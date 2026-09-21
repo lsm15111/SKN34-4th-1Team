@@ -33,8 +33,10 @@ export function SavedSupportProgramPickerDialog({
   useEffect(() => { if (open) closeRef.current?.focus() }, [open])
   if (!open) return null
 
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(event) => { if (event.target === event.currentTarget) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}>
-    <section className="flex max-h-[min(80vh,44rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+  // 목록을 훑어 고르는 작업이라 화면 가운데 모달이 아니라 오른쪽 옆 패널로 엽니다. 뒤의 서식(제목·선택 결과)이 보여야 무엇을 위해 고르는지 압니다.
+  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/25" role="dialog" aria-modal="true" aria-labelledby={titleId}
+    onClick={(event) => { if (event.target === event.currentTarget) onClose() }} onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}>
+    <section className="flex h-full w-full max-w-[34rem] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl">
       <header className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
         <div><h3 className="text-lg font-bold" id={titleId}>관심 공고함에서 선택</h3><p className={muted}>{description}</p></div>
         <button ref={closeRef} type="button" className="grid size-10 shrink-0 place-items-center rounded-full text-xl hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-emerald-700" aria-label="관심 공고함 닫기" onClick={onClose}>×</button>
