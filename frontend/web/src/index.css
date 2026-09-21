@@ -1,10 +1,48 @@
 @import "tailwindcss";
 
 @theme {
+  /*
+   * 의미 토큰입니다. 기능 화면은 아래 이름만 쓰고 hex를 직접 적지 않습니다.
+   * 값은 새 색이 아니라 화면마다 흩어져 있던 값을 합친 것입니다(#f6f7f8·#f7f8f9 → canvas, #f1f2f3 → surface-muted).
+   */
   --color-app-canvas: #f5f6f7;
   --color-app-ink: #202124;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f3f4;
+  --color-line: #e3e5e8;
+  --color-line-strong: #cfd4d9;
+  --color-ink-muted: #606770;
+  --color-ink-subtle: #838a93;
   --color-brand-accent: #e7f6ed;
   --color-brand-primary: #087f46;
+  --color-brand-hover: #066538;
+  --color-brand-soft: #e7f6ed;
+  --color-brand-line: #b4ddc7;
+  /* 의미 톤 — success는 brand와 같은 값이고, info는 "정보"와 "정상"이 같은 초록이던 것을 가르기 위해 새로 둡니다. */
+  --color-danger: #9a3947;
+  --color-danger-hover: #7f2d3a;
+  --color-danger-soft: #fff5f6;
+  --color-danger-line: #efc6cd;
+  --color-warning: #8a5a00;
+  --color-warning-soft: #fff4e0;
+  --color-warning-line: #f1d9a6;
+  --color-info: #1f5f99;
+  --color-info-soft: #eaf2fb;
+  --color-info-line: #bcd4ec;
+  /* 모서리 5 · 그림자 4 · 본문 너비 5 — 화면마다 다르던 21·24·11종을 이 값으로 모읍니다. */
+  --radius-tag: 0.375rem;
+  --radius-control: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-card: 1.4rem;
+  --shadow-card: 0 8px 24px rgb(32 33 36 / 4%);
+  --shadow-popover: 0 12px 32px rgb(32 33 36 / 12%);
+  --shadow-modal: 0 24px 64px rgb(32 33 36 / 18%);
+  --shadow-focus: 0 0 0 3px rgb(8 127 70 / 14%);
+  --container-auth: 27.5rem;
+  --container-narrow: 45rem;
+  --container-reading: 57.5rem;
+  --container-page: 73.75rem;
+  --container-wide: 87.5rem;
   --color-sample-primary: #087f46;
   --color-sample-heading: #202124;
   --color-sample-muted: #606770;
@@ -69,7 +107,8 @@
     color: var(--color-app-ink);
     /* 공개·작업 화면 모두 흰 바탕이라 문서도 흰색으로 둡니다. 회색 캔버스 색은 말풍선·강조 칸에만 씁니다. */
     background: #fff;
-    font-family: Inter, Pretendard, 'Noto Sans KR', system-ui, sans-serif;
+    /* Pretendard는 라틴 글리프를 자체 보유해 한 줄 안에서 서체가 섞이지 않습니다. Inter가 앞이면 숫자만 다른 서체가 됩니다. */
+    font-family: 'Pretendard Variable', Pretendard, Inter, 'Noto Sans KR', system-ui, sans-serif;
     line-height: normal;
     font-synthesis: none;
     text-rendering: optimizeLegibility;

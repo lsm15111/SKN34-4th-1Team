@@ -25,8 +25,9 @@ export const workspacePageStyles = {
   headerTabs: 'flex min-w-0 grow items-center',
   title: 'm-0 text-[1.25rem] font-bold tracking-[-0.04em] break-words text-app-ink',
   headerActions: 'ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2',
+  // 넓은 모니터에서 표와 카드가 끝까지 늘어나지 않도록 본문 폭을 page(1180px) 토큰으로 제한하고 가운데 둡니다.
   content: classes(
-    'flex flex-col gap-5 px-[clamp(1.25rem,5vw,4.5rem)] pt-8 pb-12',
+    'mx-auto flex w-full max-w-page flex-col gap-5 px-[clamp(1.25rem,5vw,4.5rem)] pt-8 pb-12',
     'max-chat:px-4 max-chat:pt-5 max-chat:pb-8',
   ),
   // 사이드바를 제외한 실제 작업 공간이 충분할 때만 보조 패널을 옆에 배치합니다.
@@ -45,18 +46,18 @@ export const workspacePageStyles = {
     'm-0 text-[0.7rem] font-extrabold tracking-[0.12em] text-sample-muted uppercase',
   primaryButton: classes(
     'inline-flex min-h-10 cursor-pointer items-center justify-center gap-[0.35rem] rounded-full border-0',
-    'bg-brand-primary px-4 py-[0.65rem] text-[0.74rem] font-extrabold text-white no-underline hover:bg-[#066538]',
-    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087f46] disabled:cursor-not-allowed disabled:opacity-60',
+    'bg-brand-primary px-4 py-[0.65rem] text-[0.74rem] font-extrabold text-white no-underline hover:bg-brand-hover',
+    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary disabled:cursor-not-allowed disabled:opacity-60',
   ),
   secondaryButton: classes(
     'inline-flex min-h-10 cursor-pointer items-center justify-center gap-[0.35rem] rounded-full border bg-white',
     'border-sample-border px-4 py-[0.65rem] text-[0.74rem] font-bold text-app-ink no-underline',
-    'hover:border-[#087f46] hover:text-[#087f46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087f46]',
+    'hover:border-brand-primary hover:text-brand-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
     'disabled:cursor-not-allowed disabled:opacity-60',
   ),
   dangerButton: classes(
-    'inline-flex min-h-10 cursor-pointer items-center justify-center rounded-full border-0 bg-[#9a3947]',
-    'px-[0.8rem] py-[0.55rem] text-[0.74rem] font-extrabold text-white hover:bg-[#873140]',
+    'inline-flex min-h-10 cursor-pointer items-center justify-center rounded-full border-0 bg-danger',
+    'px-[0.8rem] py-[0.55rem] text-[0.74rem] font-extrabold text-white hover:bg-danger-hover',
   ),
   quietLink: 'text-[0.74rem] font-bold text-[#087f46] no-underline hover:text-[#066538]',
   mutedLink: 'text-[0.74rem] font-bold text-sample-muted no-underline hover:text-app-ink',
