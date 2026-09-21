@@ -40,6 +40,10 @@ export const adminAccountsPageStyles = {
   pageLabel: 'text-[0.78rem] text-sample-muted',
   notice: 'm-0 flex items-start justify-between gap-3 rounded-xl bg-brand-accent px-4 py-3 text-[0.88rem] leading-[1.6] text-app-ink',
   detailGrid: 'grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]',
+  // 계정 상세 드로어: 목록 위 오른쪽에 겹치고, 좁은 화면에서는 전체 폭입니다.
+  drawerBackdrop: 'fixed inset-0 z-40 bg-slate-950/20',
+  drawer: 'fixed inset-y-0 right-0 z-50 flex w-[min(100%,36rem)] flex-col overflow-y-auto border-l border-line bg-white shadow-2xl',
+  drawerBody: 'flex flex-col gap-5 px-5 pt-5 pb-8',
   accountHeading: 'flex flex-wrap items-center gap-2',
   accountEmail: 'm-0 text-[1.05rem] font-bold [overflow-wrap:anywhere]',
   infoList: 'm-0 flex flex-col gap-2',

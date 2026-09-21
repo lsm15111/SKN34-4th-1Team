@@ -1,26 +1,38 @@
 
+import { useNavigate } from 'react-router'
+
 import { WorkspaceModal } from '../../../shared/workspace/WorkspaceModal'
 import { workspaceModalStyles } from '../../../shared/workspace/WorkspaceModal.styles'
 import { workspacePageStyles, workspaceTagClassName } from '../../../shared/workspace/WorkspacePage.styles'
 import { WorkspacePageHeader } from '../../../shared/workspace/WorkspacePageHeader'
 import { useAdminAccountDetailViewModel } from '../viewmodel/useAdminAccountDetailViewModel'
+import { AdminAccountsPage } from './AdminAccountsPage'
 import { adminAccountsPageStyles as styles } from './AdminAccountsPage.styles'
 
 type DetailViewModel = ReturnType<typeof useAdminAccountDetailViewModel>
 
 /** 관리자 계정 상세입니다. 계정·기업·활동·조치 기록을 보여 주고, 정지·정지 해제·강제 로그아웃은 사유를 받아 처리합니다. */
+/**
+ * 계정 상세는 목록 위에 겹치는 오른쪽 드로어입니다. 여러 계정을 잇달아 볼 때 표가 그대로 보이고,
+ * 주소는 `?accountId=`를 유지해 새로고침·공유가 됩니다. 머리글의 "계정 관리"나 Esc·바깥 클릭으로 목록만 남깁니다.
+ */
 export function AdminAccountDetailPage() {
   const vm = useAdminAccountDetailViewModel()
+  const navigate = useNavigate()
+  const close = () => navigate(vm.listPath)
 
   return (
     <>
-      {/* 파트너 모집글 상세처럼 "계정 관리 > 계정 상세" 이동 경로로 목록에 돌아갑니다. */}
+      <AdminAccountsPage />
+      <div className={styles.drawerBackdrop} onClick={close} aria-hidden="true" />
+      <aside className={styles.drawer} aria-label="계정 상세"
+        onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); close() } }}>
       <WorkspacePageHeader
         parent={{ to: vm.listPath, label: '계정 관리' }}
         title="계정 상세"
       />
 
-      <div className={workspacePageStyles.content}>
+      <div className={styles.drawerBody}>
         {vm.notice ? (
           <p className={styles.notice} role="status">
             <span>{vm.notice}</span>
@@ -91,6 +103,7 @@ export function AdminAccountDetailPage() {
           </div>
         )}
       </div>
+      </aside>
 
       <AdminAccountActionModal vm={vm.modal} />
     </>
