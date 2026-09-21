@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 
+import { publicPaths } from '../../../shared/routes/appPaths'
 import { resetPasswordMessages, useResetPasswordViewModel } from '../viewmodel/useResetPasswordViewModel'
 import { AuthLogo } from './AuthLogo'
 import { authPageStyles } from './AuthPage.styles'
@@ -89,15 +90,15 @@ export function ResetPasswordPage() {
           ) : null}
 
           {isDone ? (
-            <Link className={authPageStyles.primaryLink} to="/login">
+            <Link className={authPageStyles.primaryLink} to={publicPaths.login}>
               로그인하러 가기
             </Link>
           ) : null}
 
           <p className={authPageStyles.linksRow}>
-            <Link className={authPageStyles.footerLink} to="/forgot-password">재설정 링크 다시 요청</Link>
+            <Link className={authPageStyles.footerLink} to={publicPaths.forgotPassword}>재설정 링크 다시 요청</Link>
             <span className={authPageStyles.linkSeparator} aria-hidden="true" />
-            <Link className={authPageStyles.footerLink} to="/login">로그인으로 돌아가기</Link>
+            <Link className={authPageStyles.footerLink} to={publicPaths.login}>로그인으로 돌아가기</Link>
           </p>
         </form>
       </section>

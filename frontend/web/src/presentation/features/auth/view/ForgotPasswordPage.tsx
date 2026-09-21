@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 
+import { publicPaths } from '../../../shared/routes/appPaths'
 import { forgotPasswordMessages, useForgotPasswordViewModel } from '../viewmodel/useForgotPasswordViewModel'
 import { AuthLogo } from './AuthLogo'
 import { authPageStyles } from './AuthPage.styles'
@@ -51,9 +52,9 @@ export function ForgotPasswordPage() {
           )}
 
           <p className={authPageStyles.linksRow}>
-            <Link className={authPageStyles.footerLink} to="/login">로그인으로 돌아가기</Link>
+            <Link className={authPageStyles.footerLink} to={publicPaths.login}>로그인으로 돌아가기</Link>
             <span className={authPageStyles.linkSeparator} aria-hidden="true" />
-            <Link className={authPageStyles.footerLink} to="/signup">회원가입</Link>
+            <Link className={authPageStyles.footerLink} to={publicPaths.signup}>회원가입</Link>
           </p>
         </form>
       </section>
