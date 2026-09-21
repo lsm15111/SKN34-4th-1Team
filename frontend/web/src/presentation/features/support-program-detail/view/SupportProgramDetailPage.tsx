@@ -211,15 +211,14 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
         지역·분야 태그만으로 신청 자격을 판단하지 마세요.
       </p>
 
+      {/* 본문(조건)과 동작 패널(질문·신청 문서·원문)을 두 열로 둡니다. 동작은 스크롤 위치와 무관하게 늘 같은 자리에 있습니다. */}
+      <div className={supportProgramDetailStyles.columns}>
       <section className={supportProgramDetailStyles.details} aria-label="공고 조건">
-        <DetailItem label="신청 기간">
-          {program.applicationPeriod}
-        </DetailItem>
-        <DetailItem label="접수 시작일">
-          {program.applicationStartDate ?? '별도 안내'}
-        </DetailItem>
-        <DetailItem label="접수 마감일">
-          {program.applicationEndDate ?? '별도 안내'}
+        {/* 시작일·마감일은 신청 기간과 같은 값이라 한 항목으로 보여 줍니다. 날짜가 없으면 제공처 안내 문구를 그대로 씁니다. */}
+        <DetailItem label="접수 기간">
+          {program.applicationStartDate && program.applicationEndDate
+            ? `${program.applicationStartDate} ~ ${program.applicationEndDate}`
+            : program.applicationPeriod}
         </DetailItem>
         <DetailItem label="지원 대상">
           {program.targetDescription}
@@ -232,6 +231,7 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
         </DetailItem>
       </section>
 
+      <aside className={supportProgramDetailStyles.actionPanel} aria-label="공고 동작">
       <section className={supportProgramDetailStyles.questionSection} aria-labelledby="evidence-question-title">
         <h2 id="evidence-question-title" className={supportProgramDetailStyles.sectionTitle}>
           공고 원문 기반 질문
@@ -296,6 +296,8 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
           {program.sourceCode === 'CNTRADE_NOTICE' ? '공식 공지 목록' : `${program.sourceName} 원문 보기`} ↗
         </a>
       </section>
+      </aside>
+      </div>
     </main>
     </>
   )

@@ -3,7 +3,11 @@ function classes(...groups: string[]) {
 }
 
 export const supportProgramDetailStyles = {
-  page: 'mx-auto w-[min(920px,calc(100%_-_2rem))] py-[clamp(1.5rem,5vw,4rem)] [overflow-wrap:anywhere]',
+  // 본문 + 340px 동작 패널이 들어가도록 page(1180px) 너비를 씁니다.
+  page: 'mx-auto w-[min(1180px,calc(100%_-_2rem))] py-[clamp(1.5rem,5vw,4rem)] [overflow-wrap:anywhere]',
+  // 왼쪽 본문, 오른쪽 340px 동작 패널. 좁은 화면에서는 본문 아래로 내려갑니다.
+  columns: 'grid grid-cols-[minmax(0,1fr)_340px] items-start gap-6 max-[1000px]:grid-cols-1',
+  actionPanel: 'flex flex-col gap-4 max-[1000px]:contents',
   unavailablePage: 'mx-auto w-[min(720px,calc(100%_-_2rem))] py-[clamp(1.5rem,5vw,4rem)]',
   header: 'mb-8 flex flex-wrap items-center justify-between gap-4',
   headerActions: 'flex flex-wrap items-center gap-3',
@@ -45,22 +49,22 @@ export const supportProgramDetailStyles = {
   tagList: 'm-0 flex list-none flex-wrap gap-2 p-0',
   tag: 'rounded-full bg-brand-accent px-3 py-1 text-[0.78rem] font-bold text-[#066538]',
   emptyValue: 'text-sample-muted',
-  sectionTitle: 'm-0 text-[1.25rem] font-bold tracking-[-0.03em] text-app-ink',
-  questionSection: 'mt-6 rounded-[1.4rem] border border-sample-border bg-white p-[clamp(1.4rem,4vw,2.1rem)]',
+  sectionTitle: 'm-0 text-[1.05rem] font-bold tracking-[-0.03em] text-app-ink',
+  questionSection: 'rounded-[1.4rem] border border-sample-border bg-white p-[1.4rem] max-[1000px]:mt-3',
   questionDescription: 'mt-3 mb-0 leading-[1.6] text-sample-muted',
   /** 질문하기·신청 문서 작성하기 버튼을 가운데 정렬하고 사이를 띄웁니다. 좁은 화면에서는 줄을 바꿉니다. */
-  questionActions: 'mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-3',
+  questionActions: 'mt-5 flex flex-col items-stretch gap-3',
   questionLink: classes(
-    'inline-flex rounded-full bg-brand-primary px-4 py-3 text-[0.84rem] font-extrabold text-white no-underline',
+    'inline-flex justify-center rounded-full bg-brand-primary px-4 py-3 text-center text-[0.84rem] font-extrabold text-white no-underline',
     'hover:bg-[#066538] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
   ),
   sourceSection: classes(
-    'mt-6 flex items-center justify-between gap-6 rounded-[1.4rem] border border-sample-border bg-white p-[clamp(1.4rem,4vw,2.1rem)]',
-    'text-app-ink max-chat:items-start max-chat:flex-col',
+    'flex flex-col items-start gap-4 rounded-[1.4rem] border border-sample-border bg-white p-[1.4rem]',
+    'text-app-ink',
   ),
   sourceEyebrow:
     'mt-0 mb-2 text-[0.72rem] font-extrabold tracking-[0.12em] text-sample-muted uppercase',
-  sourceTitle: 'm-0 text-[1.25rem] font-bold tracking-[-0.03em] text-app-ink',
+  sourceTitle: 'm-0 text-[1.05rem] font-bold tracking-[-0.03em] text-app-ink',
   sourceDescription: 'mt-3 mb-0 leading-[1.6] text-sample-muted',
   sourceLink: classes(
     'max-w-full shrink-0 rounded-full bg-brand-primary px-4 py-3 text-[0.84rem] font-extrabold',
