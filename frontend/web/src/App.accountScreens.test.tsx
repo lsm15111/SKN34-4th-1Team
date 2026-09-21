@@ -165,10 +165,22 @@ describe('계정 화면', () => {
     renderApp('/forgot-password')
 
     const form = screen.getByRole('form', { name: '비밀번호 찾기' })
-    fireEvent.change(within(form).getByLabelText('이메일'), { target: { value: 'manager' } })
     fireEvent.submit(form)
     expect(screen.getByRole('alert').textContent).toBe(forgotPasswordMessages.emailRequired)
+    // 브라우저 type=email이 통과시키는 도메인 없는 주소도 제출 전에 막는다.
+    for (const value of ['manager', 'manager@company', 'manager@localhost']) {
+      fireEvent.change(within(form).getByLabelText('이메일'), { target: { value } })
+      fireEvent.submit(form)
+      expect(screen.getByRole('alert').textContent).toBe(forgotPasswordMessages.emailInvalid)
+    }
     expect(execute).not.toHaveBeenCalled()
+
+    // 입력 칸을 벗어나면 미리 알리고, 고쳐 쓰기 시작하면 안내를 지운다.
+    fireEvent.change(within(form).getByLabelText('이메일'), { target: { value: 'manager@company' } })
+    fireEvent.blur(within(form).getByLabelText('이메일'))
+    expect(screen.getByRole('alert').textContent).toBe(forgotPasswordMessages.emailInvalid)
+    fireEvent.change(within(form).getByLabelText('이메일'), { target: { value: 'manager@company.' } })
+    expect(screen.queryByRole('alert')).toBeNull()
 
     fireEvent.change(within(form).getByLabelText('이메일'), { target: { value: 'Manager@Company.co.kr' } })
     fireEvent.submit(form)
@@ -178,14 +190,20 @@ describe('계정 화면', () => {
     expect(within(form).queryByRole('button', { name: '재설정 링크 보내기' })).toBeNull()
   })
 
-  it('비밀번호 찾기는 메일 불가·시도 제한을 구분해 안내한다', async () => {
+  it('비밀번호 찾기는 미가입 이메일·메일 불가·시도 제한을 구분해 안내한다', async () => {
     vi.spyOn(appContainer.resolve('requestPasswordResetUseCase'), 'execute')
+      .mockResolvedValueOnce({ outcome: 'not-registered' })
       .mockResolvedValueOnce({ outcome: 'mail-unavailable' })
       .mockResolvedValueOnce({ outcome: 'rate-limited', retryAfterSeconds: 40 })
     renderApp('/forgot-password')
 
     const form = screen.getByRole('form', { name: '비밀번호 찾기' })
     fireEvent.change(within(form).getByLabelText('이메일'), { target: { value: 'manager@company.co.kr' } })
+    fireEvent.submit(form)
+    // 가입되지 않은 이메일은 입력 칸 오류로 알리고 회원가입 링크를 그대로 둔다.
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(forgotPasswordMessages.emailNotRegistered))
+    expect(within(form).getByLabelText('이메일').getAttribute('aria-invalid')).toBe('true')
+    expect(within(form).getByRole('link', { name: '회원가입' })).toBeTruthy()
     fireEvent.submit(form)
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(forgotPasswordMessages.mailUnavailable))
     fireEvent.submit(form)

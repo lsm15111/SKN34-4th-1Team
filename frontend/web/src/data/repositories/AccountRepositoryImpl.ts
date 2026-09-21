@@ -145,6 +145,7 @@ export class AccountRepositoryImpl implements AccountRepository {
       return { outcome: 'requested' }
     } catch (error) {
       if (error instanceof AccountApiError) {
+        if (error.status === 404) return { outcome: 'not-registered' }
         if (error.status === 503) return { outcome: 'mail-unavailable' }
         if (error.status === 429) return { outcome: 'rate-limited', retryAfterSeconds: error.retryAfterSeconds }
       }

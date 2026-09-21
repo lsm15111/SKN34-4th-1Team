@@ -153,6 +153,7 @@ export async function deleteAccountApi(password: string | null, signal?: AbortSi
 }
 
 /** 재설정 링크 요청입니다. 가입 여부와 관계없이 204라 응답으로 계정 존재를 알 수 없습니다. */
+/** 가입 이메일로 재설정 링크를 요청합니다. 성공은 204, 가입하지 않은 이메일은 404, 메일 불가는 503, 시도 제한은 429입니다. */
 export async function requestPasswordResetApi(email: string, signal?: AbortSignal): Promise<void> {
   const response = await fetch(`${getCoreApiBaseUrl()}${PASSWORD_RESET_PATH}`, {
     method: 'POST',

@@ -1,13 +1,14 @@
 import { Link } from 'react-router'
 
 import { publicPaths } from '../../../shared/routes/appPaths'
+import { MAX_EMAIL_LENGTH } from '../../../../domain/entities/EmailAddress'
 import { forgotPasswordMessages, useForgotPasswordViewModel } from '../viewmodel/useForgotPasswordViewModel'
 import { AuthLogo } from './AuthLogo'
 import { authPageStyles } from './AuthPage.styles'
 
 /** 비밀번호 찾기 화면입니다. 로그인 화면의 "비밀번호 찾기" 링크가 이 화면으로 옵니다. */
 export function ForgotPasswordPage() {
-  const { email, isSent, error, isSubmitting, updateEmail, submit } = useForgotPasswordViewModel()
+  const { email, isSent, error, isSubmitting, updateEmail, checkEmail, submit } = useForgotPasswordViewModel()
 
   return (
     <main className={authPageStyles.page}>
@@ -37,8 +38,11 @@ export function ForgotPasswordPage() {
                   aria-invalid={error?.field === 'email'}
                   aria-describedby={error ? 'forgot-password-error' : undefined}
                   placeholder="가입한 이메일을 입력해 주세요."
+                  maxLength={MAX_EMAIL_LENGTH}
+                  spellCheck={false}
                   value={email}
                   onChange={(event) => updateEmail(event.target.value)}
+                  onBlur={checkEmail}
                 />
               </label>
             </div>

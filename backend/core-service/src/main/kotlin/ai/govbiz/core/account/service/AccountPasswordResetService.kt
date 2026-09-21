@@ -8,6 +8,7 @@ import ai.govbiz.core.account.helper.normalizeEmail
 import ai.govbiz.core.account.repository.AccountPasswordResetRepository
 import ai.govbiz.core.account.repository.AccountRepository
 import ai.govbiz.core.account.service.exception.AccountSuspendedException
+import ai.govbiz.core.account.service.exception.PasswordResetAccountNotFoundException
 import ai.govbiz.core.account.service.exception.PasswordResetMailUnavailableException
 import ai.govbiz.core.account.service.exception.PasswordResetTokenInvalidException
 import java.time.Clock
@@ -39,7 +40,8 @@ class AccountPasswordResetService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * 재설정 링크를 요청합니다. 계정이 없거나 정지됐거나 시간당 한도를 넘으면 아무 일도 하지 않고 조용히 끝납니다.
+     * 재설정 링크를 요청합니다. 가입하지 않은 이메일은 404로 알리고, 정지됐거나 시간당 한도를 넘은 계정은
+     * 아무 일도 하지 않고 조용히 끝납니다(정지 여부와 요청 횟수는 드러내지 않습니다).
      * SMTP가 없으면 개발용 로그인이 켜진 환경에서만 링크를 로그로 남기고, 아니면 503입니다.
      */
     fun request(rawEmail: String, clientAddress: String) {
@@ -48,7 +50,7 @@ class AccountPasswordResetService(
         if (!canDeliver) throw PasswordResetMailUnavailableException()
 
         val email = normalizeEmail(rawEmail)
-        val account = accountRepository.findByEmail(email) ?: return
+        val account = accountRepository.findByEmail(email) ?: throw PasswordResetAccountNotFoundException()
         if (account.isSuspended) return
 
         val now = LocalDateTime.now(clock)

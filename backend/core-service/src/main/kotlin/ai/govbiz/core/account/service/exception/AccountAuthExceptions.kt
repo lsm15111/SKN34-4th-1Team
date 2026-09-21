@@ -52,6 +52,12 @@ class PasswordResetTokenInvalidException : RuntimeException()
 /** SMTP가 설정되지 않았거나 전송에 실패해 재설정 메일을 보낼 수 없을 때 발생합니다. */
 class PasswordResetMailUnavailableException(cause: Throwable? = null) : RuntimeException(cause)
 
+/**
+ * 재설정 링크를 요청한 이메일로 가입한 계정이 없을 때 발생합니다. 회원가입 인증번호가 이미 가입 여부를 알려 주므로
+ * 여기서만 숨길 이유가 없고, 사용자가 다른 주소를 확인하거나 회원가입으로 가도록 404로 알립니다.
+ */
+class PasswordResetAccountNotFoundException : RuntimeException()
+
 /** 회원가입 인증번호가 틀렸을 때 발생합니다. 시도 횟수는 서비스가 올립니다. */
 class EmailCodeInvalidException : RuntimeException()
 

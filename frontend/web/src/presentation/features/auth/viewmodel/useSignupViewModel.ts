@@ -1,3 +1,4 @@
+import { isEmailAddress } from '../../../../domain/entities/EmailAddress'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
@@ -73,7 +74,7 @@ export function useSignupViewModel(
   }, [])
 
   function isEmailShapeValid(): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+    return isEmailAddress(email)
   }
 
   async function sendCode() {

@@ -327,11 +327,13 @@ describe('password reset apis', () => {
   it('maps the unavailable mail server and the rejected token to results in the repository', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(problemResponse(503, 'PASSWORD_RESET_MAIL_UNAVAILABLE'))
+      .mockResolvedValueOnce(problemResponse(404, 'PASSWORD_RESET_ACCOUNT_NOT_FOUND'))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(problemResponse(422, 'PASSWORD_RESET_TOKEN_INVALID')))
     const repository = new AccountRepositoryImpl({ sessionHintStorage: createMemorySessionHintStorage() })
 
     await expect(repository.requestPasswordReset('manager@company.co.kr')).resolves.toEqual({ outcome: 'mail-unavailable' })
+    await expect(repository.requestPasswordReset('nobody@company.co.kr')).resolves.toEqual({ outcome: 'not-registered' })
     await expect(repository.requestPasswordReset('manager@company.co.kr')).resolves.toEqual({ outcome: 'requested' })
     await expect(repository.resetPassword('a'.repeat(43), 'new-password-2')).resolves.toEqual({ outcome: 'token-invalid' })
   })

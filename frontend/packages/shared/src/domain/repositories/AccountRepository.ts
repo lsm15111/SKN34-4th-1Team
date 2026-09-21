@@ -44,9 +44,10 @@ export type DeleteAccountResult =
   /** 활성 관리자가 이 계정 하나뿐이라 삭제할 수 없습니다. */
   | { outcome: 'last-admin' }
 
-/** 재설정 링크 요청은 가입 여부와 관계없이 `requested`입니다. 메일을 보낼 수 없는 서버 상태만 따로 안내합니다. */
+/** 재설정 링크 요청 결과입니다. 가입하지 않은 이메일과 메일을 보낼 수 없는 서버 상태를 화면이 구분해 안내합니다. */
 export type RequestPasswordResetResult =
   | { outcome: 'requested' }
+  | { outcome: 'not-registered' }
   | { outcome: 'mail-unavailable' }
   | { outcome: 'rate-limited'; retryAfterSeconds: number | null }
 

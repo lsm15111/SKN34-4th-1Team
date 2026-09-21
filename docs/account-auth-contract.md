@@ -385,7 +385,8 @@ POST /api/v1/auth/password-reset
 { "email": "manager@company.co.kr" }
 ```
 
-가입 여부와 관계없이 **항상 204**라 응답으로 계정 존재가 드러나지 않습니다. 계정이 있으면 토큰을 만들어 SHA-256 해시만
+가입한 계정이 있으면 204, 없으면 404 `PASSWORD_RESET_ACCOUNT_NOT_FOUND`입니다. 회원가입 인증번호 요청이 이미 409로
+가입 여부를 알려 주므로 여기서만 숨기지 않고, 사용자가 주소를 고치거나 회원가입으로 가도록 안내합니다. 계정이 있으면 토큰을 만들어 SHA-256 해시만
 `account_password_reset`에 저장하고 원문은 메일 링크 `<frontend-base-url>/reset-password#token=<43자>`에만 싣습니다.
 토큰은 fragment라 HTTP 요청·접속 로그·Referer로 나가지 않습니다. 정지된 계정, 시간당 한도(기본 3회)를 넘긴 계정은 조용히
 건너뜁니다. 접속 주소 한도(분당 20회)는 로그인과 같이 쓰며 넘기면 429 `LOGIN_RATE_LIMITED`입니다.

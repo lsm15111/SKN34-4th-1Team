@@ -339,7 +339,7 @@ Controller의 `SupportProgramRequestAdmissionService.execute`가 공개 요청 �
 | `GET /api/v1/auth/mobile/oauth/{provider}/authorize`, `POST …/exchange` | 앱 Google·Kakao 시스템 브라우저 로그인 시작과 PKCE 일회용 코드 교환. 아래 모바일 인증 계약 참고 |
 | `GET /api/v1/auth/me` | 세션 쿠키 또는 Bearer로 현재 계정·권한 단계 조회 |
 | `PUT /api/v1/me/password` | 로그인 세션으로 본인을 확인해 새 비밀번호만 받아 변경. 요청한 세션만 남기고 다른 기기 세션 종료 |
-| `POST /api/v1/auth/password-reset`, `POST …/confirm` | 로그인 없이 가입 이메일로 30분 일회용 재설정 링크 요청(가입 여부와 무관하게 204), 토큰으로 새 비밀번호 저장(모든 세션 종료) |
+| `POST /api/v1/auth/password-reset`, `POST …/confirm` | 로그인 없이 가입 이메일로 30분 일회용 재설정 링크 요청(가입 계정은 204, 미가입 이메일은 404), 토큰으로 새 비밀번호 저장(모든 세션 종료) |
 | `GET /api/v1/me/deletion-preview`, `DELETE /api/v1/me` | 삭제 시 닫히는 모집글·제안 수 미리 보기와 계정 삭제(제안 철회·모집글 마감·기업 삭제·세션 삭제·`deleted_at`) |
 | `GET /api/v1/auth/oauth/providers` | 키가 설정된 소셜 로그인 공급자(카카오·Google)와 시작 주소. 설정 확인용이며 화면은 이 목록을 기다리지 않고 두 버튼을 바로 그림 |
 | `GET /api/v1/auth/oauth/{provider}/authorize`, `GET …/callback` | 소셜 로그인 시작(서명한 state 쿠키와 함께 공급자로 302)과 콜백(코드 교환·ID 토큰 확인 뒤 `sub`로 로그인 또는 가입, 세션 쿠키와 함께 프런트로 302). 같은 이메일의 기존 계정에는 자동 연결하지 않음 |

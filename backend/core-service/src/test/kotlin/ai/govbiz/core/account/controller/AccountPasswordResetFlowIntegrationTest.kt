@@ -69,7 +69,14 @@ class AccountPasswordResetFlowIntegrationTest {
         val oldSession = signUp("manager@company.co.kr", "password1")
 
         requestReset("Manager@Company.co.kr")
-        requestReset("nobody@company.co.kr")
+        // 가입하지 않은 이메일은 토큰 없이 404로 알린다.
+        mockMvc.perform(
+            post("/api/v1/auth/password-reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"email":"nobody@company.co.kr"}"""),
+        )
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("PASSWORD_RESET_ACCOUNT_NOT_FOUND"))
 
         val token = ArgumentCaptor.forClass(String::class.java)
         verify(mailClient, times(1)).sendPasswordReset(eqValue("manager@company.co.kr"), token.capture() ?: "")

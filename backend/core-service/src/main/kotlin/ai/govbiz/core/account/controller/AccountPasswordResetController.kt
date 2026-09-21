@@ -18,7 +18,7 @@ class AccountPasswordResetController(
     private val resetService: AccountPasswordResetService,
 ) {
 
-    /** 가입 이메일로 재설정 링크를 보냅니다. 가입 여부와 관계없이 204라 계정 존재가 드러나지 않습니다. */
+    /** 가입 이메일로 재설정 링크를 보냅니다. 가입하지 않은 이메일은 404, 정지·한도 초과 계정은 조용히 204입니다. */
     @PostMapping
     fun request(
         @RequestBody @Valid request: PasswordResetRequest,

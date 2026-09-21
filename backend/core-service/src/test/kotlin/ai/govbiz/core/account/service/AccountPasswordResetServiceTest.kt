@@ -9,6 +9,7 @@ import ai.govbiz.core.account.helper.OneTimeTokenHelper
 import ai.govbiz.core.account.repository.AccountPasswordResetRepository
 import ai.govbiz.core.account.repository.AccountRepository
 import ai.govbiz.core.account.service.exception.AccountSuspendedException
+import ai.govbiz.core.account.service.exception.PasswordResetAccountNotFoundException
 import ai.govbiz.core.account.service.exception.PasswordResetMailUnavailableException
 import ai.govbiz.core.account.service.exception.PasswordResetTokenInvalidException
 import java.time.Duration
@@ -76,16 +77,27 @@ class AccountPasswordResetServiceTest {
     }
 
     @Test
-    fun requestStaysSilentForUnknownSuspendedAndOverLimitAccounts() {
+    fun requestRejectsAnUnregisteredEmailWithoutCreatingAToken() {
         doReturn(true).`when`(mailClient).isAvailable()
         doReturn(null).`when`(accountRepository).findByEmail("nobody@company.co.kr")
+
+        assertThrows(PasswordResetAccountNotFoundException::class.java) { service.request(" Nobody@Company.co.kr ", "10.0.0.1") }
+
+        verify(resetRepository, never()).create(
+            ArgumentMatchers.anyLong(), AccountTestHelper.anyValue(), AccountTestHelper.anyValue(), AccountTestHelper.anyValue(),
+        )
+        verify(mailClient, never()).sendPasswordReset(AccountTestHelper.anyValue(), AccountTestHelper.anyValue())
+    }
+
+    @Test
+    fun requestStaysSilentForSuspendedAndOverLimitAccounts() {
+        doReturn(true).`when`(mailClient).isAvailable()
         doReturn(AccountTestHelper.account(id = 6L, email = "stopped@company.co.kr", suspendedAt = NOW))
             .`when`(accountRepository).findByEmail("stopped@company.co.kr")
         val busy = AccountTestHelper.account(id = 7L, email = "busy@company.co.kr")
         doReturn(busy).`when`(accountRepository).findByEmail("busy@company.co.kr")
         doReturn(3).`when`(resetRepository).countRequestsSince(7L, NOW.minusHours(1))
 
-        service.request("nobody@company.co.kr", "10.0.0.1")
         service.request("stopped@company.co.kr", "10.0.0.1")
         service.request("busy@company.co.kr", "10.0.0.1")
 
