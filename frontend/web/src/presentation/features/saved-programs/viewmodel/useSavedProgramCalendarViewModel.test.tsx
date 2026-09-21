@@ -94,7 +94,7 @@ describe('관심 공고 캘린더', () => {
   it('달력과 목록을 전환하고 목록을 8개씩 페이지로 나눈다', () => {
     const today = '2026-09-10'
     const { result } = renderHook(() => useSavedProgramCalendarViewModel({ today, programs: createCalendarPreview(today) }))
-    expect(result.current.viewMode).toBe('calendar')
+    expect(result.current.viewMode).toBe('list')
     expect(result.current.listPrograms).toHaveLength(8)
     expect(result.current.listTotalPages).toBe(3)
     act(() => result.current.setViewMode('list'))

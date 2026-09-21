@@ -7,7 +7,8 @@ describe('getSupportProgramSearchReturnTo', () => {
   it('검색 화면은 검증된 필터만, 관심 공고함은 보던 탭만 되살린다', () => {
     expect(getSupportProgramSearchReturnTo({ searchReturnTo: '/app/chat?mode=filter&region=서울' })).toContain('/app/chat?')
     expect(getSupportProgramSearchReturnTo({ searchReturnTo: '/app/chat?foo=1' })).toBe('/')
-    expect(getSupportProgramSearchReturnTo({ searchReturnTo: '/app/saved-programs?view=list' })).toBe('/app/saved-programs?view=list')
+    expect(getSupportProgramSearchReturnTo({ searchReturnTo: '/app/saved-programs?view=calendar' })).toBe('/app/saved-programs?view=calendar')
+    expect(getSupportProgramSearchReturnTo({ searchReturnTo: '/app/saved-programs?view=list' })).toBe(appPaths.savedPrograms)
     expect(getSupportProgramSearchReturnTo({ searchReturnTo: '/app/saved-programs?view=nope' })).toBe(appPaths.savedPrograms)
   })
 
@@ -30,7 +31,7 @@ describe('supportProgramBackLabel', () => {
   it('출처 화면 이름으로 돌아가기 문구를 만든다', () => {
     expect(supportProgramBackLabel('/')).toBe('← 검색 결과로 돌아가기')
     expect(supportProgramBackLabel('/app/chat?mode=filter')).toBe('← 검색 결과로 돌아가기')
-    expect(supportProgramBackLabel('/app/saved-programs?view=list')).toBe('← 관심 공고함으로 돌아가기')
+    expect(supportProgramBackLabel('/app/saved-programs?view=calendar')).toBe('← 관심 공고함으로 돌아가기')
     expect(supportProgramBackLabel(appPaths.reports)).toBe('← 기업 맞춤 리포트로 돌아가기')
     expect(supportProgramBackLabel('/app/combination-reviews/5')).toBe('← 중복 지원·수혜 검토로 돌아가기')
     expect(supportProgramBackLabel('/app/partners/detail?recruitmentId=3')).toBe('← 파트너 모집으로 돌아가기')

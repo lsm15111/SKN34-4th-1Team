@@ -12,7 +12,8 @@ afterEach(() => { cleanup(); vi.useRealTimers() })
 it('관심 공고를 내부 스크롤 없이 달력과 페이지 목록으로 확인한다', () => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-09-10T03:00:00Z'))
-  render(<MemoryRouter><SavedProgramsPage initial={{ today: '2026-09-10', programs: createCalendarPreview('2026-09-10') }} /></MemoryRouter>)
+  // 기본 보기는 목록이므로 달력은 주소로 엽니다.
+  render(<MemoryRouter initialEntries={['/app/saved-programs?view=calendar']}><SavedProgramsPage initial={{ today: '2026-09-10', programs: createCalendarPreview('2026-09-10') }} /></MemoryRouter>)
   expect(screen.getByRole('table', { name: '2026년 9월 접수 일정' })).toBeTruthy()
   expect(screen.queryByRole('region', { name: '달력 내부 스크롤' })).toBeNull()
   expect(screen.queryByRole('link', { name: /지원사업 찾기/ })).toBeNull()

@@ -41,7 +41,7 @@ type SavedProgramsPageProps = {
 }
 
 /**
- * 로그인 회원이 실제로 저장한 지원사업을 달력·목록으로, 실제 신청 준비 건을 진행 관리로 보여 줍니다.
+ * 로그인 회원이 실제로 저장한 지원사업을 목록(마감 임박순, 기본)·달력으로, 실제 신청 준비 건을 진행 관리로 보여 줍니다.
  * 머리글·탭·검색 칸·필터·카드는 파트너 관리와 같은 공용 모양을 쓰고, 달력만 이 화면 고유입니다.
  */
 export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase }: SavedProgramsPageProps = {}) {
@@ -52,7 +52,7 @@ export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase }
   function chooseViewMode(view: SavedProgramsViewMode) {
     vm.setViewMode(view)
     const next = new URLSearchParams(searchParams)
-    if (view === 'calendar') next.delete('view')
+    if (view === 'list') next.delete('view')
     else next.set('view', view)
     setSearchParams(next, { replace: true })
   }
@@ -67,10 +67,10 @@ export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase }
 
   return <>
     <WorkspacePageHeader title="관심 공고함" tabs={<div className={s.viewTabs} role="tablist" aria-label="관심 공고 보기 방식">
-      <button type="button" role="tab" aria-selected={vm.viewMode === 'calendar'} className={workspaceChipClassName(vm.viewMode === 'calendar')}
-        onClick={() => chooseViewMode('calendar')}>달력 보기</button>
       <button type="button" role="tab" aria-selected={vm.viewMode === 'list'} className={workspaceChipClassName(vm.viewMode === 'list')}
         onClick={() => chooseViewMode('list')}>목록 보기</button>
+      <button type="button" role="tab" aria-selected={vm.viewMode === 'calendar'} className={workspaceChipClassName(vm.viewMode === 'calendar')}
+        onClick={() => chooseViewMode('calendar')}>달력 보기</button>
       <button type="button" role="tab" aria-selected={vm.viewMode === 'pipeline'} className={workspaceChipClassName(vm.viewMode === 'pipeline')}
         onClick={() => chooseViewMode('pipeline')}>진행 관리</button>
     </div>} />

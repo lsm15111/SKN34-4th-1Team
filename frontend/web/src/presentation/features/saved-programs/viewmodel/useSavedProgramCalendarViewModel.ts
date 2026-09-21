@@ -31,7 +31,7 @@ export function useSavedProgramCalendarViewModel(
   input?: { today: string; programs: readonly CalendarProgram[] },
   browseUseCase: SavedProgramsBrowseUseCase = appContainer.resolve('browseSavedSupportProgramsUseCase'),
   /** 주소가 가리키는 탭입니다. 공고 상세에서 돌아올 때 보던 탭 그대로 열리게 합니다. */
-  initialViewMode: SavedProgramsViewMode = 'calendar',
+  initialViewMode: SavedProgramsViewMode = 'list',
 ) {
   const [initial] = useState(() => {
     const today = input?.today ?? calendarToday()
@@ -81,7 +81,10 @@ export function useSavedProgramCalendarViewModel(
     .filter(Boolean).length
   const listTotalPages = Math.max(1, Math.ceil(filteredPrograms.length / savedProgramListPageSize))
   const safeListPage = Math.min(listPage, listTotalPages)
-  const listPrograms = filteredPrograms.slice((safeListPage - 1) * savedProgramListPageSize, safeListPage * savedProgramListPageSize)
+  // 목록은 마감 임박순입니다. 마감일이 없는 공고(상태 미확인 등)는 뒤로 보내고, 같은 날이면 담은 순서를 유지합니다.
+  const listPrograms = [...filteredPrograms]
+    .sort((a, b) => (a.endDate === null ? 1 : b.endDate === null ? -1 : a.endDate.localeCompare(b.endDate)) || 0)
+    .slice((safeListPage - 1) * savedProgramListPageSize, safeListPage * savedProgramListPageSize)
 
   function changeFilter<Key extends keyof SavedProgramCalendarFilters>(key: Key, value: SavedProgramCalendarFilters[Key]) {
     setFilters(current => ({ ...current, [key]: value }))
