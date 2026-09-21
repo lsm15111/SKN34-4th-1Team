@@ -53,7 +53,7 @@ export function PartnerRecruitmentCreatePage() {
   if (!canCreate || ownCompany === null) {
     return (
       <>
-        <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 관리' }} title="모집글 작성" />
+        <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 모집' }} title="모집글 작성" />
         <div className={workspacePageStyles.content}>
           <section className={workspacePageStyles.card} aria-label="기업 등록 필요">
             <h2 className={workspacePageStyles.cardTitle}>기업을 등록한 뒤 모집글을 쓸 수 있습니다</h2>
@@ -71,7 +71,7 @@ export function PartnerRecruitmentCreatePage() {
 
   return (
     <>
-      <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 관리' }} title="모집글 작성" />
+      <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 모집' }} title="모집글 작성" />
 
       <div className={workspacePageStyles.content}>
         <div className={workspacePageStyles.column}>

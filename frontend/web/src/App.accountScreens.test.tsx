@@ -395,7 +395,7 @@ describe('계정 화면', () => {
     fireEvent.change(within(form).getByLabelText('비밀번호'), { target: { value: 'govbiz-admin1' } })
     fireEvent.click(within(form).getByRole('button', { name: '이메일로 로그인' }))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: '파트너 관리' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('heading', { name: '파트너 모집' })).toBeTruthy())
   })
 
   it('로그인 상태에서 로그인·회원가입 화면은 작업 화면으로 돌려보낸다', () => {
@@ -469,14 +469,14 @@ describe('작업 화면 사이드바', () => {
 
     const sidebar = screen.getByRole('complementary', { name: '작업 사이드바' })
     fireEvent.click(within(sidebar).getByRole('link', { name: '파트너 모집' }))
-    // 머리글 한 줄에 제목·탭·작성 버튼이 함께 놓이고, 탭으로 제안함을 오갑니다.
-    const header = screen.getByRole('heading', { name: '파트너 관리' }).closest('header') as HTMLElement
-    const tabs = within(header).getByRole('navigation', { name: '파트너 관리 탭' })
+    // 머리글 한 줄에 제목·탭(모집글·내 모집글)·작성 버튼이 함께 놓입니다. 제안함은 탭이 아니라 사이드바 항목입니다.
+    const header = screen.getByRole('heading', { name: '파트너 모집' }).closest('header') as HTMLElement
+    const tabs = within(header).getByRole('navigation', { name: '파트너 모집 탭' })
     expect(within(tabs).getByRole('link', { name: '모집글' }).getAttribute('aria-current')).toBe('page')
+    expect(within(tabs).queryByRole('link', { name: /제안함/ })).toBeNull()
     expect(within(header).getByRole('link', { name: /작성$/ })).toBeTruthy()
-    fireEvent.click(within(tabs).getByRole('link', { name: /제안함/ }))
-    expect(screen.getByRole('heading', { name: '파트너 관리' })).toBeTruthy()
-    expect(within(screen.getByRole('navigation', { name: '파트너 관리 탭' })).getByRole('link', { name: /제안함/ }).getAttribute('aria-current')).toBe('page')
+    fireEvent.click(within(sidebar).getByRole('link', { name: /제안함/ }))
+    expect(screen.getByRole('heading', { name: '제안함' })).toBeTruthy()
     expect(screen.getByRole('tablist', { name: '제안함 종류' })).toBeTruthy()
     // 제안함은 사이드바의 독립 항목이라 제안함 탭에서는 파트너 모집이 아니라 제안함이 현재 화면입니다.
     expect(within(sidebar).getByRole('link', { name: /제안함/ }).getAttribute('aria-current')).toBe('page')
@@ -1033,8 +1033,8 @@ describe('파트너 모집 화면', () => {
     fireEvent.click(screen.getAllByRole('link', { name: '자세히 보기' })[0]!)
 
     expect(await screen.findByRole('heading', { name: '모집글 상세' })).toBeTruthy()
-    // 머리글의 상위 화면 이름(파트너 관리)을 누르면 목록으로 돌아갑니다.
-    expect(within(screen.getByRole('navigation', { name: '상위 화면' })).getByRole('link', { name: '파트너 관리' }).getAttribute('href')).toBe('/app/partners')
+    // 머리글의 상위 화면 이름(파트너 모집)을 누르면 목록으로 돌아갑니다.
+    expect(within(screen.getByRole('navigation', { name: '상위 화면' })).getByRole('link', { name: '파트너 모집' }).getAttribute('href')).toBe('/app/partners')
     expect(screen.getByText('AI 실증 과제 데이터 구축·라벨링 참여기관 구합니다')).toBeTruthy()
     expect(screen.getByText('참여기관 1곳')).toBeTruthy()
     const proposal = screen.getByRole('form', { name: '참여 제안' })
@@ -1441,7 +1441,7 @@ describe('파트너 모집 화면', () => {
     const close = vi.spyOn(appContainer.resolve('closePartnerRecruitmentUseCase'), 'execute')
       .mockResolvedValue({ outcome: 'closed', recruitment: { ...partnerRecruitmentDetail, id: mine.id, isMine: true, status: 'CLOSED' } })
     renderApp('/app/partners')
-    fireEvent.click(within(screen.getByRole('navigation', { name: '파트너 관리 탭' })).getByRole('link', { name: '내 모집글' }))
+    fireEvent.click(within(screen.getByRole('navigation', { name: '파트너 모집 탭' })).getByRole('link', { name: '내 모집글' }))
 
     await waitFor(() => expect(browse).toHaveBeenLastCalledWith(
       { keyword: '', seekingRoles: [], regions: [], mineOnly: true, sourceCode: '', sort: 'RECENT', page: 1 },
@@ -1547,9 +1547,7 @@ describe('제안함 화면', () => {
     expect(menu.getAttribute('href')).toBe('/app/proposals')
     expect(within(sidebar).getByRole('link', { name: '파트너 모집' }).textContent).not.toContain('1')
 
-    const proposalsTab = within(screen.getByRole('navigation', { name: '파트너 관리 탭' })).getByRole('link', { name: /제안함/ })
-    expect(proposalsTab.textContent).toContain('1')
-    fireEvent.click(proposalsTab)
+    fireEvent.click(menu)
     expect(screen.getByRole('tablist', { name: '제안함 종류' })).toBeTruthy()
     const panel = await screen.findByRole('tabpanel', { name: '받은 제안' })
     expect(within(panel).getAllByRole('article')).toHaveLength(2)

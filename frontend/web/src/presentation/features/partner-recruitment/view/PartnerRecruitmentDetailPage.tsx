@@ -111,7 +111,7 @@ export function PartnerRecruitmentDetailPage() {
   return (
     <>
       <WorkspacePageHeader
-        parent={{ to: appPaths.partners, label: '파트너 관리' }}
+        parent={{ to: appPaths.partners, label: '파트너 모집' }}
         title="모집글 상세"
         actions={
           <>

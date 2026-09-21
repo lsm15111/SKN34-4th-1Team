@@ -9,7 +9,7 @@ import {
   workspaceTagClassName,
 } from '../../../shared/workspace/WorkspacePage.styles'
 import { HelpTip } from '../../../shared/workspace/HelpTip'
-import { PartnerManagementHeader } from '../../../shared/partner-recruitment/PartnerManagementHeader'
+import { WorkspacePageHeader } from '../../../shared/workspace/WorkspacePageHeader'
 import {
   proposalActionConfirmations,
   proposalActionLabels,
@@ -50,7 +50,8 @@ export function PartnerProposalBoxPage() {
 
   return (
     <>
-      <PartnerManagementHeader active="proposals" />
+      {/* 제안함은 사이드바의 독립 항목이라 파트너 모집 탭이 아니라 제 머리글을 씁니다. 받은·보낸 구분은 본문의 탭입니다. */}
+      <WorkspacePageHeader title="제안함" />
 
       <div className={workspacePageStyles.content}>
         {hasCompany ? null : (

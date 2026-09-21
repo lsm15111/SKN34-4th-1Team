@@ -98,8 +98,8 @@ describe('비로그인 대화의 화면 이동 수명', () => {
     const previous = store.getState().chat
     renderApp(store, '/app/chat')
     await act(async () => fireEvent.click(within(screen.getByRole('complementary', { name: '작업 사이드바' }))
-      .getByRole('link', { name: /파트너 관리/ })))
-    expect(screen.getByRole('heading', { name: '파트너 관리' })).toBeTruthy()
+      .getByRole('link', { name: '파트너 모집' })))
+    expect(screen.getByRole('heading', { name: '파트너 모집' })).toBeTruthy()
     expect(store.getState().chat).toEqual(previous)
     fireEvent.click(within(screen.getByRole('complementary', { name: '작업 사이드바' }))
       .getByRole('link', { name: 'GovBiz' }))
@@ -210,7 +210,7 @@ describe('비로그인 대화의 화면 이동 수명', () => {
     const sidebar = () => screen.getByRole('complementary', { name: '작업 사이드바' })
     expect(within(sidebar()).queryByRole('status', { name: '검색 상태' })).toBeNull()
     const signal = fetchMock.mock.calls.at(-1)![1]!.signal as AbortSignal
-    await act(async () => fireEvent.click(within(sidebar()).getByRole('link', { name: /파트너 관리/ })))
+    await act(async () => fireEvent.click(within(sidebar()).getByRole('link', { name: '파트너 모집' })))
     expect(within(sidebar()).queryByRole('status', { name: '검색 상태' })).toBeNull()
     expect(signal.aborted).toBe(false)
     expect(store.getState().chat.searchStatus).toBe('pending')
@@ -249,7 +249,7 @@ describe('비로그인 대화의 화면 이동 수명', () => {
     await act(async () => fireEvent.submit(input.closest('form')!))
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '이 조건으로 검색' })))
     const sidebar = () => screen.getByRole('complementary', { name: '작업 사이드바' })
-    await act(async () => fireEvent.click(within(sidebar()).getByRole('link', { name: /파트너 관리/ })))
+    await act(async () => fireEvent.click(within(sidebar()).getByRole('link', { name: '파트너 모집' })))
 
     // 다른 메뉴에서는 필터 검색 탭도 써야 하므로 묻지 않고 검색 화면으로 갑니다. 진행 중인 대화는 그대로입니다.
     fireEvent.click(within(sidebar()).getByRole('button', { name: '지원사업 새검색' }))

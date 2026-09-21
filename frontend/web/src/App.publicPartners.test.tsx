@@ -180,7 +180,7 @@ describe('공개 파트너 모집', () => {
 describe('로그인 상태의 공개 주소', () => {
   it.each([
     ['/', '지원사업 검색어'],
-    ['/partners', '파트너 관리'],
+    ['/partners', '파트너 모집'],
   ])('%s에 오면 사이드바 안의 같은 화면으로 보낸다', (path, expected) => {
     renderApp(path, memberAccount)
 

@@ -18,7 +18,7 @@ import { PartnerRecruitmentFormFields } from './PartnerRecruitmentFormFields'
 export function PartnerRecruitmentEditPage() {
   const { phase, recruitment, canEdit, form, maximumRecruitmentDeadline, isSubmitting, submit, detailPath, listPath } =
     usePartnerRecruitmentEditViewModel()
-  const header = <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 관리' }} title="모집글 수정" />
+  const header = <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 모집' }} title="모집글 수정" />
 
   if (phase === 'loading') {
     return (
@@ -44,7 +44,7 @@ export function PartnerRecruitmentEditPage() {
               {phase === 'failed' ? '잠시 후 다시 시도해 주세요.' : '요청한 모집글이 없거나 내려갔습니다.'}
             </p>
             <div className={partnerRecruitmentStyles.linkRow}>
-              <Link className={workspacePageStyles.secondaryButton} to={listPath}>파트너 관리</Link>
+              <Link className={workspacePageStyles.secondaryButton} to={listPath}>파트너 모집</Link>
             </div>
           </section>
         </div>

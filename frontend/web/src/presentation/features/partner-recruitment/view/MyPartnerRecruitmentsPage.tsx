@@ -17,7 +17,7 @@ import { useMyPartnerRecruitmentsViewModel } from '../viewmodel/useMyPartnerRecr
 import { partnerRecruitmentStyles } from './PartnerRecruitment.styles'
 
 /**
- * 파트너 관리의 "내 모집글" 탭입니다. 내가 쓴 글을 최근 등록순으로 모아 상태·받은 제안 수를 보여 주고,
+ * 파트너 모집의 "내 모집글" 탭입니다. 내가 쓴 글을 최근 등록순으로 모아 상태·받은 제안 수를 보여 주고,
  * 모집 중인 글은 카드에서 바로 수정·마감합니다. 마감된 글은 뒤로 보내되 지우지 않습니다.
  */
 export function MyPartnerRecruitmentsPage() {
