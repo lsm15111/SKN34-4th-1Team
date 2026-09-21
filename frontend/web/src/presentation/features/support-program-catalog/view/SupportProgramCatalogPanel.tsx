@@ -21,6 +21,9 @@ export function SupportProgramCatalogPanel() {
   const { pathname } = useLocation()
   const catalog = useSupportProgramCatalogViewModel(filters)
   const apply = (next: SupportProgramCatalogFilters) => setParams(writeCatalogFilters(next))
+  // 필터 폼은 접을 수 있습니다. 접어도 초안은 남도록 숨김(hidden)만 하고 내리지 않습니다. 적용된 조건은 아래 칩 줄이 대신 보여 줍니다.
+  const [showFilters, setShowFilters] = useState(true)
+  const appliedChips = appliedFilterChips(filters)
   const returnTo = `${pathname}?${writeCatalogFilters(filters)}`
   const pageStart = Math.max(1, Math.min(filters.page - 2, (catalog.data?.totalPages ?? 1) - 4))
   return (
@@ -31,9 +34,24 @@ export function SupportProgramCatalogPanel() {
           <h1 className="mt-2 mb-2 text-3xl font-bold tracking-tight max-chat:text-2xl">원하는 지원사업을 직접 골라보세요.</h1>
           <p className="m-0 text-sm leading-relaxed text-sample-muted">분야와 지역을 선택하면 저장된 공고를 바로 볼 수 있어요.</p>
         </header>
+        <div className="flex items-center justify-end">
+          <button type="button" className={`${buttonStyle} !min-h-9 !text-xs`} aria-expanded={showFilters} aria-controls="catalog-filter-form"
+            onClick={() => setShowFilters((open) => !open)}>{showFilters ? '필터 접기' : '필터 펼치기'}</button>
+        </div>
+        <div id="catalog-filter-form" hidden={!showFilters}>
         {/* 적용된 조건이 바뀌면 폼을 다시 그리되, 정렬·페이지만 바뀔 때는 아직 검색하지 않은 초안(검색어·지역)을 버리지 않습니다. */}
         <CatalogFilters key={JSON.stringify({ ...filters, sort: undefined, page: undefined })} filters={filters} regions={catalog.regions} categories={catalog.categories}
           startupStages={catalog.startupStages} applicantTypes={catalog.applicantTypes} founderAges={catalog.founderAges} onApply={apply} />
+        </div>
+        {appliedChips.length > 0 ? <div className="flex flex-wrap items-center gap-2" role="group" aria-label="적용된 조건">
+          {appliedChips.map((chip) => <span key={chip.key} className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-3 py-1 text-xs font-semibold text-app-ink">
+            {chip.label}
+            <button type="button" className="grid size-5 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-ink-subtle hover:bg-line hover:text-app-ink"
+              aria-label={`${chip.label} 조건 지우기`} onClick={() => apply(chip.remove(filters))}>✕</button>
+          </span>)}
+          {appliedChips.length > 1 ? <button type="button" className="cursor-pointer border-0 bg-transparent text-xs font-bold text-sample-muted underline underline-offset-2 hover:text-app-ink"
+            onClick={() => apply({ ...defaultCatalogFilters, sort: filters.sort })}>모두 지우기</button> : null}
+        </div> : null}
         <section aria-label="필터 검색 결과" className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             {/* 건수는 결과가 있을 때만 확정합니다. 불러오는 중이나 실패에 "0건"을 보여 주면 없는 것으로 읽힙니다. */}
@@ -81,6 +99,24 @@ export function SupportProgramCatalogPanel() {
       </div>
     </main>
   )
+}
+
+type AppliedFilterChip = { key: string; label: string; remove: (filters: SupportProgramCatalogFilters) => SupportProgramCatalogFilters }
+
+/** 기본값과 다른 조건만 칩으로 만듭니다. 지우면 그 조건만 기본값으로 돌리고 1페이지부터 다시 봅니다. */
+function appliedFilterChips(filters: SupportProgramCatalogFilters): AppliedFilterChip[] {
+  const chips: AppliedFilterChip[] = []
+  const add = (key: keyof SupportProgramCatalogFilters, label: string, reset: Partial<SupportProgramCatalogFilters>) =>
+    chips.push({ key, label, remove: (current) => ({ ...current, ...reset, page: 1 }) })
+  if (filters.keyword) add('keyword', `검색어: ${filters.keyword}`, { keyword: '' })
+  if (filters.region) add('region', `지역: ${filters.region}`, { region: '' })
+  if (filters.category) add('category', `분야: ${filters.category}`, { category: '' })
+  if (filters.sourceCode) add('sourceCode', `출처: ${catalogSourceLabels[filters.sourceCode]}`, { sourceCode: '', startupStage: '', applicantType: '', founderAge: '' })
+  if (filters.status !== defaultCatalogFilters.status) add('status', statusLabels[filters.status], { status: defaultCatalogFilters.status })
+  if (filters.startupStage) add('startupStage', `창업 업력: ${filters.startupStage}`, { startupStage: '' })
+  if (filters.applicantType) add('applicantType', `신청 대상: ${filters.applicantType}`, { applicantType: '' })
+  if (filters.founderAge) add('founderAge', `창업자 연령: ${filters.founderAge}`, { founderAge: '' })
+  return chips
 }
 
 function CatalogFilters({ filters, regions, categories, startupStages, applicantTypes, founderAges, onApply }: {

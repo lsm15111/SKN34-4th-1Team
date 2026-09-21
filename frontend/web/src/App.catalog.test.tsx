@@ -585,3 +585,27 @@ describe('지원사업 직접 필터 검색', () => {
     expect(getSupportProgramSearchReturnTo({ searchReturnTo })).toBe('/')
   })
 })
+
+describe('필터 검색의 적용 조건 칩과 필터 접기', () => {
+  it('기본값과 다른 조건만 칩으로 보여 주고, 칩을 지우면 그 조건만 풀리며, 폼은 접어도 초안이 남는다', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => Response.json(catalog)))
+    start('/?mode=filter&region=%EC%84%9C%EC%9A%B8&category=%EC%88%98%EC%B6%9C')
+    await screen.findByRole('link', { name: program.title })
+    const chips = screen.getByRole('group', { name: '적용된 조건' })
+    expect(within(chips).getByText('지역: 서울')).toBeTruthy()
+    expect(within(chips).getByText('분야: 수출')).toBeTruthy()
+    // 기본값(접수 중)은 칩이 아닙니다.
+    expect(within(chips).queryByText('접수 중')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '필터 접기' }))
+    expect(screen.queryByRole('form', { name: '공고 필터' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '필터 펼치기' }))
+    expect((screen.getByRole('radio', { name: '서울' }) as HTMLInputElement).checked).toBe(true)
+
+    fireEvent.click(within(chips).getByRole('button', { name: '지역: 서울 조건 지우기' }))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('region='))
+    expect((screen.getByRole('radio', { name: '서울' }) as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByRole('radio', { name: '수출' }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.queryByRole('button', { name: '모두 지우기' })).toBeNull()
+  })
+})
