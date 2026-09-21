@@ -100,7 +100,7 @@ const evidenceLabels: Record<DailyReportItem['evidenceStatus'], string> = {
 
 function ReportItem({ item }: { item: DailyReportItem }) {
   return <article className={styles.outlinedCard}>
-    <h4 className={styles.cardTitle}><Link className={styles.quietLink} to={supportProgramDetailPath({ sourceCode: item.sourceCode, sourceProgramId: item.sourceProgramId }, true)}>{item.title}</Link></h4>
+    <h4 className={styles.cardTitle}><Link className={styles.quietLink} to={supportProgramDetailPath({ sourceCode: item.sourceCode, sourceProgramId: item.sourceProgramId }, true)} state={{ searchReturnTo: appPaths.reports }}>{item.title}</Link></h4>
     <p className={noteClass}>접수 기간: {item.applicationPeriod || '원문 확인 필요'}</p>
     <p className={noteClass}>검색 관련도: {item.relevanceScore === null ? '점수 없음' : `${item.relevanceScore}/100점`} · 선정확률 아님</p>
     {item.matchedReasons.length > 0 && <div><h5 className="m-0 text-sm font-bold">매칭 근거</h5><ul className="m-0 list-disc pl-5 text-sm leading-6">{item.matchedReasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul></div>}

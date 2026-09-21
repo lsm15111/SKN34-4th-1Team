@@ -581,7 +581,7 @@ describe('지원사업 직접 필터 검색', () => {
     expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true)
   })
 
-  it.each(['//evil.example/?mode=filter', 'https://evil.example', '/admin?mode=filter', '/app/chat/../admin?mode=filter', '/app/admin?mode=filter'])('외부·허용되지 않은 복귀 주소를 차단한다 %s', (searchReturnTo) => {
+  it.each(['//evil.example/?mode=filter', 'https://evil.example', '/admin?mode=filter', '/app/chat/../admin?mode=filter', '/app/unknown-screen?mode=filter'])('외부·허용되지 않은 복귀 주소를 차단한다 %s', (searchReturnTo) => {
     expect(getSupportProgramSearchReturnTo({ searchReturnTo })).toBe('/')
   })
 })
