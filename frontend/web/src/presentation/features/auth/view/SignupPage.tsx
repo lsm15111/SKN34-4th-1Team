@@ -1,3 +1,4 @@
+import { PasswordField } from '../../../shared/ui/PasswordField'
 import { Link } from 'react-router'
 
 import { useSignupViewModel } from '../viewmodel/useSignupViewModel'
@@ -102,10 +103,9 @@ export function SignupPage() {
 
             <div className={authPageStyles.field}>
               <label className={authPageStyles.fieldName} htmlFor="signup-password">비밀번호</label>
-              <input
+              <PasswordField
                 className={authPageStyles.fieldControl}
                 id="signup-password"
-                type="password"
                 name="password"
                 autoComplete="new-password"
                 required
@@ -122,9 +122,8 @@ export function SignupPage() {
 
             <label className={authPageStyles.field}>
               <span className={authPageStyles.fieldName}>비밀번호 확인</span>
-              <input
+              <PasswordField
                 className={authPageStyles.fieldControl}
-                type="password"
                 name="passwordConfirmation"
                 autoComplete="new-password"
                 required

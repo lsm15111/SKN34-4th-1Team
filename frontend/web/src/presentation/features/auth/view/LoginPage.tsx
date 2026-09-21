@@ -1,3 +1,4 @@
+import { PasswordField } from '../../../shared/ui/PasswordField'
 import { Link } from 'react-router'
 
 import { publicPaths } from '../../../shared/routes/appPaths'
@@ -56,9 +57,8 @@ export function LoginPage() {
 
             <label className={authPageStyles.field}>
               <span className={authPageStyles.fieldName}>비밀번호</span>
-              <input
+              <PasswordField
                 className={authPageStyles.fieldControl}
-                type="password"
                 name="password"
                 autoComplete="current-password"
                 required
