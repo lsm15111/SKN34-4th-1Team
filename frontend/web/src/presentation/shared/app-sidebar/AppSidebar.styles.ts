@@ -9,7 +9,9 @@ export const appSidebarStyles = {
   iconButton: 'grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-[#777] hover:bg-black/5 hover:text-app-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary',
   scrollArea: 'min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4',
   newChatButton: 'mb-1 w-full cursor-pointer border-0 text-left',
-  menuGroup: 'flex flex-col gap-1',
+  menuGroup: 'mt-3 flex flex-col gap-1 first-of-type:mt-1',
+  // 무리 이름은 눈에 띄지 않게 작은 대문자 느낌으로. 항목 사이 구분은 이 글자만으로 충분합니다.
+  menuGroupTitle: 'm-0 px-3 pt-1 pb-1 text-[0.66rem] font-extrabold tracking-[0.08em] text-ink-subtle',
   menuItem: 'flex min-h-11 min-w-0 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-semibold no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary [&_svg]:size-[18px]',
   activeMenuItem: 'bg-[#e6f5ed] text-brand-primary hover:bg-[#dcefe5]',
   inactiveMenuItem: 'bg-transparent text-app-ink hover:bg-[#f5f6f7]',

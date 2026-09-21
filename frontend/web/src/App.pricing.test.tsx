@@ -81,6 +81,9 @@ describe('공개 요금제', () => {
   it('작업 사이드바에서 요금제를 열면 사이드바 안에 머물고 무료 버튼은 작업 채팅으로 간다', () => {
     renderApp('/app/partners')
     const sidebar = screen.getByRole('complementary', { name: '작업 사이드바' })
+    // 요금제는 업무 메뉴가 아니라 계정 카드 메뉴에 있습니다.
+    expect(within(sidebar).queryByRole('link', { name: '요금제' })).toBeNull()
+    fireEvent.click(within(sidebar).getByRole('button', { name: /계정 메뉴/ }))
     fireEvent.click(within(sidebar).getByRole('link', { name: '요금제' }))
 
     expect(screen.queryByText('GovBiz 요금제', { exact: true })).toBeNull()
@@ -89,6 +92,8 @@ describe('공개 요금제', () => {
       expect(screen.getByRole('heading', { name })).toBeTruthy()
     }
     expect(screen.getByRole('complementary', { name: '작업 사이드바' })).toBeTruthy()
+    // 화면을 옮기면 계정 메뉴가 닫히고, 다시 열면 요금제가 현재 화면으로 표시됩니다.
+    fireEvent.click(within(sidebar).getByRole('button', { name: /계정 메뉴/ }))
     expect(within(sidebar).getByRole('link', { name: '요금제' }).getAttribute('aria-current')).toBe('page')
     expect(fetch).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: '무료로 지원사업 찾기' }).getAttribute('href')).toBe('/app/chat')

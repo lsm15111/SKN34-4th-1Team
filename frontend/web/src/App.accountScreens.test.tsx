@@ -454,9 +454,12 @@ describe('작업 화면 사이드바', () => {
     expect(savedPrograms.getAttribute('aria-disabled')).toBeNull()
     expect(within(sidebar).queryByText('준비 중')).toBeNull()
 
+    // 요금제는 업무 메뉴가 아니라 계정 메뉴에 있습니다. 화면을 옮기면 메뉴는 닫힙니다.
+    expect(within(sidebar).queryByRole('link', { name: '요금제' })).toBeNull()
+    fireEvent.click(within(sidebar).getByRole('button', { name: /계정 메뉴/ }))
     fireEvent.click(within(sidebar).getByRole('link', { name: '요금제' }))
-    expect(within(sidebar).getByRole('link', { name: '요금제' }).getAttribute('aria-current')).toBe('page')
-    expect(within(sidebar).getByRole('link', { name: '요금제' }).classList.contains('bg-[#e6f5ed]')).toBe(true)
+    expect(screen.getByRole('heading', { name: /요금제/ })).toBeTruthy()
+    expect(within(sidebar).queryByRole('link', { name: '요금제' })).toBeNull()
     expect(search.getAttribute('aria-current')).toBeNull()
     expect(search.classList.contains('bg-[#e6f5ed]')).toBe(false)
   })
@@ -465,7 +468,7 @@ describe('작업 화면 사이드바', () => {
     renderApp('/app/chat', adminAccount)
 
     const sidebar = screen.getByRole('complementary', { name: '작업 사이드바' })
-    fireEvent.click(within(sidebar).getByRole('link', { name: '파트너 관리' }))
+    fireEvent.click(within(sidebar).getByRole('link', { name: '파트너 모집' }))
     // 머리글 한 줄에 제목·탭·작성 버튼이 함께 놓이고, 탭으로 제안함을 오갑니다.
     const header = screen.getByRole('heading', { name: '파트너 관리' }).closest('header') as HTMLElement
     const tabs = within(header).getByRole('navigation', { name: '파트너 관리 탭' })
@@ -475,7 +478,9 @@ describe('작업 화면 사이드바', () => {
     expect(screen.getByRole('heading', { name: '파트너 관리' })).toBeTruthy()
     expect(within(screen.getByRole('navigation', { name: '파트너 관리 탭' })).getByRole('link', { name: /제안함/ }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('tablist', { name: '제안함 종류' })).toBeTruthy()
-    expect(within(sidebar).getByRole('link', { name: /파트너 관리/ }).getAttribute('aria-current')).toBe('page')
+    // 제안함은 사이드바의 독립 항목이라 제안함 탭에서는 파트너 모집이 아니라 제안함이 현재 화면입니다.
+    expect(within(sidebar).getByRole('link', { name: /제안함/ }).getAttribute('aria-current')).toBe('page')
+    expect(within(sidebar).getByRole('link', { name: '파트너 모집' }).getAttribute('aria-current')).toBeNull()
 
     expect(within(sidebar).queryByRole('navigation', { name: '관리자' })).toBeNull()
     expect(within(sidebar).queryByRole('link', { name: '회원·기업' })).toBeNull()
@@ -1536,10 +1541,11 @@ describe('제안함 화면', () => {
   it('사이드바 제안함 배지는 받은 제안 대기 건수를 보여주고 받은 제안함으로 이동한다', async () => {
     renderApp('/app/partners', companyAccount)
     const sidebar = screen.getByRole('complementary', { name: '작업 사이드바' })
-    // 파트너 관리 메뉴가 대기 건수를 배지로 보여 주고, 제안함은 머리글 아래 탭으로 갑니다.
-    const menu = await within(sidebar).findByRole('link', { name: /파트너 관리/ })
+    // 사이드바의 제안함 항목이 대기 건수를 배지로 보여 주고, 파트너 모집 항목에는 배지가 없습니다.
+    const menu = await within(sidebar).findByRole('link', { name: /제안함/ })
     expect(menu.textContent).toContain('1')
-    expect(menu.getAttribute('href')).toBe('/app/partners')
+    expect(menu.getAttribute('href')).toBe('/app/proposals')
+    expect(within(sidebar).getByRole('link', { name: '파트너 모집' }).textContent).not.toContain('1')
 
     const proposalsTab = within(screen.getByRole('navigation', { name: '파트너 관리 탭' })).getByRole('link', { name: /제안함/ })
     expect(proposalsTab.textContent).toContain('1')
@@ -1582,7 +1588,7 @@ describe('제안함 화면', () => {
     expect(within(pending).queryByRole('button', { name: '거절' })).toBeNull()
     // 받은 제안함은 Redux에 있으므로 사이드바 배지도 다시 읽지 않고 함께 사라집니다.
     const sidebar = screen.getByRole('complementary', { name: '작업 사이드바' })
-    await waitFor(() => expect(within(sidebar).getByRole('link', { name: /파트너 관리/ }).textContent).not.toContain('1'))
+    await waitFor(() => expect(within(sidebar).getByRole('link', { name: /제안함/ }).textContent).not.toContain('1'))
     const browse = appContainer.resolve('browsePartnerProposalsUseCase').execute as ReturnType<typeof vi.fn>
     expect(browse.mock.calls.filter(([box]) => box === 'received')).toHaveLength(1)
   })

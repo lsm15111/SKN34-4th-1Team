@@ -14,7 +14,7 @@ import { useFloatingPopover } from '../workspace/useFloatingPopover'
 import { appSidebarStyles, sidebarMenuItemClassName } from './AppSidebar.styles'
 import type { ChatHistoryViewModel } from '../../features/chat/hooks/useChatHistory'
 
-type MenuIcon = 'search' | 'document' | 'bookmark' | 'users' | 'inbox' | 'building' | 'shield' | 'pricing' | 'logout' | 'more' | 'newChat' | 'panel' | 'trash'
+type MenuIcon = 'search' | 'document' | 'bookmark' | 'users' | 'inbox' | 'mail' | 'building' | 'shield' | 'pricing' | 'logout' | 'more' | 'newChat' | 'panel' | 'trash'
 
 /** 사이드바 메뉴 한 줄입니다. `to`가 없으면 아직 화면이 없는 메뉴이므로 링크로 만들지 않습니다. */
 type MenuItem = {
@@ -27,23 +27,29 @@ type MenuItem = {
 
 type MenuGroup = { title: string; items: MenuItem[] }
 
-// 순서는 사용 빈도와 업무 흐름(찾기 → 모아두기 → 준비·검토 → 협업 → 결제)을 따르고, 도우미 도움말 주제 순서와 맞춥니다.
+// 일의 순서대로 세 무리(찾기 → 준비 → 협업)로 묶어 제품 설명 없이도 구조가 읽히게 합니다.
+// 결제(요금제)는 업무 메뉴가 아니라 계정 영역이므로 계정 카드 메뉴에 둡니다.
 const menuGroups: MenuGroup[] = [
   {
-    title: '메뉴',
+    title: '찾기',
     items: [
       { label: '관심 공고함', icon: 'bookmark', to: appPaths.savedPrograms, matches: (pathname) => pathname.startsWith(appPaths.savedPrograms) },
       { label: '기업 맞춤 리포트', icon: 'inbox', to: appPaths.reports, matches: (pathname) => pathname === appPaths.reports },
+    ],
+  },
+  {
+    title: '준비',
+    items: [
       { label: '신청 문서 작성', icon: 'document', to: appPaths.applicationPreparations, matches: (pathname) => pathname.startsWith(appPaths.applicationPreparations) },
       { label: '중복 지원·수혜 검토', icon: 'shield', to: appPaths.combinationReviews, matches: (pathname) => pathname.startsWith(appPaths.combinationReviews) },
-      {
-        label: '파트너 관리',
-        icon: 'users',
-        to: appPaths.partners,
-        // 모집글과 제안함은 한 메뉴 아래 탭으로 오갑니다.
-        matches: (pathname) => pathname.startsWith(appPaths.partners) || pathname.startsWith(appPaths.proposals),
-      },
-      { label: '요금제', icon: 'pricing', to: appPaths.pricing, matches: (pathname) => pathname === appPaths.pricing },
+    ],
+  },
+  {
+    title: '협업',
+    items: [
+      { label: '파트너 모집', icon: 'users', to: appPaths.partners, matches: (pathname) => pathname.startsWith(appPaths.partners) },
+      // 받은 제안은 "나를 기다리는 일"이라 파트너 모집 아래 탭에 두지 않고 항목으로 올려 미확인 수를 배지로 보입니다.
+      { label: '제안함', icon: 'mail', to: appPaths.proposals, matches: (pathname) => pathname.startsWith(appPaths.proposals) },
     ],
   },
 ]
@@ -63,6 +69,12 @@ const iconPaths: Record<MenuIcon, ReactNode> = {
     <>
       <path d="M4 5h16v14H4z" />
       <path d="M4 13h5l1.5 2h3L15 13h5" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
     </>
   ),
   document: (
@@ -193,9 +205,12 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
     navigate(publicPaths.landing, { replace: true })
   }
 
-  /** 파트너 관리는 받은 제안 대기 건수를 배지로 보여 줍니다. 나머지 메뉴는 고정 문구를 씁니다. */
+  /** 제안함은 받은 제안 대기 건수를 배지로 보여 줍니다(두 자리를 넘으면 99+). 나머지 메뉴는 고정 문구를 씁니다. */
   function badgeFor(item: MenuItem): string | undefined {
-    if (item.to === appPaths.partners) return pendingProposalCount === null || pendingProposalCount === 0 ? undefined : String(pendingProposalCount)
+    if (item.to === appPaths.proposals) {
+      if (pendingProposalCount === null || pendingProposalCount === 0) return undefined
+      return pendingProposalCount > 99 ? '99+' : String(pendingProposalCount)
+    }
     return item.badge
   }
 
@@ -219,7 +234,7 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
         {menuGroups
           .map((group) => (
             <nav className={appSidebarStyles.menuGroup} key={group.title} aria-label={group.title}>
-              <p className="sr-only">{group.title}</p>
+              <p className={appSidebarStyles.menuGroupTitle}>{group.title}</p>
               {group.items.map((item) =>
                 item.to ? (
                   <Link
@@ -291,6 +306,14 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
               >
                 <MenuIconGraphic name="building" />
                 <span>내 프로필</span>
+              </Link>
+              <Link
+                className={sidebarMenuItemClassName(pathname === appPaths.pricing ? 'active' : 'inactive')}
+                to={appPaths.pricing}
+                aria-current={pathname === appPaths.pricing ? 'page' : undefined}
+              >
+                <MenuIconGraphic name="pricing" />
+                <span>요금제</span>
               </Link>
               {account.tier === 'ADMIN' ? (
                 <Link
