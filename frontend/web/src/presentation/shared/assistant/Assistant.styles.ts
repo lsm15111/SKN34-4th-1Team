@@ -9,9 +9,10 @@ function classes(...groups: string[]) {
 export const assistantStyles = {
   // 런처: 우측 하단 56px 원. 채팅 화면에서는 입력창을 가리지 않게 위로 올립니다.
   launcherWrap: 'fixed right-6 z-[30] flex items-center gap-2.5 max-[639px]:right-4',
-  launcherWrapDefault: 'bottom-6',
+  // 모바일(≤759px) 작업 화면에는 하단 탭(약 3.5rem)이 있어 그 위로 올립니다.
+  launcherWrapDefault: 'bottom-6 max-[759px]:bottom-[4.5rem]',
   // 입력창(약 134px + 여백)이 있는 화면에서는 그 위로 올려 전송 버튼을 가리지 않습니다.
-  launcherWrapLifted: 'bottom-[176px]',
+  launcherWrapLifted: 'bottom-[176px] max-[759px]:bottom-[206px]',
   launcher: classes(
     'relative flex size-14 cursor-pointer items-center justify-center rounded-full border-0 bg-brand-primary text-white',
     'shadow-[0_8px_22px_-8px_rgb(8_127_70_/_60%)] hover:bg-[#066538] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',

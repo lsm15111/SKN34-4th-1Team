@@ -467,3 +467,27 @@ function expectLoadingCard(phase: 'interpretation' | 'search') {
     name: isInterpreting ? '지원사업 검색 진행 중' : '조건 해석 진행 중',
   })).toBeNull()
 }
+
+describe('모바일 하단 탭', () => {
+  it('좁은 화면의 작업 화면에는 하단 탭 다섯 개가 있고 더보기가 사이드바 메뉴를 연다', () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query === '(max-width: 759px)', media: query,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })))
+    HTMLDialogElement.prototype.showModal ??= function showModal() { this.setAttribute('open', '') }
+    HTMLDialogElement.prototype.close ??= function close() { this.removeAttribute('open') }
+    renderChat('/app/chat')
+    const tabs = screen.getByRole('navigation', { name: '모바일 하단 탭' })
+    expect(within(tabs).getByRole('link', { name: '검색' }).getAttribute('aria-current')).toBe('page')
+    for (const name of ['관심함', '리포트', '제안함']) expect(within(tabs).getByRole('link', { name })).toBeTruthy()
+    expect(within(tabs).getByRole('link', { name: '관심함' }).getAttribute('href')).toBe('/app/saved-programs')
+    fireEvent.click(within(tabs).getByRole('button', { name: '더보기' }))
+    expect(screen.getByRole('dialog', { name: '작업 메뉴', hidden: true })).toBeTruthy()
+  })
+
+  it('넓은 화면에는 하단 탭이 없다', () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+    renderChat('/app/chat')
+    expect(screen.queryByRole('navigation', { name: '모바일 하단 탭' })).toBeNull()
+  })
+})

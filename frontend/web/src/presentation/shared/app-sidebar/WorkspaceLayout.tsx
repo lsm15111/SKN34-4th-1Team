@@ -2,6 +2,7 @@ import { Link, Outlet } from 'react-router'
 
 import { chatActivityMessages } from '../chat-activity/chatActivityMessages'
 import { appPaths } from '../routes/appPaths'
+import { MobileTabBar } from './MobileTabBar'
 import { WorkspaceModal } from '../workspace/WorkspaceModal'
 import { workspaceModalStyles } from '../workspace/WorkspaceModal.styles'
 import { workspacePageStyles } from '../workspace/WorkspacePage.styles'
@@ -31,6 +32,8 @@ export function WorkspaceLayout() {
         className={vm.isCollapsed ? 'hidden' : 'h-full w-[260px] shrink-0'}>
         {sidebar}
       </div>}
+      {/* 모바일은 스크롤 칸 아래에 하단 탭이 붙습니다. 탭이 스크롤 칸 밖에 있어야 입력창(sticky)이 탭 위에 놓입니다. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className={appSidebarStyles.workspace} ref={vm.workspaceRef}>
         {vm.isMobile || vm.isCollapsed ? <header className={appSidebarStyles.compactHeader} aria-label="작업 메뉴 열기">
           <button ref={vm.menuButtonRef} type="button" className={appSidebarStyles.iconButton}
@@ -42,6 +45,8 @@ export function WorkspaceLayout() {
             title="지원사업 새검색" onClick={vm.requestNewChat}><SidebarActionIcon name="newChat" /></button>
         </header> : null}
         <Outlet />
+      </div>
+      {vm.isMobile ? <MobileTabBar onOpenMenu={vm.openSidebar} /> : null}
       </div>
       {pendingAction?.kind === 'delete' ? (
         <WorkspaceModal isOpen title="대화를 삭제할까요?" tone="danger" onClose={vm.cancelPendingAction}
