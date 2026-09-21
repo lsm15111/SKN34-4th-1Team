@@ -210,7 +210,7 @@ Redux `receivedProposals` slice와 `useReceivedProposals`(계정당 한 번 조�
 모집 작성은 중복 검토·신청 문서와 같은 `SavedSupportProgramPickerDialog`·`useSavedSupportProgramChoices`로 관심 공고함을 팝업에서 읽어 접수 중인 공고 1개를 고르고
 `createPartnerRecruitmentUseCase`로 등록합니다. 관심 공고는 화면 진입이 아니라 팝업을 열 때 조회하며, 접수 중이 아니거나 오늘 접수가 끝나는 공고는 팝업에서 이유(`접수 중 아님`·`오늘 접수 마감`)와 함께 비활성입니다.
 공고 카탈로그 검색은 모집글 작성에서 쓰지 않으며, 담은 공고가 없으면 관심 공고함 링크로 안내합니다.
-공고당 모집글은 하나이며 마감일은 접수 마감 전날까지입니다. 모집글 저장·숨김·신고·회원 정지 등
+공고당 모집글은 하나이며 마감일은 접수 마감 전날까지입니다. 모집글 저장·숨김·신고·회원 정지 등(화면에 자리를 두지 않고 기능이 생길 때 붙임)
 연결되지 않은 동작은 준비 중으로 비활성화했습니다. 프로필의 선택은 화면 안에서만 유지되고 추천에 전달되지 않습니다.
 없는 `recruitmentId`는 다른 모집글로 대체하지 않고 "찾을 수 없습니다"로 보여 줍니다.
 공개 파트너 모집 화면은 `presentation/features/public-partner-recruitment`에 따로 두어 매칭·제안 폼 없이 읽기만 제공하고,
