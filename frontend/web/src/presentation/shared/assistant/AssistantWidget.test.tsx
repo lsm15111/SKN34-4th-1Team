@@ -54,14 +54,14 @@ describe('GovBiz 도우미 위젯', () => {
     const launcher = screen.getByRole('button', { name: assistantMessages.openLauncher })
     expect(launcher.getAttribute('aria-expanded')).toBe('false')
     // 채팅 입력창이 있는 화면이라 런처가 위로 올라갑니다.
-    expect(launcher.parentElement?.classList.contains('bottom-[92px]')).toBe(true)
+    expect(launcher.parentElement?.classList.contains('bottom-[176px]')).toBe(true)
     expect(screen.getByText(assistantMessages.launcherLabel)).toBeTruthy()
 
     fireEvent.click(launcher)
     const panel = screen.getByRole('dialog', { name: assistantMessages.name })
     // 입력창 위로 올린 만큼 높이도 줄여, 창을 낮춰도 패널 위쪽이 화면 밖으로 잘리지 않습니다.
-    expect(panel.classList.contains('bottom-[160px]')).toBe(true)
-    expect(panel.classList.contains('h-[min(600px,calc(100dvh-180px))]')).toBe(true)
+    expect(panel.classList.contains('bottom-[244px]')).toBe(true)
+    expect(panel.classList.contains('h-[min(600px,calc(100dvh-264px))]')).toBe(true)
     expect(within(panel).getByText(assistantMessages.greetingIntro)).toBeTruthy()
     expect(within(panel).getByText(assistantMessages.greetingAsk)).toBeTruthy()
     expect(screen.getByRole('button', { name: assistantMessages.closeLauncher }).getAttribute('aria-expanded')).toBe('true')

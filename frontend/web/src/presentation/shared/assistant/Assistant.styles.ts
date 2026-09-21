@@ -10,7 +10,8 @@ export const assistantStyles = {
   // 런처: 우측 하단 56px 원. 채팅 화면에서는 입력창을 가리지 않게 위로 올립니다.
   launcherWrap: 'fixed right-6 z-[30] flex items-center gap-2.5 max-[639px]:right-4',
   launcherWrapDefault: 'bottom-6',
-  launcherWrapLifted: 'bottom-[92px]',
+  // 입력창(약 134px + 여백)이 있는 화면에서는 그 위로 올려 전송 버튼을 가리지 않습니다.
+  launcherWrapLifted: 'bottom-[176px]',
   launcher: classes(
     'relative flex size-14 cursor-pointer items-center justify-center rounded-full border-0 bg-brand-primary text-white',
     'shadow-[0_8px_22px_-8px_rgb(8_127_70_/_60%)] hover:bg-[#066538] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
@@ -35,7 +36,7 @@ export const assistantStyles = {
   ),
   panelDefault: 'bottom-[92px] h-[min(600px,calc(100dvh-112px))]',
   // 채팅 화면에서는 입력창 위로 올리므로(bottom 160px) 그만큼 높이도 줄입니다.
-  panelLifted: 'bottom-[160px] h-[min(600px,calc(100dvh-180px))]',
+  panelLifted: 'bottom-[244px] h-[min(600px,calc(100dvh-264px))]',
   header: 'flex shrink-0 items-center gap-2.5 bg-brand-primary px-3.5 py-3 text-white',
   headerBack: 'hidden max-[639px]:flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-white text-lg',
   avatar: 'flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-[15px] font-bold text-brand-primary',
