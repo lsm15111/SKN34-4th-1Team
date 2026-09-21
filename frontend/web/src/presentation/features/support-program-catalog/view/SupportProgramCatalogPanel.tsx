@@ -31,11 +31,17 @@ export function SupportProgramCatalogPanel() {
           <h1 className="mt-2 mb-2 text-3xl font-bold tracking-tight max-chat:text-2xl">원하는 지원사업을 직접 골라보세요.</h1>
           <p className="m-0 text-sm leading-relaxed text-sample-muted">분야와 지역을 선택하면 저장된 공고를 바로 볼 수 있어요.</p>
         </header>
-        <CatalogFilters key={JSON.stringify(filters)} filters={filters} regions={catalog.regions} categories={catalog.categories}
+        {/* 적용된 조건이 바뀌면 폼을 다시 그리되, 정렬·페이지만 바뀔 때는 아직 검색하지 않은 초안(검색어·지역)을 버리지 않습니다. */}
+        <CatalogFilters key={JSON.stringify({ ...filters, sort: undefined, page: undefined })} filters={filters} regions={catalog.regions} categories={catalog.categories}
           startupStages={catalog.startupStages} applicantTypes={catalog.applicantTypes} founderAges={catalog.founderAges} onApply={apply} />
         <section aria-label="필터 검색 결과" className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="m-0 text-base font-bold" aria-live="polite">검색 결과 <span className="text-brand-primary">{(catalog.data?.total ?? 0).toLocaleString()}건</span></h2>
+            {/* 건수는 결과가 있을 때만 확정합니다. 불러오는 중이나 실패에 "0건"을 보여 주면 없는 것으로 읽힙니다. */}
+            <h2 className="m-0 text-base font-bold" aria-live="polite">
+              {catalog.phase === 'loading' ? '검색 결과 불러오는 중…'
+                : catalog.phase === 'failed' ? '검색 결과를 불러오지 못했습니다'
+                : <>검색 결과 <span className="text-brand-primary">{(catalog.data?.total ?? 0).toLocaleString()}건</span></>}
+            </h2>
             <label className="flex items-center gap-2 text-xs text-sample-muted">정렬
               <SelectField label="공고 정렬" className={`${inputStyle} !min-h-9 !w-auto !text-xs`} value={filters.sort}
                 options={[{ value: 'RECENT', label: '최신순' }, { value: 'DEADLINE', label: '마감일순' }]}
