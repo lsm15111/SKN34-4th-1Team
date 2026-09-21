@@ -45,7 +45,7 @@ describe('기업 맞춤 리포트 화면', () => {
     renderPage()
     await screen.findByRole('button', { name: '이메일 주소 확인 메일 보내기' })
     expect((screen.getByLabelText(/매일 8시 이후/) as HTMLInputElement).disabled).toBe(true)
-    expect(screen.getByText(/아직 생성된 리포트가 없습니다/)).toBeTruthy()
+    expect(screen.getByText(/아직 만든 리포트가 없습니다/)).toBeTruthy()
     expect(preview).not.toHaveBeenCalled()
     expect(verify).not.toHaveBeenCalled()
   })

@@ -25,14 +25,26 @@ export function DailyReportPage() {
         {vm.notice && <p role="status" className={noteClass}>{vm.notice}</p>}
         {!vm.loaded && !vm.error && <p role="status">리포트 설정을 불러오는 중입니다.</p>}
         {vm.loaded && settings && <>
+          {/* 리포트 내용이 먼저, 수신 설정은 아래 접이식입니다. 화면의 주인공은 설정 폼이 아니라 오늘의 공고입니다. */}
+          <section className={styles.card}>
+            <h2 className={styles.cardTitle}>오늘의 리포트</h2>
+            <p className={noteClass}>미리보기를 생성할 때 AI 분석 비용이 발생할 수 있습니다. 계정당 하루 한 리포트를 웹과 이메일이 함께 사용하며, 저장한 조건을 바꾸어도 오늘의 결과는 다시 만들지 않습니다. 생성에 실패하면 같은 조건으로 최대 1회 재시도할 수 있으며 추가 AI 비용이 발생할 수 있습니다. 변경한 조건은 다음 리포트부터 반영됩니다.</p>
+            <p className={noteClass}>미리보기 버튼 자체는 메일을 보내지 않습니다. 정기 수신이 켜져 있으면 생성된 오늘의 리포트가 정기 발송에 사용될 수 있습니다.</p>
+            <button className={styles.primaryButton} type="button" disabled={busy || vm.company === null || vm.dirty} onClick={() => void vm.preview()}>{vm.busy === 'preview' ? '오늘의 리포트 생성 중…' : '오늘의 리포트 미리보기'}</button>
+            {vm.dirty && <p className={noteClass}>변경한 설정을 먼저 저장해 주세요.</p>}
+            {vm.report === null ? <p className={noteClass}>아직 만든 리포트가 없습니다. 미리보기를 누르면 오늘 접수 중인 공고를 모아 보여 드립니다. 검색 결과가 없다는 뜻은 아닙니다.</p> : <ReportContent report={vm.report} />}
+          </section>
+          <details className={styles.card} open={!settings.enabled}>
+            <summary className="cursor-pointer text-[1.02rem] font-bold tracking-[-0.025em] text-app-ink">수신 설정 · 정기 이메일 {settings.enabled ? '켜짐' : '꺼짐'}</summary>
+            <div className="mt-4 flex flex-col gap-4">
           {!settings.emailDeliveryAvailable && <p className={warningClass}>현재 서버의 이메일 발송이 꺼져 있습니다. 웹 미리보기는 사용할 수 있지만, 확인 메일과 정기 이메일 발송은 운영자의 설정 후 사용할 수 있습니다.</p>}
           {settings.emailDeliveryAvailable && !settings.schedulerEnabled && <p className={warningClass}>서버의 새 정기 발송 예약이 꺼져 있습니다. 이미 예약된 메일은 처리될 수 있습니다. 주소 확인과 수신 설정은 미리 저장할 수 있습니다. 메일 설정이 있어도 실제 도착을 보장하지는 않습니다.</p>}
-          {vm.company === null ? <section className={styles.card}>
+          {vm.company === null ? <section className={styles.outlinedCard}>
             <h2 className={styles.cardTitle}>기업 정보가 필요합니다</h2>
             <p className={noteClass}>지역과 업종을 기준으로 공고를 찾으려면 기업 정보를 먼저 등록해 주세요.</p>
             <Link className={styles.primaryButton} to={appPaths.profile}>기업 정보 등록하기</Link>
             {settings.enabled && <button className={styles.secondaryButton} type="button" disabled={busy} onClick={() => vm.save(true)}>정기 이메일 수신 중지</button>}
-          </section> : <section className={styles.card}>
+          </section> : <section className={styles.outlinedCard}>
             <h2 className={styles.cardTitle}>리포트 설정</h2>
             <p className={noteClass}>{vm.company.companyName} · {vm.company.region} · {vm.company.industry}</p>
             <Link className={styles.quietLink} to={appPaths.profile}>기업 조건 수정</Link>
@@ -58,14 +70,8 @@ export function DailyReportPage() {
             </form>
             <p className={noteClass}>정기 수신: {settings.enabled ? '켜짐' : '꺼짐'} · 발송에는 서버 가동과 검색 준비가 필요합니다.</p>
           </section>}
-          <section className={styles.card}>
-            <h2 className={styles.cardTitle}>오늘의 미리보기와 최신 리포트</h2>
-            <p className={noteClass}>미리보기를 생성할 때 AI 분석 비용이 발생할 수 있습니다. 계정당 하루 한 리포트를 웹과 이메일이 함께 사용하며, 저장한 조건을 바꾸어도 오늘의 결과는 다시 만들지 않습니다. 생성에 실패하면 같은 조건으로 최대 1회 재시도할 수 있으며 추가 AI 비용이 발생할 수 있습니다. 변경한 조건은 다음 리포트부터 반영됩니다.</p>
-            <p className={noteClass}>미리보기 버튼 자체는 메일을 보내지 않습니다. 정기 수신이 켜져 있으면 생성된 오늘의 리포트가 정기 발송에 사용될 수 있습니다.</p>
-            <button className={styles.primaryButton} type="button" disabled={busy || vm.company === null || vm.dirty} onClick={() => void vm.preview()}>{vm.busy === 'preview' ? '오늘의 리포트 생성 중…' : '오늘의 리포트 미리보기'}</button>
-            {vm.dirty && <p className={noteClass}>변경한 설정을 먼저 저장해 주세요.</p>}
-            {vm.report === null ? <p className={noteClass}>아직 생성된 리포트가 없습니다. 검색 결과가 없다는 뜻은 아닙니다.</p> : <ReportContent report={vm.report} />}
-          </section>
+            </div>
+          </details>
           <p className={noteClass}>이 버전의 서류 안내는 지원하는 공식 HTML 본문의 근거에 한정됩니다. PDF·HWP 첨부파일 전체 검토와 뉴스 브리핑은 제공하지 않습니다. 신청 전 최신 공고와 담당 기관에서 최종 확인해 주세요.</p>
         </>}
       </main>
