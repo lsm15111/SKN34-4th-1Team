@@ -88,13 +88,22 @@ export function toAppPath(pathname: string, search = ''): string {
   return appPaths.chat
 }
 
-/** 공고 상세·질문 화면 경로입니다. 내부 화면에서 열면 사이드바를 유지하도록 `/app` 아래 경로를 씁니다. */
-export function supportProgramDetailPath(identity: { sourceCode: string; sourceProgramId: string }, inApp: boolean): string {
+/**
+ * 공고 상세·질문 화면 경로입니다. 내부 화면에서 열면 사이드바를 유지하도록 `/app` 아래 경로를 씁니다.
+ * 비로그인 화면은 이동 상태가 새로고침·공유에서 사라지므로, 기본 검색(`/`)이 아닌 복귀 경로만 `back`에 실어 둡니다.
+ */
+export function supportProgramDetailPath(identity: { sourceCode: string; sourceProgramId: string }, inApp: boolean, searchReturnTo?: string): string {
   const base = inApp ? appPaths.supportProgramDetail : publicPaths.supportProgramDetail
-  return `${base}?${new URLSearchParams(identity)}`
+  return `${base}?${withSearchReturnTo(identity, inApp, searchReturnTo)}`
 }
 
-export function supportProgramQuestionPath(identity: { sourceCode: string; sourceProgramId: string }, inApp: boolean): string {
+export function supportProgramQuestionPath(identity: { sourceCode: string; sourceProgramId: string }, inApp: boolean, searchReturnTo?: string): string {
   const base = inApp ? appPaths.supportProgramQuestion : publicPaths.supportProgramQuestion
-  return `${base}?${new URLSearchParams(identity)}`
+  return `${base}?${withSearchReturnTo(identity, inApp, searchReturnTo)}`
+}
+
+function withSearchReturnTo(identity: { sourceCode: string; sourceProgramId: string }, inApp: boolean, searchReturnTo?: string): URLSearchParams {
+  const params = new URLSearchParams(identity)
+  if (!inApp && searchReturnTo && searchReturnTo !== publicPaths.landing) params.set('back', searchReturnTo)
+  return params
 }
