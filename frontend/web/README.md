@@ -149,8 +149,8 @@ Core의 도구 에이전트(`ASSISTANT_AGENT_ENABLED`)가 켜져 있으면 같�
 | `/partners`, `/partners/detail?recruitmentId=...` | 헤더 | 공개 파트너 모집 목록·상세. 모집 API를 읽기만 하고(검색어는 조회 버튼으로 적용, 출처·정렬 선택 상자는 지원사업 찾기와 같은 모양, 건수는 "검색 결과 N건") 작성 기업 정보는 흐리게 가리며, 자세히 보기·제안 버튼은 로그인하면 할 수 있는 일 다이얼로그(배경 흐림)로 안내 |
 | `/support-programs/detail?sourceCode=...&sourceProgramId=...` | 검색 화면 안(헤더·검색 탭 고정) | 식별자로 상세 API를 조회해 공고 조건·출처 표시. 검색 탭을 누르면 들어온 검색 화면으로 돌아감. 관심 공고 저장(책갈피 아이콘)·원문 질문·신청 문서 작성은 회원 기능이라 로그인 뒤 같은 곳으로 이어지는 링크 |
 | `/support-programs/detail/question?sourceCode=...&sourceProgramId=...` | 검색 화면 안(헤더·검색 탭 고정) | 공고별 원문 질문 입력·답변·근거 인용·취소, 상세 화면으로 돌아가기 |
-| `/examples/sample-item/hook` | 헤더 | React Hook Form·로컬 요청 상태 예제 |
-| `/examples/sample-item/redux` | 헤더 | Redux 상태 유지 예제 |
+| `/examples/sample-item/hook` | 헤더(개발 빌드 전용) | React Hook Form·로컬 요청 상태 예제. 운영 빌드에는 등록되지 않음 |
+| `/examples/sample-item/redux` | 헤더(개발 빌드 전용) | Redux 상태 유지 예제. 운영 빌드에는 등록되지 않음 |
 | `/login` | 없음 | 카카오·Google 로그인 버튼(요청 없이 바로 표시, 키가 없으면 누를 때 안내), 이메일·비밀번호 로그인, 로그인 상태 유지, `?next=` 복귀 경로, 소셜 로그인 실패 안내(`?oauthError=`) |
 | `/signup` | 없음 | 카카오·Google 가입 버튼과 이메일·비밀번호 회원가입. 이메일 옆 "인증번호 받기"로 6자리 번호를 받아 맞힌 뒤에만 가입할 수 있고, 성공하면 세션이 생겨 작업 채팅으로 이동 |
 | `/oauth/complete` | 없음 | 소셜 로그인 뒤 서버가 보내는 완료 화면. 세션으로 계정을 확인해 `?next=`로 이동하고, 세션이 없으면 로그인 화면에 실패 안내 |

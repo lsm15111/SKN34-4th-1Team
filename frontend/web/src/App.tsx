@@ -97,9 +97,13 @@ function App() {
             <Route path={publicPaths.supportProgramQuestion} element={<SupportProgramEvidenceQuestionPage />} />
           </Route>
         </Route>
-        {/* 상태관리 비교 예제는 개발용 화면이라 로그인 여부와 무관하게 같은 헤더 아래에서 엽니다. */}
-        <Route path="/examples/sample-item/hook" element={<SampleItemPage />} />
-        <Route path="/examples/sample-item/redux" element={<ReduxSampleItemPage />} />
+        {/* 상태관리 비교 예제는 학습용 화면이라 개발 빌드에서만 등록합니다. 운영 번들에는 예제 화면과 react-hook-form이 들어가지 않습니다. */}
+        {import.meta.env.DEV ? (
+          <>
+            <Route path="/examples/sample-item/hook" element={<SampleItemPage />} />
+            <Route path="/examples/sample-item/redux" element={<ReduxSampleItemPage />} />
+          </>
+        ) : null}
       </Route>
 
       {/* 소셜 로그인 완료 화면은 세션을 막 받은 순간이라 로그인 여부로 가르지 않고 스스로 복귀 경로로 옮깁니다. */}
