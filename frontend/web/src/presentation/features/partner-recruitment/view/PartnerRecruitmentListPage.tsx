@@ -2,9 +2,12 @@ import { Link } from 'react-router'
 
 import type { PartnerRecruitmentSummary } from '../../../../domain/entities/PartnerRecruitment'
 import {
+  workspaceChipClassName,
   workspacePageStyles,
   workspaceTagClassName,
 } from '../../../shared/workspace/WorkspacePage.styles'
+import { WorkspaceModal } from '../../../shared/workspace/WorkspaceModal'
+import { workspaceModalStyles } from '../../../shared/workspace/WorkspaceModal.styles'
 import { PartnerManagementHeader } from '../../../shared/partner-recruitment/PartnerManagementHeader'
 import { FilterChoices } from '../../../shared/workspace/FilterChoices'
 import { FilterMultiChoices } from '../../../shared/workspace/FilterMultiChoices'
@@ -19,7 +22,7 @@ import { appPaths } from '../../../shared/routes/appPaths'
 import { usePartnerRecruitmentListViewModel } from '../viewmodel/usePartnerRecruitmentListViewModel'
 import { partnerRecruitmentStyles } from './PartnerRecruitment.styles'
 
-function RecruitmentCard({ recruitment }: { recruitment: PartnerRecruitmentSummary }) {
+function RecruitmentCard({ recruitment, editPath, onClose }: { recruitment: PartnerRecruitmentSummary; editPath: string; onClose: () => void }) {
   const cardClassName = recruitment.isMine
     ? workspacePageStyles.outlinedCard
     : workspacePageStyles.card
@@ -84,12 +87,21 @@ function RecruitmentCard({ recruitment }: { recruitment: PartnerRecruitmentSumma
             제안 {recruitment.proposalCount}건
           </span>
         )}
-        <Link
-          className={recruitment.isMine ? workspacePageStyles.secondaryButton : workspacePageStyles.primaryButton}
-          to={`${appPaths.partnerDetail}?${new URLSearchParams({ recruitmentId: String(recruitment.id) })}`}
-        >
-          {recruitment.isMine ? '받은 제안 보기' : '자세히 보기'}
-        </Link>
+        <span className={partnerRecruitmentStyles.tagRow}>
+          {/* 내 글이 모집 중이면 카드에서 바로 수정·마감합니다. 마감은 확인 상자를 거칩니다. */}
+          {recruitment.isMine && recruitment.status === 'OPEN' ? (
+            <>
+              <Link className={workspacePageStyles.secondaryButton} to={editPath}>수정</Link>
+              <button className={workspacePageStyles.dangerButton} type="button" onClick={onClose}>마감</button>
+            </>
+          ) : null}
+          <Link
+            className={recruitment.isMine ? workspacePageStyles.secondaryButton : workspacePageStyles.primaryButton}
+            to={`${appPaths.partnerDetail}?${new URLSearchParams({ recruitmentId: String(recruitment.id) })}`}
+          >
+            {recruitment.isMine ? '받은 제안 보기' : '자세히 보기'}
+          </Link>
+        </span>
       </div>
     </article>
   )
@@ -118,11 +130,19 @@ export function PartnerRecruitmentListPage() {
     hasActiveNarrowing,
     clearNarrowing,
     resultSummary,
+    toggleMineOnly,
+    editPathFor,
+    closingRecruitment,
+    isClosing,
+    closeError,
+    openCloseConfirm,
+    cancelClose,
+    confirmClose,
   } = usePartnerRecruitmentListViewModel()
 
   return (
     <>
-      <PartnerManagementHeader active="recruitments" />
+      <PartnerManagementHeader />
 
       <div className={workspacePageStyles.content}>
         <div className={workspacePageStyles.column}>
@@ -170,6 +190,7 @@ export function PartnerRecruitmentListPage() {
 
             <div className={partnerRecruitmentStyles.filterFooter}>
               <span className={partnerRecruitmentStyles.tagRow}>
+                <button className={workspaceChipClassName(query.mineOnly)} type="button" aria-pressed={query.mineOnly} onClick={toggleMineOnly}>내가 쓴 모집글만</button>
                 {hasActiveNarrowing ? (
                   <button className={workspacePageStyles.quietLink} type="button" onClick={clearNarrowing}>검색·필터 초기화</button>
                 ) : null}
@@ -197,7 +218,7 @@ export function PartnerRecruitmentListPage() {
             <>
               <div className={partnerRecruitmentStyles.cardGrid}>
                 {recruitments.map((recruitment) => (
-                  <RecruitmentCard key={recruitment.id} recruitment={recruitment} />
+                  <RecruitmentCard key={recruitment.id} recruitment={recruitment}  editPath={editPathFor(recruitment.id)} onClose={() => openCloseConfirm(recruitment)} />
                 ))}
               </div>
               {totalPages > 1 ? (
@@ -215,6 +236,22 @@ export function PartnerRecruitmentListPage() {
           )}
         </div>
       </div>
+
+      <WorkspaceModal
+        isOpen={closingRecruitment !== null}
+        title="모집을 마감할까요?"
+        description={`${closingRecruitment?.title ?? ''} · 마감하면 새 제안을 받지 않고 대기 중인 제안은 만료됩니다. 되돌릴 수 없습니다.`}
+        tone="danger"
+        onClose={cancelClose}
+      >
+        {closeError ? <p className={workspaceModalStyles.error} role="alert">{closeError}</p> : null}
+        <div className={workspaceModalStyles.actions}>
+          <button className={workspaceModalStyles.ghostButton} type="button" onClick={cancelClose}>취소</button>
+          <button className={workspacePageStyles.dangerButton} type="button" disabled={isClosing} onClick={() => void confirmClose()}>
+            {isClosing ? '마감 중…' : '마감'}
+          </button>
+        </div>
+      </WorkspaceModal>
     </>
   )
 }

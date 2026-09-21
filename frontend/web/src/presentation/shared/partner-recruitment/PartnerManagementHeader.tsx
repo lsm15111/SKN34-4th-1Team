@@ -4,20 +4,18 @@ import { useAuthSession } from '../auth/hooks/useAuthSession'
 import { appPaths } from '../routes/appPaths'
 import { workspacePageStyles } from '../workspace/WorkspacePage.styles'
 import { WorkspacePageHeader } from '../workspace/WorkspacePageHeader'
-import { type PartnerSection, PartnerSectionTabs } from './PartnerSectionTabs'
 
 /**
- * 모집글·내 모집글 두 화면이 똑같이 쓰는 "파트너 모집" 머리글입니다. 제목·탭·작성 버튼을 한 줄에 두고 [active]만 다릅니다.
+ * "파트너 모집" 목록의 머리글입니다. 제목과 작성 버튼을 한 줄에 둡니다. 내 글은 목록의 "내가 쓴 모집글만" 칩으로 봅니다.
  * 이름은 사이드바 항목과 같은 "파트너 모집"입니다. 제안함은 제 머리글을 씁니다.
  * 기업을 등록하지 않은 회원은 작성 대신 프로필 등록으로 안내합니다.
  */
-export function PartnerManagementHeader({ active }: { active: PartnerSection }) {
+export function PartnerManagementHeader() {
   const { hasCompany } = useAuthSession()
 
   return (
     <WorkspacePageHeader
       title="파트너 모집"
-      tabs={<PartnerSectionTabs active={active} />}
       actions={
         <Link
           className={hasCompany ? workspacePageStyles.primaryButton : workspacePageStyles.secondaryButton}

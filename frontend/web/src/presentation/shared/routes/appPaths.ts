@@ -21,6 +21,7 @@ export const appPaths = {
   partnerDetail: `${APP_PREFIX}/partners/detail`,
   partnerNew: `${APP_PREFIX}/partners/new`,
   partnerEdit: `${APP_PREFIX}/partners/edit`,
+  /** 예전 "내 모집글" 주소입니다. 목록의 내 글만 칩(`?mine=1`)으로 넘깁니다. */
   myPartners: `${APP_PREFIX}/partners/mine`,
   proposals: `${APP_PREFIX}/proposals`,
   profile: `${APP_PREFIX}/profile`,

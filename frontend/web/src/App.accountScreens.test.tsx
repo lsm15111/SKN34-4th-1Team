@@ -469,12 +469,11 @@ describe('작업 화면 사이드바', () => {
 
     const sidebar = screen.getByRole('complementary', { name: '작업 사이드바' })
     fireEvent.click(within(sidebar).getByRole('link', { name: '파트너 모집' }))
-    // 머리글 한 줄에 제목·탭(모집글·내 모집글)·작성 버튼이 함께 놓입니다. 제안함은 탭이 아니라 사이드바 항목입니다.
+    // 머리글 한 줄에 제목·작성 버튼이 놓입니다. 내 글은 탭이 아니라 칩이고, 제안함은 사이드바 항목입니다.
     const header = screen.getByRole('heading', { name: '파트너 모집' }).closest('header') as HTMLElement
-    const tabs = within(header).getByRole('navigation', { name: '파트너 모집 탭' })
-    expect(within(tabs).getByRole('link', { name: '모집글' }).getAttribute('aria-current')).toBe('page')
-    expect(within(tabs).queryByRole('link', { name: /제안함/ })).toBeNull()
+    expect(within(header).queryByRole('navigation')).toBeNull()
     expect(within(header).getByRole('link', { name: /작성$/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '내가 쓴 모집글만' }).getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(within(sidebar).getByRole('link', { name: /제안함/ }))
     expect(screen.getByRole('heading', { name: '제안함' })).toBeTruthy()
     expect(screen.getByRole('tablist', { name: '제안함 종류' })).toBeTruthy()
@@ -1082,8 +1081,8 @@ describe('파트너 모집 화면', () => {
     expect(browse).not.toHaveBeenCalledWith(expect.objectContaining({ keyword: '스마트' }), expect.anything())
 
     fireEvent.click(within(panel).getByRole('button', { name: '조회' }))
-    // 내 글만 보기는 칩이 아니라 "내 모집글" 탭이 맡습니다.
-    expect(within(panel).queryByRole('button', { name: '내가 쓴 모집글만' })).toBeNull()
+    // 내 글만 보기는 바로 적용되는 칩입니다. 아직 누르지 않았습니다.
+    expect(within(panel).getByRole('button', { name: '내가 쓴 모집글만' }).getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(within(panel).getByRole('radio', { name: '최근 등록순' }))
 
     await waitFor(() => expect(browse).toHaveBeenLastCalledWith(
@@ -1433,7 +1432,7 @@ describe('파트너 모집 화면', () => {
     expect(await screen.findByRole('heading', { name: '모집글 상세' })).toBeTruthy()
   })
 
-  it('내 모집글 탭은 내 글만 최근 등록순으로 읽어 마감된 글을 뒤로 보내고 카드에서 마감한다', async () => {
+  it('내가 쓴 모집글만 칩은 내 글만 읽어 마감된 글을 뒤로 보내고 카드에서 수정·마감한다', async () => {
     const mine = partnerRecruitmentPage.recruitments.find((item) => item.isMine)!
     const closedMine = { ...mine, id: 105, title: '이미 마감된 내 글', status: 'CLOSED' as const, proposalCount: 3 }
     const browse = vi.spyOn(appContainer.resolve('browsePartnerRecruitmentsUseCase'), 'execute')
@@ -1441,10 +1440,11 @@ describe('파트너 모집 화면', () => {
     const close = vi.spyOn(appContainer.resolve('closePartnerRecruitmentUseCase'), 'execute')
       .mockResolvedValue({ outcome: 'closed', recruitment: { ...partnerRecruitmentDetail, id: mine.id, isMine: true, status: 'CLOSED' } })
     renderApp('/app/partners')
-    fireEvent.click(within(screen.getByRole('navigation', { name: '파트너 모집 탭' })).getByRole('link', { name: '내 모집글' }))
+    fireEvent.click(await screen.findByRole('button', { name: '내가 쓴 모집글만' }))
+    expect(screen.getByRole('button', { name: '내가 쓴 모집글만' }).getAttribute('aria-pressed')).toBe('true')
 
     await waitFor(() => expect(browse).toHaveBeenLastCalledWith(
-      { keyword: '', seekingRoles: [], regions: [], mineOnly: true, sourceCode: '', sort: 'RECENT', page: 1 },
+      expect.objectContaining({ keyword: '', seekingRoles: [], regions: [], mineOnly: true, page: 1 }),
       expect.any(AbortSignal),
     ))
     const cards = await screen.findAllByRole('article')
@@ -1455,7 +1455,6 @@ describe('파트너 모집 화면', () => {
     expect(within(cards[1]!).queryByRole('button', { name: '마감' })).toBeNull()
     expect(within(cards[1]!).getByText('받은 제안 3건')).toBeTruthy()
     expect(within(cards[0]!).getByRole('link', { name: '수정' }).getAttribute('href')).toBe(`/app/partners/edit?recruitmentId=${mine.id}`)
-    expect(screen.queryByRole('searchbox', { name: '모집글 검색' })).toBeNull()
 
     fireEvent.click(within(cards[0]!).getByRole('button', { name: '마감' }))
     const dialog = screen.getByRole('dialog', { name: '모집을 마감할까요?' })

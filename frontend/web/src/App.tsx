@@ -25,7 +25,6 @@ import { PartnerRecruitmentCreatePage } from './presentation/features/partner-re
 import { PartnerRecruitmentDetailPage } from './presentation/features/partner-recruitment/view/PartnerRecruitmentDetailPage'
 import { PartnerRecruitmentEditPage } from './presentation/features/partner-recruitment/view/PartnerRecruitmentEditPage'
 import { PartnerRecruitmentListPage } from './presentation/features/partner-recruitment/view/PartnerRecruitmentListPage'
-import { MyPartnerRecruitmentsPage } from './presentation/features/partner-recruitment/view/MyPartnerRecruitmentsPage'
 import { PartnerProposalBoxPage } from './presentation/features/partner-proposal/view/PartnerProposalBoxPage'
 import { PricingPage } from './presentation/features/pricing/view/PricingPage'
 import { PublicPartnerRecruitmentDetailPage } from './presentation/features/public-partner-recruitment/view/PublicPartnerRecruitmentDetailPage'
@@ -133,7 +132,8 @@ function App() {
           <Route path={appPaths.partners} element={<PartnerRecruitmentListPage />} />
           <Route path={appPaths.partnerNew} element={<PartnerRecruitmentCreatePage />} />
           <Route path={appPaths.partnerEdit} element={<PartnerRecruitmentEditPage />} />
-          <Route path={appPaths.myPartners} element={<MyPartnerRecruitmentsPage />} />
+          {/* 예전 "내 모집글" 주소는 목록의 내 글만 칩으로 넘깁니다. */}
+          <Route path={appPaths.myPartners} element={<Navigate replace to={`${appPaths.partners}?mine=1`} />} />
           <Route path={appPaths.partnerDetail} element={<PartnerRecruitmentDetailPage />} />
           <Route path={appPaths.proposals} element={<PartnerProposalBoxPage />} />
           <Route path={appPaths.profile} element={<CompanyProfilePage />} />
