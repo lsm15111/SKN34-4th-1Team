@@ -469,9 +469,12 @@ describe('지원사업 직접 필터 검색', () => {
     fireEvent.click(await screen.findByRole('link', { name: program.title }))
     await screen.findByRole('heading', { name: program.title })
     if (path.startsWith('/app')) {
+      // 질문은 상세를 떠나지 않고 동작 패널 안에서 열립니다.
       fireEvent.click(screen.getByRole('link', { name: '이 공고에 질문하기' }))
-      expect(screen.getByTestId('location').textContent).toContain(`${detailPath}/question?`)
-      fireEvent.click(screen.getByRole('link', { name: '← 공고 상세로 돌아가기' }))
+      expect(screen.getByTestId('location').textContent).toContain(`${detailPath}?`)
+      expect(screen.getByTestId('location').textContent).toContain('ask=1')
+      expect(screen.getByRole('textbox', { name: '공고 원문에 질문하기' })).toBeTruthy()
+      fireEvent.click(screen.getByRole('link', { name: '질문 닫기' }))
       await screen.findByRole('heading', { name: program.title })
     } else {
       // 원문 질문은 회원 기능이라 비로그인은 로그인 링크만 봅니다.

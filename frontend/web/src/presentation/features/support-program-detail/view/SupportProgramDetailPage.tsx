@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 
 import { loginPathFor } from '../../../shared/auth/returnPath'
-import { appPaths, isAppPath, supportProgramQuestionPath } from '../../../shared/routes/appPaths'
+import { appPaths, isAppPath, supportProgramDetailPath, supportProgramQuestionPath } from '../../../shared/routes/appPaths'
+import { SupportProgramEvidenceQuestionContent } from './SupportProgramEvidenceQuestionPage'
 import { workspacePageStyles } from '../../../shared/workspace/WorkspacePage.styles'
 
 import type { SupportProgramDetail, SupportProgramStatus } from '../../../../domain/entities/SupportProgram'
@@ -116,7 +117,10 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
   fromPipeline: boolean
 }) {
   // 작업 채팅에서 연 상세는 질문 화면도 사이드바 안(/app)에서 열리도록 현재 경로로 판단합니다.
-  const inApp = isAppPath(useLocation().pathname)
+  const location = useLocation()
+  const inApp = isAppPath(location.pathname)
+  // 원문 질문은 상세를 떠나지 않고 동작 패널 안에서 엽니다(`?ask=1`). 본문을 보면서 묻고 인용을 대조하기 위해서입니다.
+  const isAsking = new URLSearchParams(location.search).get('ask') === '1'
   const save = useSupportProgramSaveViewModel({ sourceCode: program.sourceCode, sourceProgramId: program.id })
   // 진행 관리에서 들어온 공고는 신청 준비 중인 사업이라, 관심 공고함에서 빼면 진행 관리 보드에서도 사라집니다.
   // 책갈피 한 번에 실수로 빠지지 않도록 이때만 확인을 받습니다. 담기는 되돌리기 쉬우므로 바로 처리합니다.
@@ -126,7 +130,9 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
     sourceCode: program.sourceCode,
     sourceProgramId: program.id,
   })}`
-  const questionPath = supportProgramQuestionPath({ sourceCode: program.sourceCode, sourceProgramId: program.id }, inApp, searchReturnTo)
+  const identity = { sourceCode: program.sourceCode, sourceProgramId: program.id }
+  const detailPath = supportProgramDetailPath(identity, inApp, searchReturnTo)
+  const askPath = `${detailPath}&ask=1`
   // 관심 공고 저장은 책갈피 아이콘 하나입니다. 로그인한 회원은 담기·빼기를 오가고, 비로그인은 로그인 뒤 이 공고로 돌아옵니다.
   const saveLabel = save.isSaved ? '관심 공고 저장됨' : '관심 공고 저장'
   const saveControl = save.isAuthenticated ? (
@@ -248,9 +254,18 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
         <div className={supportProgramDetailStyles.questionActions}>
           {program.evidenceQuestionSupported ? (
             save.isAuthenticated ? (
-              <Link className={supportProgramDetailStyles.questionLink} state={{ searchReturnTo }} to={questionPath}>
-                이 공고에 질문하기
-              </Link>
+              isAsking ? (
+                <>
+                  <SupportProgramEvidenceQuestionContent key={JSON.stringify([program.sourceCode, program.id])} identity={identity} compact />
+                  <Link className={supportProgramDetailStyles.questionCloseLink} state={{ searchReturnTo }} to={detailPath}>
+                    질문 닫기
+                  </Link>
+                </>
+              ) : (
+                <Link className={supportProgramDetailStyles.questionLink} state={{ searchReturnTo }} to={askPath}>
+                  이 공고에 질문하기
+                </Link>
+              )
             ) : (
               // 원문 질문도 회원 기능이라 비로그인에는 로그인 뒤 작업 화면의 질문 화면으로 이어지는 링크를 둡니다.
               <Link

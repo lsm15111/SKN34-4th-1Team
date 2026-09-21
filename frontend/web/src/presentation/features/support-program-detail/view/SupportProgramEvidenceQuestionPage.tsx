@@ -51,10 +51,14 @@ export function SupportProgramEvidenceQuestionPage() {
   )
 }
 
-function SupportProgramEvidenceQuestionContent({
+/** 질문 입력·답변·인용 부분입니다. 공고 상세의 동작 패널(`?ask=1`)과 직접 연 질문 화면이 같이 씁니다. */
+export function SupportProgramEvidenceQuestionContent({
   identity,
+  compact = false,
 }: {
   identity: SupportProgramIdentity
+  /** 상세의 동작 패널 안에서 열 때입니다. 패널이 이미 제목·설명을 갖고 있어 머리글을 그리지 않고 폭에 맞게 여백을 줄입니다. */
+  compact?: boolean
 }) {
   const {
     canSubmit,
@@ -89,7 +93,8 @@ function SupportProgramEvidenceQuestionContent({
   }
 
   return (
-    <section className={supportProgramEvidenceQuestionStyles.evidenceSection} aria-labelledby="evidence-question-title">
+    <section className={compact ? supportProgramEvidenceQuestionStyles.evidencePanel : supportProgramEvidenceQuestionStyles.evidenceSection} aria-labelledby="evidence-question-title">
+      {compact ? null : <>
       <div className={supportProgramEvidenceQuestionStyles.evidenceHeader}>
         <div>
           <p className={supportProgramEvidenceQuestionStyles.sectionEyebrow}>공고 원문 기반</p>
@@ -102,6 +107,7 @@ function SupportProgramEvidenceQuestionContent({
       <p className={supportProgramEvidenceQuestionStyles.evidenceDescription}>
         공고 원문에 있는 내용만 근거로 답합니다. 최종 신청 조건은 원문 공고에서 다시 확인해 주세요.
       </p>
+      </>}
 
       <form className={supportProgramEvidenceQuestionStyles.evidenceForm} onSubmit={handleSubmit}>
         <label className={supportProgramEvidenceQuestionStyles.evidenceLabel} htmlFor="support-program-evidence-question">

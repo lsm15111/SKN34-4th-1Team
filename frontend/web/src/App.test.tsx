@@ -99,7 +99,8 @@ describe('App navigation', () => {
       expect(screen.getByRole('link', { name: '로그인하고 이 공고에 질문하기' }).getAttribute('href')).toMatch(/^\/login\?next=/)
     } else {
       fireEvent.click(screen.getByRole('link', { name: '이 공고에 질문하기' }))
-      fireEvent.click(screen.getByRole('link', { name: '← 공고 상세로 돌아가기' }))
+      expect(screen.getByRole('textbox', { name: '공고 원문에 질문하기' })).toBeTruthy()
+      fireEvent.click(screen.getByRole('link', { name: '질문 닫기' }))
       await screen.findByText('자격 미평가 · 공고 상세 정보')
       expect(screen.getByRole('link', { name: '← 검색 결과로 돌아가기' }).getAttribute('href')).toBe(returnPath)
     }
@@ -110,7 +111,8 @@ describe('App navigation', () => {
     expect(store.getState().chat.messages).toEqual(messages)
     // 작업 화면 상세는 관심 공고 저장 여부도 확인하므로 검색·상세 조회만 셉니다.
     const searchAndDetailCalls = fetchMock.mock.calls.filter(([url]) => !String(url).includes('/me/saved-programs'))
-    expect(searchAndDetailCalls).toHaveLength(returnPath === '/' ? 2 : 3)
+    // 검색 1 + 상세 1. 질문은 상세 안 패널에서 열려 상세를 다시 읽지 않습니다.
+    expect(searchAndDetailCalls).toHaveLength(2)
   })
 
   it('준비 상태 재확인 중 오류 안내의 버튼을 비활성화한다', () => {

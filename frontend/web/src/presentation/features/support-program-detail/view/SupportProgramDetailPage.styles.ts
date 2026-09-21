@@ -54,6 +54,7 @@ export const supportProgramDetailStyles = {
   questionDescription: 'mt-3 mb-0 leading-[1.6] text-sample-muted',
   /** 질문하기·신청 문서 작성하기 버튼을 가운데 정렬하고 사이를 띄웁니다. 좁은 화면에서는 줄을 바꿉니다. */
   questionActions: 'mt-5 flex flex-col items-stretch gap-3',
+  questionCloseLink: 'inline-flex justify-center rounded-full border border-line-strong bg-white px-4 py-2 text-[0.8rem] font-bold text-app-ink no-underline hover:border-brand-primary hover:text-brand-primary',
   questionLink: classes(
     'inline-flex justify-center rounded-full bg-brand-primary px-4 py-3 text-center text-[0.84rem] font-extrabold text-white no-underline',
     'hover:bg-[#066538] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',

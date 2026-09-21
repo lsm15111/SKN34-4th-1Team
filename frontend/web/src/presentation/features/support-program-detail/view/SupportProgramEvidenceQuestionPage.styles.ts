@@ -13,6 +13,8 @@ export const supportProgramEvidenceQuestionStyles = {
   sectionEyebrow:
     'mt-0 mb-2 text-[0.72rem] font-extrabold tracking-[0.12em] text-sample-muted uppercase',
   evidenceSection: 'mt-6 rounded-[1.4rem] border border-sample-border bg-white p-[clamp(1.4rem,4vw,2.1rem)]',
+  // 상세 패널 안에서는 테두리·큰 여백 없이 내용만 둡니다.
+  evidencePanel: 'flex flex-col gap-3',
   evidenceHeader: 'flex flex-wrap items-start justify-between gap-4',
   evidenceBadge: 'shrink-0 rounded-full bg-brand-accent px-3 py-[0.45rem] text-[0.7rem] font-extrabold text-brand-primary',
   evidenceDescription: 'mt-3 mb-0 leading-[1.6] text-sample-muted',
