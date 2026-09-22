@@ -16,6 +16,7 @@ export const appSidebarStyles = {
   activeMenuItem: 'bg-[#e6f5ed] text-brand-primary hover:bg-[#dcefe5]',
   inactiveMenuItem: 'bg-transparent text-app-ink hover:bg-[#f5f6f7]',
   pendingMenuItem: 'cursor-default bg-[#f5f6f7] text-[#727b86]',
+  menuNote: 'm-0 px-3 pt-0.5 pb-1 pl-[2.6rem] text-[0.68rem] leading-snug text-ink-subtle',
   menuBadge: 'ml-auto inline-flex shrink-0 rounded-full bg-brand-accent px-1.5 py-0.5 text-[0.65rem] font-semibold text-brand-primary',
   pendingBadge: 'ml-auto inline-flex shrink-0 rounded-full bg-[#e9ecef] px-2 py-1 text-[0.6rem] font-semibold leading-none text-[#727b86]',
   account: 'relative mt-auto shrink-0 border-t border-[#e7e7e7] pt-2',

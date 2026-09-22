@@ -786,7 +786,7 @@ describe('기업 프로필 화면', () => {
     })
   })
 
-  it('완성도는 기업 정보·이메일 인증·협업 설정 세 항목으로 계산하고 선택 항목인 홈페이지는 넣지 않는다', async () => {
+  it('완성도는 기업 정보·협업 설정 두 항목으로 계산하고 이메일 인증·홈페이지는 넣지 않는다', async () => {
     vi.spyOn(appContainer.resolve('getMyCompanyUseCase'), 'execute').mockResolvedValue(registeredCompany)
     const getProfile = vi.spyOn(appContainer.resolve('getCompanyPartnerProfileUseCase'), 'execute')
       .mockResolvedValue({ isSet: false, roles: [], interestAreas: [], introduction: '', capabilities: [], updatedAt: null })
@@ -794,9 +794,10 @@ describe('기업 프로필 화면', () => {
     await screen.findByRole('region', { name: '기업 기본정보' })
     await waitFor(() => expect(getProfile).toHaveBeenCalled())
 
-    // 기업 등록·이메일 인증(회원 fixture)은 끝났고 협업 설정만 남았습니다.
+    // 기업 등록은 끝났고 협업 설정만 남았습니다. 이메일 인증은 스스로 할 수 없는 항목이라 세지 않습니다.
     const completion = screen.getByRole('progressbar', { name: '프로필 완성도' })
-    await waitFor(() => expect(completion.getAttribute('aria-valuenow')).toBe('67'))
+    await waitFor(() => expect(completion.getAttribute('aria-valuenow')).toBe('50'))
+    expect(within(screen.getByRole('region', { name: '프로필 요약' })).queryByText('이메일 인증')).toBeNull()
     // 체크리스트는 옆 칸이 아니라 완성도 막대 아래 요약 카드 안에 있습니다.
     const summary = screen.getByRole('region', { name: '프로필 요약' })
     expect(within(summary).getByText('협업·파트너 설정', { selector: 'span' })).toBeTruthy()

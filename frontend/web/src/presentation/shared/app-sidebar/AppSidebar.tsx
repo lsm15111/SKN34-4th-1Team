@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import type { Account } from '../../../domain/entities/Account'
@@ -24,6 +24,8 @@ type MenuItem = {
   icon: MenuIcon
   to?: string
   badge?: string
+  /** 항목 아래 한 줄 설명입니다. 잠긴 이유처럼 메뉴를 숨기지 않고 무엇이 열리는지 알릴 때 씁니다. */
+  note?: string
   matches?: (pathname: string) => boolean
 }
 
@@ -55,6 +57,23 @@ const menuGroups: MenuGroup[] = [
     ],
   },
 ]
+
+/** 개인 회원의 협업 무리입니다. 둘러보기만 열어 두고 이유를 적어 "기업 등록"이 무엇을 여는지 보이게 합니다. 메뉴를 숨기면 전환 동기가 사라집니다. */
+const individualCollaborationGroup: MenuGroup = {
+  title: '협업',
+  items: [
+    {
+      label: '파트너 모집 둘러보기', icon: 'users', to: appPaths.partners,
+      matches: (pathname) => pathname.startsWith(appPaths.partners) || pathname.startsWith(appPaths.proposals),
+      note: '모집글 작성·제안은 기업 회원으로 전환하고 기업을 등록하면 열려요',
+    },
+  ],
+}
+
+function menuGroupsFor(account: Account | null): MenuGroup[] {
+  if (account?.accountType !== 'INDIVIDUAL') return menuGroups
+  return menuGroups.map((group) => (group.title === '협업' ? individualCollaborationGroup : group))
+}
 
 const iconPaths: Record<MenuIcon, ReactNode> = {
   trash: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>,
@@ -236,17 +255,17 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
           <MenuIconGraphic name="search" /><span>지원사업 새검색</span>
         </button>
         <GettingStartedCard checklist={gettingStarted} />
-        {menuGroups
+        {menuGroupsFor(account)
           .map((group) => (
             <nav className={appSidebarStyles.menuGroup} key={group.title} aria-label={group.title}>
               <p className={appSidebarStyles.menuGroupTitle}>{group.title}</p>
               {group.items.map((item) =>
                 item.to ? (
+                  <Fragment key={item.label}>
                   <Link
                     className={sidebarMenuItemClassName(
                       item.matches?.(pathname) ? 'active' : 'inactive',
                     )}
-                    key={item.label}
                     to={item.to}
                     aria-current={item.matches?.(pathname) ? 'page' : undefined}
                   >
@@ -254,6 +273,8 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
                     <span>{item.label}</span>
                     {badgeFor(item) ? <span className={appSidebarStyles.menuBadge}>{badgeFor(item)}</span> : null}
                   </Link>
+                  {item.note ? <p className={appSidebarStyles.menuNote}>{item.note}</p> : null}
+                  </Fragment>
                 ) : (
                   <span
                     className={sidebarMenuItemClassName('pending')}

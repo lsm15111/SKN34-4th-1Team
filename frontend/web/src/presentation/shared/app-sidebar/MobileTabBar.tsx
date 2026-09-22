@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router'
 
 import { usePendingReceivedProposalCount } from '../partner-proposal/useReceivedProposals'
+import { useAuthSession } from '../auth/hooks/useAuthSession'
 import { appPaths } from '../routes/appPaths'
 
 /**
@@ -10,12 +11,13 @@ import { appPaths } from '../routes/appPaths'
  */
 const tabClassName = 'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[0.66rem] font-bold no-underline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-primary'
 
-function TabIcon({ name }: { name: 'search' | 'bookmark' | 'inbox' | 'mail' | 'more' }) {
+function TabIcon({ name }: { name: 'search' | 'bookmark' | 'inbox' | 'mail' | 'building' | 'more' }) {
   const paths = {
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
     bookmark: <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />,
     inbox: <><path d="M4 5h16v14H4z" /><path d="M4 13h5l1.5 2h3L15 13h5" /></>,
     mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+    building: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2" /></>,
     more: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
   }
   return (
@@ -28,11 +30,16 @@ function TabIcon({ name }: { name: 'search' | 'bookmark' | 'inbox' | 'mail' | 'm
 export function MobileTabBar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { pathname } = useLocation()
   const pendingCount = usePendingReceivedProposalCount()
-  const tabs: { label: string; icon: 'search' | 'bookmark' | 'inbox' | 'mail'; to: string; active: boolean }[] = [
+  const { account } = useAuthSession()
+  // 개인 회원은 제안을 받을 수 없으므로 제안함 대신 프로필(기업 전환 카드가 있는 곳)을 둡니다.
+  const fourth = account?.accountType === 'INDIVIDUAL'
+    ? { label: '프로필', icon: 'building' as const, to: appPaths.profile, active: pathname.startsWith(appPaths.profile) }
+    : { label: '제안함', icon: 'mail' as const, to: appPaths.proposals, active: pathname.startsWith(appPaths.proposals) }
+  const tabs: { label: string; icon: 'search' | 'bookmark' | 'inbox' | 'mail' | 'building'; to: string; active: boolean }[] = [
     { label: '검색', icon: 'search', to: appPaths.chat, active: pathname === appPaths.chat || pathname.startsWith(appPaths.supportProgramDetail) },
     { label: '관심함', icon: 'bookmark', to: appPaths.savedPrograms, active: pathname.startsWith(appPaths.savedPrograms) },
     { label: '리포트', icon: 'inbox', to: appPaths.reports, active: pathname === appPaths.reports },
-    { label: '제안함', icon: 'mail', to: appPaths.proposals, active: pathname.startsWith(appPaths.proposals) },
+    fourth,
   ]
   const badge = pendingCount === null || pendingCount === 0 ? null : pendingCount > 99 ? '99+' : String(pendingCount)
 

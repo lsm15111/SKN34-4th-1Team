@@ -22,6 +22,8 @@ import type {
   RegisterCompanyUseCase,
   UpdateCompanyUseCase,
 } from '../../../../domain/usecases/CompanyUseCases'
+import { isOnboardingPurposeAllowed } from '../../../../domain/entities/Account'
+import type { CompleteOnboardingUseCase } from '../../../../domain/usecases/AccountProfileUseCases'
 import { useAuthSession } from '../../../shared/auth/hooks/useAuthSession'
 import { signedIn } from '../../../shared/auth/state/authSlice'
 import { useCompanyPartnerProfileViewModel } from './useCompanyPartnerProfileViewModel'
@@ -116,6 +118,7 @@ export function useCompanyProfileViewModel(useCases: Partial<CompanyUseCases> = 
     registerCompany: useCases.registerCompany ?? appContainer.resolve('registerCompanyUseCase'),
     updateCompany: useCases.updateCompany ?? appContainer.resolve('updateCompanyUseCase'),
   }
+  const completeOnboardingUseCase: Pick<CompleteOnboardingUseCase, 'execute'> = appContainer.resolve('completeOnboardingUseCase')
   const { account } = useAuthSession()
   const dispatchToStore = useAppDispatch()
   const isMounted = useRef(true)
@@ -286,11 +289,35 @@ export function useCompanyProfileViewModel(useCases: Partial<CompanyUseCases> = 
   }
 
   const company = companyState.status === 'registered' ? companyState.company : null
-  const checklist: ChecklistItem[] = [
-    { label: '사업자등록번호 확인과 기업 기본정보', isDone: company !== null },
-    { label: '이메일 인증', isDone: account?.emailVerified ?? false },
-    { label: '협업·파트너 설정', isDone: partnerProfile.isSet },
-  ]
+  // 완성도는 사용자가 채울 수 있는 항목만 셉니다. 이메일 인증은 소셜 가입 계정이 스스로 할 수 없어 막대를 영원히 묶어 두므로 빼고,
+  // 개인 회원은 사업자 항목 대신 환영 화면의 답(이용 목적)으로 100%에 닿게 합니다.
+  const isIndividual = account?.accountType === 'INDIVIDUAL'
+  const checklist: ChecklistItem[] = isIndividual
+    ? [
+      { label: '회원 유형 선택', isDone: true },
+      { label: '이용 목적 정하기', isDone: account?.onboardingPurpose != null },
+    ]
+    : [
+      { label: '사업자등록번호 확인과 기업 기본정보', isDone: company !== null },
+      { label: '협업·파트너 설정', isDone: partnerProfile.isSet },
+    ]
+  const [isSwitchingType, setIsSwitchingType] = useState(false)
+  /** 개인 회원이 사업자등록을 마쳤을 때 기업 회원으로 전환합니다. 담은 공고·문서는 그대로이고 목적은 기업에도 허용되면 유지합니다. */
+  async function switchToBusiness() {
+    if (account === null || isSwitchingType) return
+    setIsSwitchingType(true)
+    try {
+      const purpose = account.onboardingPurpose !== null && isOnboardingPurposeAllowed('BUSINESS', account.onboardingPurpose) ? account.onboardingPurpose : null
+      const updated = await completeOnboardingUseCase.execute({ accountType: 'BUSINESS', purpose })
+      if (!isMounted.current) return
+      dispatchToStore(signedIn(updated))
+      setNotice('기업 회원으로 전환했습니다. 아래에서 사업자등록번호를 조회해 기업을 등록해 주세요.')
+    } catch {
+      if (isMounted.current) setNotice('전환하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      if (isMounted.current) setIsSwitchingType(false)
+    }
+  }
   const completionPercent = Math.round(
     (checklist.filter((item) => item.isDone).length / checklist.length) * 100,
   )
@@ -310,6 +337,9 @@ export function useCompanyProfileViewModel(useCases: Partial<CompanyUseCases> = 
     summaryTags: company === null ? [] : [company.region, company.industry, company.businessStatus],
     completionPercent,
     checklist,
+    isIndividual,
+    isSwitchingType,
+    switchToBusiness,
     /** 조회로 채워져 수정 폼에서 바꿀 수 없는 항목입니다. 수정 폼이 입력란 위에 그대로 보여 줍니다. */
     readOnlyFields: company === null ? [] : [
       { label: '기업명', value: company.companyName, tag: '사업자 확인' },

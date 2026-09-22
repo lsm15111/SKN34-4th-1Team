@@ -130,7 +130,10 @@ export function CompanyProfilePage() {
     <>
       <WorkspacePageHeader
         title="내 프로필"
-        actions={<span className={workspaceTagClassName('muted')}>프로필 완성도 {completionPercent}%</span>}
+        actions={<>
+          {vm.account?.accountType ? <span className={workspaceTagClassName('info')}>{vm.account.accountType === 'INDIVIDUAL' ? '개인 회원' : '기업 회원'}</span> : null}
+          <span className={workspaceTagClassName('muted')}>프로필 완성도 {completionPercent}%</span>
+        </>}
       />
 
       <div className={workspacePageStyles.content}>
@@ -262,6 +265,16 @@ export function CompanyProfilePage() {
                     </button>
                   </div>
                 </form>
+              </section>
+            ) : null}
+            {/* 개인 회원에게는 사업자 등록 대신 전환을 먼저 권합니다. 전환해도 담은 공고와 문서는 그대로입니다. */}
+            {vm.isIndividual && company === null ? (
+              <section className={workspacePageStyles.card} aria-label="기업 회원으로 전환">
+                <h2 className={workspacePageStyles.cardTitle}>사업자등록을 하셨나요?</h2>
+                <p className={workspacePageStyles.cardDescription}>기업 회원으로 전환하면 컨소시엄 모집글을 올리고 제안할 수 있어요. 담은 공고와 문서는 그대로 남아요.</p>
+                <div><button className={workspacePageStyles.primaryButton} type="button" disabled={vm.isSwitchingType} onClick={() => void vm.switchToBusiness()}>
+                  {vm.isSwitchingType ? '전환 중…' : '기업 회원으로 전환'}
+                </button></div>
               </section>
             ) : null}
             {company !== null && !vm.isEditing ? (
