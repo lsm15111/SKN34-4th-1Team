@@ -6,12 +6,13 @@ import { useWelcomeViewModel } from '../viewmodel/useWelcomeViewModel'
 
 /**
  * 아티팩트(반응형 데모 · 최초 로그인 온보딩)의 환영 화면을 그대로 옮긴 배치입니다.
- * 위: 로고 왼쪽 + 단계 알약 오른쪽 / 가운데: 눈썹·제목·설명·선택 카드(아이콘·라디오 점·"무엇이 열리는지" 줄) / 아래: 고정 발판.
- * 좁은 화면은 카드가 한 열로 쌓이고 아이콘이 왼쪽에 붙으며 주 버튼이 넓어집니다.
+ * 로고·단계 알약, 눈썹·제목·설명, 선택 카드(아이콘·라디오 점·"무엇이 열리는지" 줄), 버튼 줄이 한 덩어리로 화면 가운데에 모여
+ * 카드 바로 아래에서 다음으로 넘어갑니다. 좁은 화면은 카드가 한 열로 쌓이고 아이콘이 왼쪽에 붙으며 버튼 줄이 아래에 고정됩니다.
  */
 const s = {
-  page: 'flex min-h-dvh flex-col bg-app-canvas',
-  top: 'flex flex-wrap items-center gap-x-4 gap-y-3 px-6 py-4 max-[599px]:px-4 max-[599px]:py-3',
+  page: 'flex min-h-dvh flex-col items-center justify-center bg-app-canvas px-6 py-8 max-[599px]:justify-start max-[599px]:px-4 max-[599px]:pt-3 max-[599px]:pb-24',
+  block: 'flex w-full max-w-[800px] flex-col gap-3.5',
+  top: 'flex flex-wrap items-center gap-x-4 gap-y-3 pb-2 max-[599px]:pb-1',
   brand: 'flex items-center gap-2 text-[0.95rem] font-extrabold tracking-[-0.01em] text-app-ink no-underline',
   brandMark: 'grid size-6 place-items-center rounded-[7px] bg-brand-primary text-[0.75rem] font-extrabold text-white',
   steps: 'm-0 ml-auto flex list-none flex-wrap gap-1.5 p-0',
@@ -24,7 +25,7 @@ const s = {
   stepNumberIdle: 'bg-surface-muted',
   stepNumberCurrent: 'bg-brand-primary text-white',
   stepNumberDone: 'bg-brand-soft text-brand-primary',
-  body: 'mx-auto flex w-full max-w-[800px] flex-1 flex-col items-center gap-3.5 px-6 pt-7 pb-4 text-center max-[599px]:items-stretch max-[599px]:px-4 max-[599px]:pt-3 max-[599px]:text-left',
+  body: 'flex w-full flex-col items-center gap-3.5 text-center max-[599px]:items-stretch max-[599px]:text-left',
   eyebrow: 'text-[0.69rem] font-extrabold tracking-[0.08em] text-brand-primary',
   title: 'm-0 text-[1.7rem] font-extrabold tracking-[-0.03em] text-app-ink text-balance max-[599px]:text-[1.3rem]',
   lead: 'm-0 max-w-[48ch] text-[0.9rem] text-ink-muted max-[599px]:text-[0.85rem]',
@@ -45,7 +46,8 @@ const s = {
   getsLead: 'font-extrabold text-brand-primary',
   hint: 'flex w-full items-start gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-left text-[0.78rem] text-ink-muted',
   hintIcon: 'mt-0.5 shrink-0 text-info',
-  foot: 'sticky bottom-0 mx-auto flex w-full max-w-[800px] flex-wrap items-center gap-2 px-6 pt-3.5 pb-[calc(1.4rem+env(safe-area-inset-bottom))] [background:linear-gradient(rgb(245_246_247/0),var(--color-app-canvas)_35%)] max-[599px]:px-4 max-[599px]:pt-3 max-[599px]:pb-[calc(1rem+env(safe-area-inset-bottom))]',
+  // 버튼 줄은 카드 바로 아래에 있습니다. 좁은 화면에서만 아래에 고정해 엄지로 바로 누르게 합니다.
+  foot: 'flex w-full flex-wrap items-center gap-2 pt-2 max-[599px]:fixed max-[599px]:inset-x-0 max-[599px]:bottom-0 max-[599px]:px-4 max-[599px]:pt-3 max-[599px]:pb-[calc(1rem+env(safe-area-inset-bottom))] max-[599px]:[background:linear-gradient(rgb(245_246_247/0),var(--color-app-canvas)_35%)]',
   grow: 'flex-1 max-[599px]:hidden',
   error: 'text-[0.78rem] font-semibold text-danger',
   primary: 'inline-flex h-11 cursor-pointer items-center justify-center rounded-full border-0 bg-brand-primary px-5 text-[0.88rem] font-bold text-white hover:bg-brand-hover aria-disabled:cursor-not-allowed aria-disabled:opacity-50 max-[599px]:h-11 max-[599px]:flex-[1_1_60%]',
@@ -95,6 +97,7 @@ export function WelcomePage() {
 
   return (
     <main className={s.page} aria-labelledby="welcome-title">
+      <div className={s.block}>
       <div className={s.top}>
         <Link className={s.brand} to={publicPaths.landing} aria-label="GovBiz 홈으로"><span className={s.brandMark} aria-hidden="true">G</span>GovBiz</Link>
         {steps}
@@ -156,6 +159,7 @@ export function WelcomePage() {
           </div>
         </form>
       )}
+      </div>
     </main>
   )
 }
