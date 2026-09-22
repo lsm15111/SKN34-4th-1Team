@@ -80,7 +80,7 @@ describe('최초 로그인 환영 화면', () => {
 describe('예시 검색 칩', () => {
   it('환영 화면의 목적에 맞는 예시를 검색 첫 화면에 보여 준다', async () => {
     renderApp('/app/chat', { ...freshAccount, accountType: 'INDIVIDUAL', onboardingPurpose: 'PREPARE_DOCUMENTS', onboarded: true })
-    expect(await screen.findByRole('button', { name: '사업계획서 양식이 있는 공고' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '예비창업패키지 사업계획서 양식' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '서울 AI 창업지원 사업 찾아줘' })).toBeNull()
   })
 

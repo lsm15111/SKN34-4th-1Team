@@ -16,6 +16,8 @@ import * as supportProgramEligibility from '../supportProgramEligibility'
 
 // 뷰모델이 세션 계정을 읽으므로 스토어를 감쌉니다.
 function wrapper({ children }: { children: ReactNode }) {
+  // react-redux의 Provider 타입이 children을 props 객체로 요구합니다.
+  // oxlint-disable-next-line react/no-children-prop
   return createElement(Provider, { store: createAppStore(), children })
 }
 

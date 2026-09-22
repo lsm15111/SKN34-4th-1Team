@@ -29,9 +29,12 @@ export function useWelcomeViewModel(
   const [purpose, setPurpose] = useState<OnboardingPurpose | null>(account?.onboardingPurpose ?? null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 2단계에서 아무것도 고르지 않고 "이대로 시작하기"를 누르면 건너뛰기를 안내합니다(아티팩트 규칙).
+  const [needsChoice, setNeedsChoice] = useState(false)
 
   function chooseType(next: AccountType) {
     setType(next)
+    setNeedsChoice(false)
     // 유형을 바꾸면 그 유형에 없는 목적은 지웁니다.
     if (purpose !== null && !purposeOptionsFor(next).some((option) => option.value === purpose)) setPurpose(null)
   }
@@ -42,7 +45,7 @@ export function useWelcomeViewModel(
     try {
       const updated = await completeOnboardingUseCase.execute({ accountType: type, purpose: chosenPurpose })
       dispatchToStore(signedIn(updated))
-      navigate(firstScreenFor(chosenPurpose), { replace: true })
+      navigate(firstScreenFor(chosenPurpose, type), { replace: true })
     } catch {
       setError(welcomeMessages.saveFailed)
       setIsSaving(false)
@@ -56,13 +59,14 @@ export function useWelcomeViewModel(
     purposeOptions: purposeOptionsFor(type),
     isSaving,
     error,
+    needsChoice,
     chooseType,
-    choosePurpose: setPurpose,
+    choosePurpose: (next: OnboardingPurpose) => { setPurpose(next); setNeedsChoice(false) },
     goToPurposeStep: () => setStep(2),
     goBackToTypeStep: () => setStep(1),
     /** 목적을 고르지 않고 시작합니다. */
     skipPurpose: () => void finish(null),
-    /** 고른 목적으로 시작합니다. 고른 것이 없으면 건너뛰기와 같습니다. */
-    start: () => void finish(purpose),
+    /** 고른 목적으로 시작합니다. 고른 것이 없으면 보내지 않고 고르거나 건너뛰라고 안내합니다. */
+    start: () => { if (purpose === null) { setNeedsChoice(true); return } void finish(purpose) },
   }
 }

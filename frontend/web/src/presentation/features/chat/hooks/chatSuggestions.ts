@@ -7,7 +7,7 @@ import { supportProgramChatSuggestions } from './useSupportProgramChat'
  * 비로그인이나 아직 답하지 않은 계정에는 지금까지의 고정 예시를 보여 줍니다. "내 회사와 무슨 상관"이 보이게 하는 가장 싼 방법입니다.
  */
 export function chatSuggestionsFor(account: Account | null): readonly string[] {
-  if (account?.onboardingPurpose) return purposeChipsFor(account.onboardingPurpose)
+  if (account?.accountType && account.onboardingPurpose) return purposeChipsFor(account.onboardingPurpose, account.accountType)
   if (account?.accountType) return defaultChipsFor(account.accountType)
   return supportProgramChatSuggestions
 }
