@@ -12,6 +12,8 @@ import { usePendingReceivedProposalCount } from '../partner-proposal/useReceived
 import { appPaths, publicPaths } from '../routes/appPaths'
 import { useFloatingPopover } from '../workspace/useFloatingPopover'
 import { appSidebarStyles, sidebarMenuItemClassName } from './AppSidebar.styles'
+import { GettingStartedCard } from './GettingStartedCard'
+import { useGettingStartedChecklist } from './useGettingStartedChecklist'
 import type { ChatHistoryViewModel } from '../../features/chat/hooks/useChatHistory'
 
 type MenuIcon = 'search' | 'document' | 'bookmark' | 'users' | 'inbox' | 'mail' | 'building' | 'shield' | 'pricing' | 'logout' | 'more' | 'newChat' | 'panel' | 'trash'
@@ -164,6 +166,8 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
   const { account, logOut } = useAuthSession()
   const navigate = useNavigate()
   const pendingProposalCount = usePendingReceivedProposalCount()
+  // 시작하기 체크리스트는 주 동작 바로 아래에 두고, 완료는 데이터로 판정합니다.
+  const gettingStarted = useGettingStartedChecklist(account, history.items.length)
   // 해당 대화 기록 항목의 점은 조건 해석·검색 진행 중과 아직 보지 않은 결과를 모두 표시합니다.
   const chatActivity = useAppSelector(selectChatActivity)
   const isSearchPage = pathname === appPaths.chat || pathname.startsWith(appPaths.supportProgramDetail)
@@ -231,6 +235,7 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
           aria-current={isSearchPage ? 'page' : undefined} title="대화와 적용 조건을 초기화합니다" onClick={onNewChat}>
           <MenuIconGraphic name="search" /><span>지원사업 새검색</span>
         </button>
+        <GettingStartedCard checklist={gettingStarted} />
         {menuGroups
           .map((group) => (
             <nav className={appSidebarStyles.menuGroup} key={group.title} aria-label={group.title}>
@@ -315,6 +320,12 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
                 <MenuIconGraphic name="pricing" />
                 <span>요금제</span>
               </Link>
+              {gettingStarted.isDismissed ? (
+                <button className={appSidebarStyles.accountMenuButton} type="button" onClick={() => { gettingStarted.restore(); setIsAccountMenuOpen(false) }}>
+                  <MenuIconGraphic name="search" />
+                  <span>시작하기 다시 보기</span>
+                </button>
+              ) : null}
               {account.tier === 'ADMIN' ? (
                 <Link
                   className={sidebarMenuItemClassName(pathname.startsWith(appPaths.admin) ? 'active' : 'inactive')}
