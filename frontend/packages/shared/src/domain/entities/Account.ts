@@ -7,6 +7,31 @@ export type AccountRole = 'USER' | 'ADMIN'
  */
 export type AccountTier = 'MEMBER' | 'COMPANY' | 'ADMIN'
 
+/** 환영 화면에서 고르는 회원 유형입니다. 사업자등록번호가 있으면 기업, 아직 없으면 개인입니다. */
+export type AccountType = 'INDIVIDUAL' | 'BUSINESS'
+
+/** 환영 화면 2단계의 이용 목적입니다. 유형마다 고를 수 있는 값이 다르고 건너뛸 수 있습니다. */
+export type OnboardingPurpose =
+  | 'FIND_STARTUP_PROGRAMS'
+  | 'CHECK_GRANT_ELIGIBILITY'
+  | 'FIND_PROGRAMS'
+  | 'FIND_PARTNERS'
+  | 'PREPARE_DOCUMENTS'
+
+const purposesByType: Record<AccountType, OnboardingPurpose[]> = {
+  INDIVIDUAL: ['FIND_STARTUP_PROGRAMS', 'CHECK_GRANT_ELIGIBILITY', 'PREPARE_DOCUMENTS'],
+  BUSINESS: ['FIND_PROGRAMS', 'FIND_PARTNERS', 'PREPARE_DOCUMENTS'],
+}
+
+/** 유형에 허용된 이용 목적입니다. 서버와 같은 규칙이라 화면이 고를 수 없는 값을 보여 주지 않습니다. */
+export function onboardingPurposesFor(type: AccountType): OnboardingPurpose[] {
+  return purposesByType[type]
+}
+
+export function isOnboardingPurposeAllowed(type: AccountType, purpose: OnboardingPurpose): boolean {
+  return purposesByType[type].includes(purpose)
+}
+
 /** 로그인한 계정입니다. 비밀번호·토큰은 포함하지 않습니다. */
 export type Account = {
   email: string
@@ -17,6 +42,12 @@ export type Account = {
   company: AccountCompanySummary | null
   /** 거짓이면 소셜 로그인으로만 가입해 비밀번호가 없는 계정입니다. 프로필은 비밀번호 항목을 숨기고 계정 삭제는 비밀번호를 묻지 않습니다. */
   hasPassword: boolean
+  /** 환영 화면에서 고른 회원 유형입니다. 아직이면 null입니다. */
+  accountType: AccountType | null
+  /** 환영 화면에서 고른 이용 목적입니다. 건너뛰었거나 아직이면 null입니다. */
+  onboardingPurpose: OnboardingPurpose | null
+  /** 거짓이면 로그인 뒤 다른 작업 화면보다 먼저 `/app/welcome`을 보여 줍니다. */
+  onboarded: boolean
 }
 
 export type AccountCompanySummary = {

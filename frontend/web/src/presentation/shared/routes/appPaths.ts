@@ -5,6 +5,8 @@
 export const APP_PREFIX = '/app'
 
 export const appPaths = {
+  /** 가입 직후 한 번 거치는 환영 화면입니다. 사이드바 없이 단독으로 뜹니다. */
+  welcome: `${APP_PREFIX}/welcome`,
   savedPrograms: `${APP_PREFIX}/saved-programs`,
   reports: `${APP_PREFIX}/reports`,
   applicationPreparations: `${APP_PREFIX}/application-preparations`,

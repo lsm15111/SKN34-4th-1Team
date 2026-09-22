@@ -24,10 +24,10 @@ vi.mock('./presentation/shared/core-api-status/CoreApiConnectionStatus', () => (
   CoreApiConnectionStatus: () => null,
 }))
 
-const memberAccount: Account = { email: 'member@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: true, hasPassword: true, company: null }
-const adminAccount: Account = { email: 'admin@govbiz.local', role: 'ADMIN', tier: 'ADMIN', emailVerified: true, hasPassword: true, company: null }
+const memberAccount: Account = { email: 'member@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: true, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true, company: null }
+const adminAccount: Account = { email: 'admin@govbiz.local', role: 'ADMIN', tier: 'ADMIN', emailVerified: true, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true, company: null }
 const companyAccount: Account = {
-  email: 'company@govbiz.local', role: 'USER', tier: 'COMPANY', emailVerified: false, hasPassword: true,
+  email: 'company@govbiz.local', role: 'USER', tier: 'COMPANY', emailVerified: false, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true,
   company: { companyName: '테스트 기업 주식회사', businessNumber: '1234567890' },
 }
 
@@ -274,7 +274,7 @@ describe('계정 화면', () => {
   it('가입에 성공하면 세션 계정으로 작업 채팅에 들어간다', async () => {
     const execute = vi.spyOn(appContainer.resolve('signUpUseCase'), 'execute').mockResolvedValue({
       outcome: 'session',
-      session: { expiresAt: '2026-09-07T00:00:00+09:00', account: { email: 'new@example.test', role: 'USER', tier: 'MEMBER', emailVerified: false, hasPassword: true, company: null } },
+      session: { expiresAt: '2026-09-07T00:00:00+09:00', account: { email: 'new@example.test', role: 'USER', tier: 'MEMBER', emailVerified: false, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true, company: null } },
     })
     renderApp('/signup')
     const form = screen.getByRole('form', { name: '회원가입' })
@@ -984,7 +984,7 @@ describe('계정 보안 모달', () => {
       hasCompany: false, openRecruitmentCount: 0, receivedPendingProposalCount: 0, sentPendingProposalCount: 0,
     })
     const remove = vi.spyOn(appContainer.resolve('deleteAccountUseCase'), 'execute').mockResolvedValue({ outcome: 'deleted' })
-    renderApp('/app/profile', { ...memberAccount, hasPassword: false })
+    renderApp('/app/profile', { ...memberAccount, hasPassword: false, accountType: null, onboardingPurpose: null, onboarded: true })
     const account = await screen.findByRole('region', { name: '계정과 알림' })
 
     expect(within(account).queryByText('비밀번호')).toBeNull()

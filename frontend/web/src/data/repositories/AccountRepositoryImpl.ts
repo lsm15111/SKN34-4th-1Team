@@ -14,11 +14,12 @@ import type {
   ResetPasswordResult,
   SendSignupEmailCodeResult,
   SignUpResult,
-  VerifySignupEmailCodeResult,
+  VerifySignupEmailCodeResult, CompleteOnboarding,
 } from '../../domain/repositories/AccountRepository'
 import {
   AccountApiError,
   changePasswordApi,
+  completeOnboardingApi,
   deleteAccountApi,
   devLogInApi,
   getAccountDeletionPreviewApi,
@@ -105,6 +106,10 @@ export class AccountRepositoryImpl implements AccountRepository {
       }
       throw error
     }
+  }
+
+  async completeOnboarding(command: CompleteOnboarding, signal?: AbortSignal): Promise<Account> {
+    return toAccount(await completeOnboardingApi({ accountType: command.accountType, purpose: command.purpose }, signal))
   }
 
   /** 429는 화면이 안내하는 업무 결과이고, 그 외 실패는 예외로 둡니다. */

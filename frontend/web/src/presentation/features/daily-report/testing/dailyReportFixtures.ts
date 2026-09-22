@@ -3,7 +3,7 @@ import type { Company } from '../../../../domain/entities/Company'
 import type { DailyReport, DailyReportSettings } from '../../../../domain/entities/DailyReport'
 
 export const reportAccount: Account = {
-  email: 'report@example.test', role: 'USER', tier: 'COMPANY', emailVerified: false, hasPassword: true,
+  email: 'report@example.test', role: 'USER', tier: 'COMPANY', emailVerified: false, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true,
   company: { companyName: '리포트 기업', businessNumber: '1234567890' },
 }
 export const reportCompany: Company = {

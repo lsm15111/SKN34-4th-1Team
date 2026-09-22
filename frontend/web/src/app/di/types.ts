@@ -52,6 +52,7 @@ import type { SupportProgramRepository } from '../../domain/repositories/Support
 import type { AskSupportProgramEvidenceQuestionUseCase } from '../../domain/usecases/AskSupportProgramEvidenceQuestionUseCase'
 import type {
   ChangePasswordUseCase,
+  CompleteOnboardingUseCase,
   DeleteAccountUseCase,
   GetAccountDeletionPreviewUseCase,
 } from '../../domain/usecases/AccountProfileUseCases'
@@ -142,6 +143,7 @@ export type AppCradle = {
   sendSignupEmailCodeUseCase: SendSignupEmailCodeUseCase
   verifySignupEmailCodeUseCase: VerifySignupEmailCodeUseCase
   changePasswordUseCase: ChangePasswordUseCase
+  completeOnboardingUseCase: CompleteOnboardingUseCase
   getAccountDeletionPreviewUseCase: GetAccountDeletionPreviewUseCase
   deleteAccountUseCase: DeleteAccountUseCase
   supportProgramRepository: SupportProgramRepository

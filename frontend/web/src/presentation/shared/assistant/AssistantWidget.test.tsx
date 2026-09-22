@@ -23,9 +23,9 @@ vi.mock('../core-api-status/CoreApiConnectionStatus', () => ({
   CoreApiConnectionStatus: () => null,
 }))
 
-const memberAccount: Account = { email: 'member@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: true, hasPassword: true, company: null }
+const memberAccount: Account = { email: 'member@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: true, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true, company: null }
 const companyAccount: Account = {
-  email: 'company@govbiz.local', role: 'USER', tier: 'COMPANY', emailVerified: true, hasPassword: true,
+  email: 'company@govbiz.local', role: 'USER', tier: 'COMPANY', emailVerified: true, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true,
   company: { companyName: '넥스트웨이브 주식회사', businessNumber: '2148812034' },
 }
 

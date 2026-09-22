@@ -19,7 +19,7 @@ const company: Company = {
   businessVerifiedAt: '2026-09-01T00:00:00', updatedAt: '2026-09-01T00:00:00',
 }
 const account = { email: 'jihoon.park@demo.govbiz.local', role: 'USER' as const, tier: 'COMPANY' as const,
-  emailVerified: true, hasPassword: true, company: { companyName: company.companyName, businessNumber: company.businessNumber } }
+  emailVerified: true, hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true, company: { companyName: company.companyName, businessNumber: company.businessNumber } }
 
 function setup(loadCompany = vi.fn<(signal?: AbortSignal) => Promise<Company | null>>().mockResolvedValue(company)) {
   const store = createAppStore()

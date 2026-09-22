@@ -19,7 +19,7 @@ const companyAccount: Account = {
   role: 'USER',
   tier: 'COMPANY',
   emailVerified: false,
-  hasPassword: true,
+  hasPassword: true, accountType: null, onboardingPurpose: null, onboarded: true,
   company: { companyName: '데이터브릿지 주식회사', businessNumber: '1248100998' },
 }
 

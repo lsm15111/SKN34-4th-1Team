@@ -1,5 +1,7 @@
+import type { Account } from '../entities/Account'
+import { isOnboardingPurposeAllowed } from '../entities/Account'
 import type { AccountDeletionPreview } from '../entities/AccountDeletionPreview'
-import type { AccountRepository, ChangePasswordResult, DeleteAccountResult } from '../repositories/AccountRepository'
+import type { AccountRepository, ChangePasswordResult, CompleteOnboarding, DeleteAccountResult } from '../repositories/AccountRepository'
 import { isValidSignUpPassword, signUpPasswordLength } from './SignUpUseCase'
 
 /** 새 비밀번호로 바꿉니다. 본인 확인은 로그인 세션이 맡고, 새 비밀번호 규칙은 가입과 같으며, 다른 기기의 세션은 서버가 끝냅니다. */
@@ -43,5 +45,21 @@ export class DeleteAccountUseCase {
   execute(password: string | null, signal?: AbortSignal): Promise<DeleteAccountResult> {
     if (password === '') throw new RangeError('password must not be empty')
     return this.repository.deleteAccount(password, signal)
+  }
+}
+
+/** 환영 화면의 답을 저장합니다. 유형에 허용되지 않은 목적은 서버에 보내기 전에 막습니다. */
+export class CompleteOnboardingUseCase {
+  private readonly repository: Pick<AccountRepository, 'completeOnboarding'>
+
+  constructor(repository: Pick<AccountRepository, 'completeOnboarding'>) {
+    this.repository = repository
+  }
+
+  execute(command: CompleteOnboarding, signal?: AbortSignal): Promise<Account> {
+    if (command.purpose !== null && !isOnboardingPurposeAllowed(command.accountType, command.purpose)) {
+      throw new RangeError(`purpose ${command.purpose} is not allowed for ${command.accountType}`)
+    }
+    return this.repository.completeOnboarding(command, signal)
   }
 }
