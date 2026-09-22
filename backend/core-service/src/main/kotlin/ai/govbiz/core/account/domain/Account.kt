@@ -19,6 +19,32 @@ enum class AccountTier {
     ADMIN,
 }
 
+/**
+ * 회원 유형입니다. 사업자등록번호가 있으면 기업, 아직 없으면 개인입니다. 환영 화면에서 한 번 고르고 프로필에서 바꿀 수 있습니다.
+ * 기업 회원이라도 사업자 등록(`company`)은 별개라, 협업 기능은 등록을 마쳐야 열립니다.
+ */
+enum class AccountType {
+    INDIVIDUAL,
+    BUSINESS,
+}
+
+/** 환영 화면 2단계의 이용 목적입니다. 유형마다 고를 수 있는 값이 다르고 건너뛸 수 있습니다. */
+enum class OnboardingPurpose(val allowedFor: Set<AccountType>) {
+    /** 창업 지원사업 찾기 (개인) */
+    FIND_STARTUP_PROGRAMS(setOf(AccountType.INDIVIDUAL)),
+    /** 받을 수 있는 지원금 확인 (개인) */
+    CHECK_GRANT_ELIGIBILITY(setOf(AccountType.INDIVIDUAL)),
+    /** 맞는 지원사업 찾기 (기업) */
+    FIND_PROGRAMS(setOf(AccountType.BUSINESS)),
+    /** 함께 신청할 기업 찾기 (기업) */
+    FIND_PARTNERS(setOf(AccountType.BUSINESS)),
+    /** 신청 서류 준비·중복 검토 (둘 다) */
+    PREPARE_DOCUMENTS(setOf(AccountType.INDIVIDUAL, AccountType.BUSINESS)),
+    ;
+
+    fun isAllowedFor(type: AccountType): Boolean = type in allowedFor
+}
+
 /** 로그인 가능한 계정입니다. 비밀번호 해시는 포함하지 않습니다. */
 data class Account(
     val id: Long,
@@ -31,10 +57,19 @@ data class Account(
     val company: CompanySummary? = null,
     /** 비밀번호를 만든 계정인지입니다. 소셜 로그인으로만 가입한 계정은 거짓이며 화면이 비밀번호 항목을 숨깁니다. */
     val hasPassword: Boolean = true,
+    /** 환영 화면에서 고른 회원 유형입니다. 아직 고르지 않았으면 null입니다. */
+    val accountType: AccountType? = null,
+    /** 환영 화면에서 고른 이용 목적입니다. 건너뛰었거나 아직이면 null입니다. */
+    val onboardingPurpose: OnboardingPurpose? = null,
+    /** 환영 화면을 마친 시각입니다. null이면 로그인 뒤 `/app/welcome`을 먼저 보여 줍니다. */
+    val onboardedAt: LocalDateTime? = null,
 ) {
     init {
         requireEmail(email)
     }
+
+    val isOnboarded: Boolean
+        get() = onboardedAt != null
 
     val isAdmin: Boolean
         get() = role == AccountRole.ADMIN

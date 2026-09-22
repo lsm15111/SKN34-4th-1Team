@@ -145,6 +145,46 @@ class AccountProfileFlowIntegrationTest {
         assertEquals(2, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM account", Int::class.java))
     }
 
+    @Test
+    fun savesTheWelcomeAnswersOnTheAccountAndRejectsAPurposeTheTypeDoesNotAllow() {
+        val session = signUp("founder@company.co.kr", "password1")
+        // 가입 직후에는 아직 환영 화면을 거치지 않았습니다.
+        mockMvc.perform(get("/api/v1/auth/me").cookie(session))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.onboarded").value(false))
+            .andExpect(jsonPath("$.account.accountType").doesNotExist())
+
+        // 개인 회원에게 기업 전용 목적은 400입니다.
+        mockMvc.perform(
+            put("/api/v1/me/onboarding").cookie(session).origin()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"accountType":"INDIVIDUAL","purpose":"FIND_PARTNERS"}"""),
+        )
+            .andExpect(status().isBadRequest())
+
+        mockMvc.perform(
+            put("/api/v1/me/onboarding").cookie(session).origin()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"accountType":"INDIVIDUAL","purpose":"FIND_STARTUP_PROGRAMS"}"""),
+        )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.accountType").value("INDIVIDUAL"))
+            .andExpect(jsonPath("$.account.onboardingPurpose").value("FIND_STARTUP_PROGRAMS"))
+            .andExpect(jsonPath("$.account.onboarded").value(true))
+
+        // 목적을 건너뛰고 유형만 바꿔도 되고, 다시 읽어도 답이 남습니다.
+        mockMvc.perform(
+            put("/api/v1/me/onboarding").cookie(session).origin()
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"accountType":"BUSINESS"}"""),
+        )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.onboardingPurpose").doesNotExist())
+        mockMvc.perform(get("/api/v1/auth/me").cookie(session))
+            .andExpect(jsonPath("$.account.accountType").value("BUSINESS"))
+            .andExpect(jsonPath("$.account.onboarded").value(true))
+    }
+
     private fun signUp(email: String, password: String): Cookie {
         val response = mockMvc.perform(
             post("/api/v1/auth/signup").contentType(MediaType.APPLICATION_JSON)

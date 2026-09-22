@@ -15,6 +15,9 @@
         <result column="deleted_at" property="deletedAt" />
         <result column="terms_agreed_at" property="termsAgreedAt" />
         <result column="created_at" property="createdAt" />
+        <result column="account_type" property="accountType" />
+        <result column="onboarding_purpose" property="onboardingPurpose" />
+        <result column="onboarded_at" property="onboardedAt" />
         <result column="company_id" property="companyId" />
         <result column="company_name" property="companyName" />
         <result column="company_business_number" property="companyBusinessNumber" />
@@ -39,6 +42,9 @@
         account.deleted_at,
         account.terms_agreed_at,
         account.created_at,
+        account.account_type,
+        account.onboarding_purpose,
+        account.onboarded_at,
         company.id AS company_id,
         company.company_name AS company_name,
         company.business_number AS company_business_number
@@ -128,6 +134,15 @@
         WHERE account_id = #{accountId}
           AND expires_at &lt;= #{now}
     </delete>
+
+    <update id="updateAccountOnboarding">
+        UPDATE account
+        SET account_type = #{accountType},
+            onboarding_purpose = #{onboardingPurpose},
+            onboarded_at = #{onboardedAt}
+        WHERE id = #{accountId}
+          AND deleted_at IS NULL
+    </update>
 
     <update id="updateAccountPasswordHash">
         UPDATE account

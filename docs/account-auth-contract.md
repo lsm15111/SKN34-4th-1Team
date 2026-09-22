@@ -24,6 +24,7 @@ Browser
 | `POST /api/v1/auth/dev-login` | 없음 | 200 세션 응답 + `Set-Cookie` (개발 환경 전용) |
 | `GET /api/v1/auth/me` | 세션 쿠키 | 200 계정 |
 | `POST /api/v1/auth/logout` | 세션 쿠키 | 204 + 쿠키 만료 |
+| `PUT /api/v1/me/onboarding` | 세션 쿠키 + Origin | 200 `{ account }`. 환영 화면의 회원 유형(필수)·이용 목적(선택) 저장. 유형에 허용되지 않은 목적은 400 |
 | `PUT /api/v1/me/password` | 세션 쿠키 + Origin | 204. 현재 비밀번호 없이 새 비밀번호만 받고 다른 기기 세션 종료 |
 | `GET /api/v1/me/deletion-preview` | 세션 쿠키 | 200 삭제 시 함께 닫히는 것의 수 |
 | `DELETE /api/v1/me` | 세션 쿠키 + Origin | 204 + 쿠키 만료 |
@@ -125,7 +126,7 @@ Content-Type: application/json
 ```json
 {
   "expiresAt": "2026-10-06T12:00:00+09:00",
-  "account": { "email": "manager@company.co.kr", "role": "USER", "tier": "MEMBER", "emailVerified": true, "hasPassword": true }
+  "account": { "email": "manager@company.co.kr", "role": "USER", "tier": "MEMBER", "emailVerified": true, "hasPassword": true, "accountType": null, "onboardingPurpose": null, "onboarded": false }
 }
 ```
 
@@ -135,6 +136,9 @@ Content-Type: application/json
 | `account.role` | `USER` 또는 `ADMIN`. 가입 시에는 항상 `USER` |
 | `account.tier` | 권한 단계 `MEMBER`·`COMPANY`·`ADMIN` |
 | `account.emailVerified` | 이메일 인증 완료 여부. 이메일 가입은 인증번호를 거치고 소셜 가입은 공급자가 인증한 이메일만 받으므로 새 계정은 항상 `true`. 인증 기능 이전에 만든 계정만 `false`일 수 있음 |
+| `account.accountType` | 환영 화면에서 고른 회원 유형 `INDIVIDUAL`·`BUSINESS`. 아직이면 `null` |
+| `account.onboardingPurpose` | 이용 목적 `FIND_STARTUP_PROGRAMS`·`CHECK_GRANT_ELIGIBILITY`(개인) / `FIND_PROGRAMS`·`FIND_PARTNERS`(기업) / `PREPARE_DOCUMENTS`(둘 다). 건너뛰면 `null` |
+| `account.onboarded` | 환영 화면을 마쳤는지. `false`면 프런트가 로그인 뒤 `/app/welcome`을 먼저 보여 줍니다 |
 | `account.hasPassword` | 비밀번호를 만든 계정인지. 소셜 로그인으로만 가입한 계정은 `false`이며 프로필이 비밀번호 항목을 숨기고 계정 삭제에 비밀번호를 묻지 않음 |
 
 ### 로그인 시도 제한
