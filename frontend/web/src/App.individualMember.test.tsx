@@ -12,7 +12,7 @@ import { sessionRestored } from './presentation/shared/auth/state/authSlice'
 
 const individual: Account = {
   email: 'solo@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: false, hasPassword: false, company: null,
-  accountType: 'INDIVIDUAL', onboardingPurpose: 'PREPARE_DOCUMENTS', onboarded: true,
+  accountType: 'INDIVIDUAL', onboardingPurpose: null, onboarded: true,
 }
 
 function renderApp(path: string, account: Account = individual) {
@@ -25,8 +25,6 @@ beforeEach(() => {
   vi.spyOn(appContainer.resolve('getMyCompanyUseCase'), 'execute').mockResolvedValue(null)
   vi.spyOn(appContainer.resolve('getCompanyPartnerProfileUseCase'), 'execute')
     .mockResolvedValue({ isSet: false, roles: [], interestAreas: [], introduction: '', capabilities: [], updatedAt: null })
-  vi.spyOn(appContainer.resolve('browseSavedSupportProgramsUseCase'), 'execute').mockResolvedValue([])
-  vi.spyOn(appContainer.resolve('applicationPreparationUseCase'), 'list').mockResolvedValue({ items: [], nextBeforeId: null })
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
@@ -39,19 +37,18 @@ describe('개인 회원', () => {
     expect(within(sidebar).queryByRole('link', { name: /제안함/ })).toBeNull()
   })
 
-  it('프로필은 개인 회원 표시와 목적 기반 완성도 100%를 보여 주고, 전환 카드로 기업 회원이 된다', async () => {
+  it('프로필은 개인 회원 표시와 완성도 100%를 보여 주고, 전환 카드로 기업 회원이 된다', async () => {
     const complete = vi.spyOn(appContainer.resolve('completeOnboardingUseCase'), 'execute')
       .mockResolvedValue({ ...individual, accountType: 'BUSINESS' })
     renderApp('/app/profile')
     expect(await screen.findByText('개인 회원')).toBeTruthy()
     expect(screen.getByRole('progressbar', { name: '프로필 완성도' }).getAttribute('aria-valuenow')).toBe('100')
     const summary = screen.getByRole('region', { name: '프로필 요약' })
-    expect(within(summary).getByText('이용 목적 정하기', { selector: 'span' })).toBeTruthy()
+    expect(within(summary).getByText('회원 유형 선택', { selector: 'span' })).toBeTruthy()
     expect(within(summary).queryByText('이메일 인증')).toBeNull()
 
     fireEvent.click(within(screen.getByRole('region', { name: '기업 회원으로 전환' })).getByRole('button', { name: '기업 회원으로 전환' }))
-    // 문서 준비 목적은 기업에도 허용되므로 그대로 넘깁니다.
-    await waitFor(() => expect(complete).toHaveBeenCalledWith({ accountType: 'BUSINESS', purpose: 'PREPARE_DOCUMENTS' }))
+    await waitFor(() => expect(complete).toHaveBeenCalledWith({ accountType: 'BUSINESS', purpose: null }))
     expect(await screen.findByText('기업 회원')).toBeTruthy()
     expect(screen.queryByRole('region', { name: '기업 회원으로 전환' })).toBeNull()
     expect(screen.getByText(/사업자등록번호를 조회해 등록하면 기업 회원이 되어/)).toBeTruthy()

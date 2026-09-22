@@ -38,57 +38,33 @@ describe('최초 로그인 환영 화면', () => {
     expect(screen.queryByRole('button', { name: /도우미/ })).toBeNull()
   })
 
-  it('개인 회원을 고르면 기업 전용 목적은 보이지 않고, 목적을 고르면 저장한 뒤 그 첫 화면으로 간다', async () => {
-    const complete = vi.spyOn(appContainer.resolve('completeOnboardingUseCase'), 'execute')
-      .mockResolvedValue({ ...freshAccount, accountType: 'INDIVIDUAL', onboardingPurpose: 'PREPARE_DOCUMENTS', onboarded: true })
-    renderApp('/app/chat', freshAccount)
-    await screen.findByRole('heading', { name: '어떤 회원으로 시작할까요?' })
-    // 기본 선택은 진입 장벽이 낮은 개인입니다.
-    expect((screen.getByRole('radio', { name: /개인 회원/ }) as HTMLInputElement).checked).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: '다음' }))
-
-    expect(screen.getByRole('heading', { name: '무엇을 하러 오셨나요?' })).toBeTruthy()
-    expect(screen.queryByRole('radio', { name: /함께 신청할 기업 찾기/ })).toBeNull()
-    fireEvent.click(screen.getByRole('radio', { name: /신청 서류 준비/ }))
-    fireEvent.click(screen.getByRole('button', { name: '이대로 시작하기' }))
-
-    await waitFor(() => expect(complete).toHaveBeenCalledWith({ accountType: 'INDIVIDUAL', purpose: 'PREPARE_DOCUMENTS' }))
-    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/app/application-preparations'))
-    // 답이 세션에 반영되어 작업 화면(사이드바)이 열립니다.
-    expect(await screen.findByRole('complementary', { name: '작업 사이드바' })).toBeTruthy()
-  })
-
-  it('기업 회원은 목적을 건너뛸 수 있고 검색 화면에서 시작한다', async () => {
+  it('기본은 개인 회원이고, 기업 회원을 골라 시작하면 저장한 뒤 검색 화면으로 가며 사이드바가 열린다', async () => {
     const complete = vi.spyOn(appContainer.resolve('completeOnboardingUseCase'), 'execute')
       .mockResolvedValue({ ...freshAccount, accountType: 'BUSINESS', onboarded: true })
     renderApp('/app/chat', freshAccount)
-    fireEvent.click(await screen.findByRole('radio', { name: /기업 회원/ }))
-    fireEvent.click(screen.getByRole('button', { name: '다음' }))
-    expect(screen.getByRole('radio', { name: /함께 신청할 기업 찾기/ })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '건너뛰기' }))
+    await screen.findByRole('heading', { name: '어떤 회원으로 시작할까요?' })
+    expect((screen.getByRole('radio', { name: /개인 회원/ }) as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: /기업 회원/ }))
+    fireEvent.click(screen.getByRole('button', { name: '시작하기' }))
+
     await waitFor(() => expect(complete).toHaveBeenCalledWith({ accountType: 'BUSINESS', purpose: null }))
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/app/chat'))
+    expect(await screen.findByRole('complementary', { name: '작업 사이드바' })).toBeTruthy()
+    // 예시 검색은 회원 유형과 무관하게 같습니다.
+    expect(screen.getByRole('button', { name: '서울 AI 창업지원 사업 찾아줘' })).toBeTruthy()
+  })
+
+  it('저장에 실패하면 화면에 남아 안내한다', async () => {
+    vi.spyOn(appContainer.resolve('completeOnboardingUseCase'), 'execute').mockRejectedValue(new Error('down'))
+    renderApp('/app/chat', freshAccount)
+    fireEvent.click(await screen.findByRole('button', { name: '시작하기' }))
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(screen.getByTestId('location').textContent).toBe('/app/welcome')
   })
 
   it('이미 답한 계정은 환영 화면으로 보내지 않는다', async () => {
     renderApp('/app/saved-programs', { ...freshAccount, accountType: 'BUSINESS', onboarded: true })
     expect(await screen.findByRole('heading', { name: '관심 공고함' })).toBeTruthy()
     expect(screen.getByTestId('location').textContent).toBe('/app/saved-programs')
-  })
-})
-
-describe('예시 검색 칩', () => {
-  it('환영 화면의 목적에 맞는 예시를 검색 첫 화면에 보여 준다', async () => {
-    renderApp('/app/chat', { ...freshAccount, accountType: 'INDIVIDUAL', onboardingPurpose: 'PREPARE_DOCUMENTS', onboarded: true })
-    expect(await screen.findByRole('button', { name: '예비창업패키지 사업계획서 양식' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '서울 AI 창업지원 사업 찾아줘' })).toBeNull()
-  })
-
-  it('목적을 건너뛴 개인 회원은 개인 기본 예시를, 답하지 않은 계정은 고정 예시를 본다', async () => {
-    renderApp('/app/chat', { ...freshAccount, accountType: 'INDIVIDUAL', onboarded: true })
-    expect(await screen.findByRole('button', { name: '예비창업자 지원사업' })).toBeTruthy()
-    cleanup()
-    renderApp('/app/chat', { ...freshAccount, onboarded: true })
-    expect(await screen.findByRole('button', { name: '서울 AI 창업지원 사업 찾아줘' })).toBeTruthy()
   })
 })

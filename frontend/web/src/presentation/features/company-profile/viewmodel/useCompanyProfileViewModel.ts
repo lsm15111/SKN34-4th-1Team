@@ -22,7 +22,6 @@ import type {
   RegisterCompanyUseCase,
   UpdateCompanyUseCase,
 } from '../../../../domain/usecases/CompanyUseCases'
-import { isOnboardingPurposeAllowed } from '../../../../domain/entities/Account'
 import type { CompleteOnboardingUseCase } from '../../../../domain/usecases/AccountProfileUseCases'
 import { useAuthSession } from '../../../shared/auth/hooks/useAuthSession'
 import { signedIn } from '../../../shared/auth/state/authSlice'
@@ -293,10 +292,7 @@ export function useCompanyProfileViewModel(useCases: Partial<CompanyUseCases> = 
   // 개인 회원은 사업자 항목 대신 환영 화면의 답(이용 목적)으로 100%에 닿게 합니다.
   const isIndividual = account?.accountType === 'INDIVIDUAL'
   const checklist: ChecklistItem[] = isIndividual
-    ? [
-      { label: '회원 유형 선택', isDone: true },
-      { label: '이용 목적 정하기', isDone: account?.onboardingPurpose != null },
-    ]
+    ? [{ label: '회원 유형 선택', isDone: true }]
     : [
       { label: '사업자등록번호 확인과 기업 기본정보', isDone: company !== null },
       { label: '협업·파트너 설정', isDone: partnerProfile.isSet },
@@ -307,8 +303,7 @@ export function useCompanyProfileViewModel(useCases: Partial<CompanyUseCases> = 
     if (account === null || isSwitchingType) return
     setIsSwitchingType(true)
     try {
-      const purpose = account.onboardingPurpose !== null && isOnboardingPurposeAllowed('BUSINESS', account.onboardingPurpose) ? account.onboardingPurpose : null
-      const updated = await completeOnboardingUseCase.execute({ accountType: 'BUSINESS', purpose })
+      const updated = await completeOnboardingUseCase.execute({ accountType: 'BUSINESS', purpose: null })
       if (!isMounted.current) return
       dispatchToStore(signedIn(updated))
       setNotice('기업 회원으로 전환했습니다. 아래에서 사업자등록번호를 조회해 기업을 등록해 주세요.')
