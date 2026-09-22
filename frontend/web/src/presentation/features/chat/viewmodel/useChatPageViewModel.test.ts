@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
-import { createElement, type FormEvent } from 'react'
+import { createElement, type FormEvent, type ReactNode } from 'react'
+import { Provider } from 'react-redux'
+
+import { createAppStore } from '../../../../app/store'
 import { act, cleanup, render, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,6 +13,11 @@ import type { useSupportProgramChat } from '../hooks/useSupportProgramChat'
 import { useChatPageViewModel } from './useChatPageViewModel'
 import type { useSupportProgramSearchReadiness } from '../hooks/useSupportProgramSearchReadiness'
 import * as supportProgramEligibility from '../supportProgramEligibility'
+
+// 뷰모델이 세션 계정을 읽으므로 스토어를 감쌉니다.
+function wrapper({ children }: { children: ReactNode }) {
+  return createElement(Provider, { store: createAppStore(), children })
+}
 
 const hookMocks = vi.hoisted(() => ({
   chat: vi.fn(),
@@ -49,7 +57,7 @@ afterEach(() => {
 
 describe('useChatPageViewModel', () => {
   it('원본 해석 상태 대신 화면에 필요한 제안·초기화·오류 상태를 제공한다', () => {
-    const { result } = renderHook(() => useChatPageViewModel())
+    const { result } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     expect(result.current).toMatchObject({ displayProposal: null, hasConfirmedSearch: false,
       hasSearchToReset: false, interpretationError: undefined, canRetryInterpretation: false })
@@ -65,7 +73,7 @@ describe('useChatPageViewModel', () => {
     hookMocks.chat.mockReturnValue(createChatHook({
       confirmedContext: { ...emptyConversationContext, query }, conversationCount,
     }))
-    const { result } = renderHook(() => useChatPageViewModel())
+    const { result } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     expect(result.current).toMatchObject({ hasConfirmedSearch, hasSearchToReset: true })
   })
@@ -74,7 +82,7 @@ describe('useChatPageViewModel', () => {
     let chat = createChatHook({ interpretation: { status: 'failed', error: '해석 실패',
       request: { message: '지원사업', context: emptyConversationContext } } })
     hookMocks.chat.mockImplementation(() => chat)
-    const { result, rerender } = renderHook(() => useChatPageViewModel())
+    const { result, rerender } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     expect(result.current).toMatchObject({ interpretationError: '해석 실패', canRetryInterpretation: true })
     act(() => result.current.handleRetryInterpretation())
@@ -97,7 +105,7 @@ describe('useChatPageViewModel', () => {
     let readiness = createReadinessHook({ canSearch: false })
     hookMocks.chat.mockReturnValue(chat)
     hookMocks.readiness.mockImplementation(() => readiness)
-    const { result, rerender } = renderHook(() => useChatPageViewModel())
+    const { result, rerender } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     expect(result.current.displayProposal).toMatchObject({ kind: 'ready', query: '사업화 지원',
       changes: [], hasRetainedConditions: true, canConfirm: false })
@@ -120,7 +128,7 @@ describe('useChatPageViewModel', () => {
     const cancelInterpretation = vi.fn(() => { chat = { ...chat, interpretation: { status: 'idle' }, pendingClarification: null } })
     chat = { ...chat, cancelInterpretation }
     hookMocks.chat.mockImplementation(() => chat)
-    const { result, rerender } = renderHook(() => useChatPageViewModel())
+    const { result, rerender } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     expect(result.current.displayProposal).toEqual({ kind: 'clarification', question: '어느 지역인가요?' })
     chat = { ...chat, isBusy: true, isInterpreting: operation === 'interpretation', isSearching: operation === 'search' }
@@ -140,7 +148,7 @@ describe('useChatPageViewModel', () => {
     hookMocks.chat.mockReturnValue(createChatHook({ messages: [{ id: 'preview', role: 'assistant', text: '일부 공개',
       programs: supportPrograms.slice(0, 2), totalCount: 5,
       resultToken: '4595df20-ea11-4b17-a37e-c82e1b5c9142', expiresAt: '2026-09-10T12:30:00Z' }] }))
-    const { result } = renderHook(() => useChatPageViewModel())
+    const { result } = renderHook(() => useChatPageViewModel(), { wrapper })
     expect(result.current.searchStatusAnnouncement).toContain('검색 결과 5건 중 2건을 표시했습니다.')
     expect(result.current.searchStatusAnnouncement).toContain('표시된 공고: 조건 확인 공고 0건, 확인 필요 공고 2건')
     expect(result.current.searchStatusAnnouncement).toContain('추가 3건은 회원가입 또는 로그인 후 확인')
@@ -153,7 +161,7 @@ describe('useChatPageViewModel', () => {
       id: 'search-result', role: 'assistant', text: '검색 결과', programs: supportPrograms.slice(0, 2),
     }] })
     hookMocks.chat.mockImplementation(() => chat)
-    const { result, rerender } = renderHook(() => useChatPageViewModel())
+    const { result, rerender } = renderHook(() => useChatPageViewModel(), { wrapper })
     const announcement = result.current.searchStatusAnnouncement
     expect(formatCounts).toHaveBeenCalledOnce()
 
@@ -279,7 +287,7 @@ describe('useChatPageViewModel', () => {
     })
     hookMocks.chat.mockReturnValue(chat)
     hookMocks.readiness.mockReturnValue(createReadinessHook({ canSearch: false }))
-    const { result } = renderHook(() => useChatPageViewModel())
+    const { result } = renderHook(() => useChatPageViewModel(), { wrapper })
     const submitEvent = createSubmitEvent()
 
     act(() => {
@@ -309,7 +317,7 @@ describe('useChatPageViewModel', () => {
     const readiness = createReadinessHook()
     hookMocks.chat.mockReturnValue(chat)
     hookMocks.readiness.mockReturnValue(readiness)
-    const { result } = renderHook(() => useChatPageViewModel())
+    const { result } = renderHook(() => useChatPageViewModel(), { wrapper })
     const submitEvent = createSubmitEvent()
 
     act(() => {
@@ -335,7 +343,7 @@ describe('useChatPageViewModel', () => {
     let readiness = createReadinessHook({ canSearch: false })
     hookMocks.chat.mockReturnValue(chat)
     hookMocks.readiness.mockImplementation(() => readiness)
-    const { result, rerender } = renderHook(() => useChatPageViewModel())
+    const { result, rerender } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     expect(result.current).toMatchObject({
       canSearch: false,
@@ -357,7 +365,7 @@ describe('useChatPageViewModel', () => {
     const chat = createChatHook()
     hookMocks.chat.mockReturnValue(chat)
     hookMocks.readiness.mockReturnValue(createReadinessHook({ canSearch: false }))
-    const { result } = renderHook(() => useChatPageViewModel())
+    const { result } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     act(() => result.current.handleStartNewConversation())
 
@@ -375,7 +383,7 @@ describe('useChatPageViewModel', () => {
       }],
     })
     hookMocks.chat.mockImplementation(() => chat)
-    const { result, rerender } = renderHook(() => useChatPageViewModel())
+    const { result, rerender } = renderHook(() => useChatPageViewModel(), { wrapper })
 
     expect(result.current.searchStatusAnnouncement).toBe('지원사업 공고를 검색하고 있습니다.')
 
@@ -507,7 +515,7 @@ function renderScrollHarness(
     )
   }
 
-  const view = render(createElement(Harness))
+  const view = render(createElement(Harness), { wrapper })
   return { scrollIntoView, focus, model: () => viewModel,
     rerender: (next: ChatHook) => { chat = next; view.rerender(createElement(Harness)) } }
 }

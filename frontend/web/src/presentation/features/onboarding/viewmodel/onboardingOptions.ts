@@ -75,6 +75,10 @@ export function defaultChipsFor(type: AccountType): [string, string, string] {
     : ['경기 제조 스마트공장 지원', '수출 바우처 신청 자격', '청년 채용 장려금']
 }
 
+export function purposeChipsFor(purpose: OnboardingPurpose): [string, string, string] {
+  return purposeOptions[purpose].chips
+}
+
 export function firstScreenFor(purpose: OnboardingPurpose | null): string {
   return purpose === null ? appPaths.chat : purposeOptions[purpose].route
 }

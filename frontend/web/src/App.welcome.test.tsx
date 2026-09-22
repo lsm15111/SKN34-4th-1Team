@@ -76,3 +76,19 @@ describe('최초 로그인 환영 화면', () => {
     expect(screen.getByTestId('location').textContent).toBe('/app/saved-programs')
   })
 })
+
+describe('예시 검색 칩', () => {
+  it('환영 화면의 목적에 맞는 예시를 검색 첫 화면에 보여 준다', async () => {
+    renderApp('/app/chat', { ...freshAccount, accountType: 'INDIVIDUAL', onboardingPurpose: 'PREPARE_DOCUMENTS', onboarded: true })
+    expect(await screen.findByRole('button', { name: '사업계획서 양식이 있는 공고' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '서울 AI 창업지원 사업 찾아줘' })).toBeNull()
+  })
+
+  it('목적을 건너뛴 개인 회원은 개인 기본 예시를, 답하지 않은 계정은 고정 예시를 본다', async () => {
+    renderApp('/app/chat', { ...freshAccount, accountType: 'INDIVIDUAL', onboarded: true })
+    expect(await screen.findByRole('button', { name: '예비창업자 지원사업' })).toBeTruthy()
+    cleanup()
+    renderApp('/app/chat', { ...freshAccount, onboarded: true })
+    expect(await screen.findByRole('button', { name: '서울 AI 창업지원 사업 찾아줘' })).toBeTruthy()
+  })
+})

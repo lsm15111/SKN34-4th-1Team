@@ -8,16 +8,19 @@ import {
 } from 'react'
 
 import {
-  supportProgramChatSuggestions,
   useSupportProgramChat,
 } from '../hooks/useSupportProgramChat'
 import { useSupportProgramSearchReadiness } from '../hooks/useSupportProgramSearchReadiness'
+import { chatSuggestionsFor } from '../hooks/chatSuggestions'
+import { useAuthSession } from '../../../shared/auth/hooks/useAuthSession'
 import { formatSupportProgramEligibilityCounts } from '../supportProgramEligibility'
 import { createChatConversationProposal } from './chatConversationProposal'
 import { useSearchResultInterests } from './useSearchResultInterests'
 
 /** 내부 훅을 조합해 ChatPage에 제공할 최종 화면 상태와 사용자 동작을 관리합니다. */
 export function useChatPageViewModel() {
+  // 예시 검색은 환영 화면의 답(유형·목적)에 맞춥니다.
+  const { account } = useAuthSession()
   const readiness = useSupportProgramSearchReadiness()
   const chat = useSupportProgramChat()
   const interests = useSearchResultInterests(chat.messages.some((message) => Boolean(message.programs?.length)))
@@ -183,7 +186,7 @@ export function useChatPageViewModel() {
     interests,
     cancelSearch: handleCancelSearch,
     readiness,
-    suggestions: supportProgramChatSuggestions,
+    suggestions: chatSuggestionsFor(account),
     searchStatusAnnouncement,
     timelineRef,
     composerInputRef,
