@@ -13,6 +13,7 @@ import {
   recruitmentConditionTags,
   recruitmentDeadlineLabel,
 } from '../../../shared/partner-recruitment/partnerRecruitmentLabels'
+import { partnerWriteLockedLabel } from '../../../shared/auth/partnerAccess'
 import { useMyPartnerRecruitmentsViewModel } from '../viewmodel/useMyPartnerRecruitmentsViewModel'
 import { partnerRecruitmentStyles } from './PartnerRecruitment.styles'
 
@@ -22,7 +23,7 @@ import { partnerRecruitmentStyles } from './PartnerRecruitment.styles'
  */
 export function MyPartnerRecruitmentsPage() {
   const {
-    hasCompany,
+    writeLock,
     phase,
     recruitments,
     totalPages,
@@ -58,10 +59,10 @@ export function MyPartnerRecruitmentsPage() {
           ) : recruitments.length === 0 ? (
             <section className={workspacePageStyles.card} aria-label="내 모집글 없음">
               <p className={workspacePageStyles.emptyNote}>
-                {hasCompany ? '아직 올린 모집글이 없습니다. 첫 모집글을 올려 보세요.' : '프로필에서 기업을 등록하면 모집글을 올릴 수 있습니다.'}
+                {writeLock === null ? '아직 올린 모집글이 없습니다. 첫 모집글을 올려 보세요.' : writeLock.body}
               </p>
               <div className={partnerRecruitmentStyles.linkRow}>
-                <Link className={workspacePageStyles.primaryButton} to={createPath}>{hasCompany ? '모집글 작성' : '기업 등록 후 작성'}</Link>
+                <Link className={workspacePageStyles.primaryButton} to={createPath}>{partnerWriteLockedLabel(writeLock)}</Link>
               </div>
             </section>
           ) : (

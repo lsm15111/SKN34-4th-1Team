@@ -11,6 +11,7 @@ import { recruitmentFieldMessage, recruitmentFormMessages, useRecruitmentFormFie
 export const recruitmentEditMessages = {
   ...recruitmentFormMessages,
   notMine: '내가 쓴 모집글만 고칠 수 있습니다.',
+  activeBusinessRequired: '모집글은 계속사업자만 고칠 수 있습니다. 사업자 상태가 바뀌면 프로필에서 다시 확인해 주세요.',
   closed: '마감된 모집글은 고칠 수 없습니다.',
   notFound: '모집글을 더 이상 찾을 수 없습니다.',
   failed: '모집글을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
@@ -82,6 +83,9 @@ export function usePartnerRecruitmentEditViewModel(
           return
         case 'forbidden':
           form.setError({ field: null, message: recruitmentEditMessages.notMine })
+          return
+        case 'active-business-required':
+          form.setError({ field: null, message: recruitmentEditMessages.activeBusinessRequired })
           return
         case 'closed':
           form.setError({ field: null, message: recruitmentEditMessages.closed })

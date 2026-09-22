@@ -46,6 +46,7 @@ describe('partnerProposalApi', () => {
     const repository = new PartnerProposalRepositoryImpl()
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(problemResponse(403, 'COMPANY_REQUIRED'))
+      .mockResolvedValueOnce(problemResponse(403, 'ACTIVE_BUSINESS_REQUIRED'))
       .mockResolvedValueOnce(problemResponse(404, 'RECRUITMENT_NOT_FOUND'))
       .mockResolvedValueOnce(problemResponse(422, 'PROPOSAL_OWN_RECRUITMENT'))
       .mockResolvedValueOnce(problemResponse(422, 'RECRUITMENT_CLOSED'))
@@ -58,6 +59,7 @@ describe('partnerProposalApi', () => {
 
     const input = { message: '제안', shareProfile: true }
     await expect(repository.send(101, input)).resolves.toEqual({ outcome: 'company-required' })
+    await expect(repository.send(101, input)).resolves.toEqual({ outcome: 'active-business-required' })
     await expect(repository.send(101, input)).resolves.toEqual({ outcome: 'recruitment-not-found' })
     await expect(repository.send(101, input)).resolves.toEqual({ outcome: 'own-recruitment' })
     await expect(repository.send(101, input)).resolves.toEqual({ outcome: 'recruitment-closed' })

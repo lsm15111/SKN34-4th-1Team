@@ -15,6 +15,8 @@ export const appSidebarStyles = {
   inactiveMenuItem: 'bg-transparent text-app-ink hover:bg-[#f5f6f7]',
   pendingMenuItem: 'cursor-default bg-[#f5f6f7] text-[#727b86]',
   menuBadge: 'ml-auto inline-flex shrink-0 rounded-full bg-brand-accent px-1.5 py-0.5 text-[0.65rem] font-semibold text-brand-primary',
+  // 잠긴 이유 한 줄입니다. 메뉴를 숨기지 않고 왜 둘러보기만 되는지 아이콘 너비만큼 들여 씁니다.
+  menuNote: 'm-0 -mt-0.5 px-3 pb-1 pl-[2.9rem] text-[0.68rem] leading-[1.45] text-[#888]',
   pendingBadge: 'ml-auto inline-flex shrink-0 rounded-full bg-[#e9ecef] px-2 py-1 text-[0.6rem] font-semibold leading-none text-[#727b86]',
   account: 'relative mt-auto shrink-0 border-t border-[#e7e7e7] pt-2',
   accountCard: 'flex min-h-14 w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-2 py-2 text-left hover:bg-black/5 aria-expanded:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary',

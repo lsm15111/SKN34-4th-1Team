@@ -121,6 +121,7 @@ describe('partnerRecruitmentApi', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(problemResponse(404, 'RECRUITMENT_NOT_FOUND'))
       .mockResolvedValueOnce(problemResponse(403, 'COMPANY_REQUIRED'))
+      .mockResolvedValueOnce(problemResponse(403, 'ACTIVE_BUSINESS_REQUIRED'))
       .mockResolvedValueOnce(problemResponse(404, 'RECRUITMENT_PROGRAM_NOT_FOUND'))
       .mockResolvedValueOnce(problemResponse(422, 'RECRUITMENT_PROGRAM_CLOSED'))
       .mockResolvedValueOnce(problemResponse(422, 'RECRUITMENT_DEADLINE_NOT_ALLOWED', { latestAllowedDeadline: '2026-09-29' }))
@@ -131,6 +132,7 @@ describe('partnerRecruitmentApi', () => {
 
     await expect(repository.getDetail(999)).resolves.toBeNull()
     await expect(repository.create(input)).resolves.toEqual({ outcome: 'company-required' })
+    await expect(repository.create(input)).resolves.toEqual({ outcome: 'active-business-required' })
     await expect(repository.create(input)).resolves.toEqual({ outcome: 'program-not-found' })
     await expect(repository.create(input)).resolves.toEqual({ outcome: 'program-closed' })
     await expect(repository.create(input)).resolves.toEqual({ outcome: 'deadline-not-allowed', latestAllowedDeadline: '2026-09-29' })

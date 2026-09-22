@@ -31,7 +31,7 @@ export function PartnerRecruitmentDetailPage() {
   const {
     phase,
     recruitment,
-    hasCompany,
+    writeLock,
     profilePath,
     proposalsPath,
     proposalRequirement,
@@ -322,9 +322,10 @@ export function PartnerRecruitmentDetailPage() {
                   </strong>
                 </div>
 
-                {hasCompany ? null : (
+                {writeLock === null ? null : (
                   <p className={workspacePageStyles.emptyNote}>
-                    제안은 기업을 등록한 회원만 보낼 수 있습니다. <Link className={workspacePageStyles.quietLink} to={profilePath}>프로필에서 기업 등록</Link>
+                    {writeLock.kind === 'suspended' ? writeLock.body : '제안은 기업을 등록한 회원만 보낼 수 있습니다.'}{' '}
+                    <Link className={workspacePageStyles.quietLink} to={profilePath}>{writeLock.actionLabel}</Link>
                   </p>
                 )}
 
@@ -360,7 +361,7 @@ export function PartnerRecruitmentDetailPage() {
                 <button
                   className={partnerRecruitmentStyles.proposalSubmit}
                   type="submit"
-                  disabled={!canSendProposal || !hasCompany || isSendingProposal}
+                  disabled={!canSendProposal || writeLock !== null || isSendingProposal}
                 >
                   {isSendingProposal ? '보내는 중…' : recruitment.status === 'CLOSED' ? '모집이 마감됐습니다' : '참여 제안 보내기'}
                 </button>

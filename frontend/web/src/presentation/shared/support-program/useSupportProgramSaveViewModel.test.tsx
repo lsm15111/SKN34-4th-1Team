@@ -22,7 +22,7 @@ afterEach(() => { vi.useRealTimers() })
 
 function wrapper(authenticated: boolean) {
   const store = createAppStore()
-  store.dispatch(sessionRestored(authenticated ? { email: 'member@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: true, hasPassword: true, company: null } : null))
+  store.dispatch(sessionRestored(authenticated ? { email: 'member@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: true, hasPassword: true, accountType: null, onboarded: true, company: null } : null))
   return ({ children }: { children: ReactNode }) => (
     <Provider store={store}><MemoryRouter initialEntries={['/app/support-programs/detail?sourceCode=BIZINFO&sourceProgramId=PBLN-1']}>{children}</MemoryRouter></Provider>
   )

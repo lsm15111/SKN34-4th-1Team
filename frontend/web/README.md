@@ -165,6 +165,8 @@ Core의 도구 에이전트(`ASSISTANT_AGENT_ENABLED`)가 켜져 있으면 같�
 
 문서 생성 충돌 응답은 기존 결과를 GET으로 확인합니다. 통신 실패·브라우저 시간 초과는 생성 중으로 간주하지 않고 결과 미확인 안내를 즉시 표시하며 자동 POST를 반복하지 않습니다. 사용자가 다시 시도하면 저장된 결과부터 조회합니다.
 결과 화면에는 미정·미입력으로 문서에 기입하지 않은 항목을 별도로 표시합니다. 다운로드 성공이 모든 항목의 작성을 의미하지 않습니다.
+| `/app/welcome` | 가입·첫 로그인 뒤 자동 | 온보딩 1단계. 회원 유형(개인·기업, 필수)을 묻고 `PUT /api/v1/me/onboarding`에 저장. 아직 답하지 않은 계정은 어떤 `/app` 화면을 열어도 먼저 이 화면을 보며, 사이드바·도우미 없이 단독으로 뜸. 기본 선택은 개인이고 [시작하기]로 검색 화면에, 기업을 고르면 [다음]으로 2단계에 감 |
+| `/app/welcome/company` | 1단계에서 기업 회원 선택 | 온보딩 2단계(건너뛸 수 있음). 사업자등록번호를 조회해 상호·상태를 확인하고, 계속·휴업이면 소재지·업종·설립연도·홈페이지(선택) 폼이 열려 [등록하고 시작]으로 `POST /api/v1/me/company`에 등록한 뒤 검색 화면으로. 폐업은 폼이 닫힌 채 이유만, 미등록 번호는 입력 칸 오류, 조회 불가는 다시 시도 카드. [나중에 하기]는 저장 없이 검색 화면으로 가고 프로필의 기업 등록 카드가 이어받음. 개인 회원이나 이미 기업이 있는 계정이 열면 검색·프로필로 보냄 |
 | `/app/pricing` | 사이드바 | 요금제를 사이드바 안에서. 무료 검색 버튼은 작업 채팅으로 |
 | `/app/partners` | 사이드바(파트너 관리 · 모집글 탭) | 파트너 모집 목록. 검색어·찾는 역할(복수)·지역(복수, 전체가 전국까지 뜻함)은 조회 버튼으로 적용하고 정렬·페이지는 바로 적용해 모집 API 조회(내 글만 보기 칩은 내 모집글 탭으로 대체). 카드는 폭에 따라 3·2·1열, 작성 버튼은 기업 등록 회원만 |
 | `/app/partners/new` | 사이드바 | 모집글 작성. `관심 공고함에서 선택` 팝업에서 접수 중인 관심 공고 1개를 고르고 등록하면 상세로 이동. 기업 미등록 회원은 프로필 등록 안내 |
@@ -193,7 +195,10 @@ Core의 도구 에이전트(`ASSISTANT_AGENT_ENABLED`)가 켜져 있으면 같�
 보내며, 이 화면의 `useOAuthCompleteViewModel`이 `CompleteOAuthSignInUseCase`로 세션 힌트를 남기고 계정을 확인한 뒤 이동합니다.
 `/app/profile`의 기업 기본정보는 `CompanyRepository`(조회·등록·수정)에 연결됩니다. 기업이 없으면 그 카드 자리에 사업자등록번호
 조회 폼이 나오고, 조회로 받은 상호·사업자 상태는 읽기 전용이며 소재지(17개 시·도)·업종(표준산업분류 대분류)·설립연도와
-홈페이지(선택)만 입력합니다. 등록에 성공하면 세션 계정을 `tier=COMPANY`로 갱신해 사이드바가 상호를 보여 줍니다. 협업·파트너
+홈페이지(선택)만 입력합니다. 조회 결과 카드는 상태별로 안내가 다릅니다. 계속사업자는 그대로 등록, 휴업자는 등록은 되지만 파트너
+모집글·제안은 잠긴다고 알리고, 폐업자는 등록할 수 없다고 알리며 [기업 등록] 버튼을 잠급니다. 등록에 성공하면 세션 계정을
+`tier=COMPANY`로 갱신해 사이드바가 상호를 보여 줍니다. 사업자번호 입력·조회 훅(`useBusinessLookup`)·조회 결과 카드·기본정보 네 칸과
+검증·문구(`companyRegistrationForm`)는 온보딩 2단계와 함께 쓰려고 `presentation/shared/company`에 둡니다. 협업·파트너
 설정은 `/api/v1/me/company/partner-profile`에 저장되고, 계정과 알림 카드의 비밀번호 변경·계정 삭제는 확인 모달로 처리합니다. 소셜 로그인으로만 가입한 계정(`hasPassword=false`)은
 비밀번호 항목을 숨기고 계정 삭제에 비밀번호를 묻지 않습니다.
 알림 스위치는 발송 기능이 없어 아직 화면 상태로만 켜고 끕니다.
@@ -206,7 +211,7 @@ Redux `receivedProposals` slice와 `useReceivedProposals`(계정당 한 번 조�
 보낸 제안함은 제안함 화면만 쓰므로 `useSentProposalBox`의 Hook 로컬 상태로 둡니다.
 추천·매칭은 아직 **데모 단계**라 ViewModel이 예시 값을 돌려줍니다. 관리자 계정 관리는 Core의 `/api/v1/admin/accounts`를 씁니다.
 지역은 공고 분류와 같은 `domain/entities/Region`의 시·도 목록을 쓰고, 프로필의 정식 명칭은 `toRegionName`으로 바꿉니다.
-모집글 작성·프로필 일치 표시는 `useAuthSession().hasCompany`(기업 등록 여부) 하나로 정하며, 제안 조건(이메일 인증)은 서비스 정책이라 작성자가 고르지 않습니다.
+모집글 작성·수정·마감과 제안 보내기는 `useAuthSession().partnerWriteLock`(`presentation/shared/auth/partnerAccess`)이 null일 때만 열립니다. 잠긴 이유는 개인 회원·기업 미등록·휴업 세 가지이고 사이드바 파트너 관리 메뉴 아래 한 줄, 파트너 머리글 버튼, 모집글 작성 화면, 제안 폼이 같은 문구를 보여 주며 둘러보기와 이미 받은 제안 확인은 그대로 됩니다. 서버가 `403 ACTIVE_BUSINESS_REQUIRED`로 거절하면 `active-business-required` 결과로 같은 안내를 합니다. 프로필 일치 표시·받은 제안 읽기는 `hasCompany`(기업 등록 여부)를 쓰고, 제안 조건(이메일 인증)은 서비스 정책이라 작성자가 고르지 않습니다.
 모집 작성은 중복 검토·신청 문서와 같은 `SavedSupportProgramPickerDialog`·`useSavedSupportProgramChoices`로 관심 공고함을 팝업에서 읽어 접수 중인 공고 1개를 고르고
 `createPartnerRecruitmentUseCase`로 등록합니다. 관심 공고는 화면 진입이 아니라 팝업을 열 때 조회하며, 접수 중이 아니거나 오늘 접수가 끝나는 공고는 팝업에서 이유(`접수 중 아님`·`오늘 접수 마감`)와 함께 비활성입니다.
 공고 카탈로그 검색은 모집글 작성에서 쓰지 않으며, 담은 공고가 없으면 관심 공고함 링크로 안내합니다.
@@ -489,7 +494,7 @@ src/
 ├── presentation/features/partner-proposal/ # 제안함(받은·보낸 제안, 수락·거절·철회) View와 ViewModel
 ├── presentation/features/company-profile/ # 기업 등록·기본정보 수정(사업자번호 자동 하이픈·연도 선택기·홈페이지 정규화), 협업·파트너 설정, 계정 보안 모달의 View·ViewModel
 ├── presentation/features/admin/ # 관리자 계정 관리 목록·상세 View와 ViewModel
-├── presentation/shared/        # 앱 공용 헤더, 작업 사이드바, 로그인 상태(auth slice·훅·라우트 보호), 경로 상수(routes), 파트너 모집 조회 훅·표시 helper, 받은 제안함 slice·훅과 보낸 제안함 훅, 작업 화면 공용 스타일, Core API 상태 표시, 지원사업 공통 오류 안내
+├── presentation/shared/        # 앱 공용 헤더, 작업 사이드바, 로그인 상태(auth slice·훅·라우트 보호), 경로 상수(routes), 기업 등록 공용 부품(company: 사업자번호 조회 훅·결과 카드·기본정보 칸·검증), 파트너 모집 조회 훅·표시 helper, 받은 제안함 slice·훅과 보낸 제안함 훅, 작업 화면 공용 스타일, Core API 상태 표시, 지원사업 공통 오류 안내
 ├── domain/                      # Entity, Repository 계약, UseCase
 └── data/                        # Fetch, Zod DTO 검증, Repository 구현, 테스트 fixture
 ```

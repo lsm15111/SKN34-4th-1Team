@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import type { Account } from '../../../domain/entities/Account'
@@ -149,7 +149,7 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
   onDeleteHistory: (id: string, title: string) => void
 }) {
   const { pathname } = useLocation()
-  const { account, logOut } = useAuthSession()
+  const { account, logOut, partnerWriteLock } = useAuthSession()
   const navigate = useNavigate()
   const pendingProposalCount = usePendingReceivedProposalCount()
   // 해당 대화 기록 항목의 점은 조건 해석·검색 진행 중과 아직 보지 않은 결과를 모두 표시합니다.
@@ -193,10 +193,18 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
     navigate(publicPaths.landing, { replace: true })
   }
 
-  /** 파트너 관리는 받은 제안 대기 건수를 배지로 보여 줍니다. 나머지 메뉴는 고정 문구를 씁니다. */
+  /** 파트너 관리는 받은 제안 대기 건수를 배지로, 쓰기가 잠긴 계정에는 "둘러보기"를 보여 줍니다. 나머지 메뉴는 고정 문구를 씁니다. */
   function badgeFor(item: MenuItem): string | undefined {
-    if (item.to === appPaths.partners) return pendingProposalCount === null || pendingProposalCount === 0 ? undefined : String(pendingProposalCount)
+    if (item.to === appPaths.partners) {
+      if (pendingProposalCount !== null && pendingProposalCount > 0) return String(pendingProposalCount)
+      return partnerWriteLock === null ? undefined : '둘러보기'
+    }
     return item.badge
+  }
+
+  /** 메뉴 아래 한 줄 이유입니다. 파트너 관리가 잠긴 계정에만 붙습니다. */
+  function noteFor(item: MenuItem): string | null {
+    return item.to === appPaths.partners && partnerWriteLock !== null ? partnerWriteLock.reason : null
   }
 
   return (
@@ -222,18 +230,21 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
               <p className="sr-only">{group.title}</p>
               {group.items.map((item) =>
                 item.to ? (
-                  <Link
-                    className={sidebarMenuItemClassName(
-                      item.matches?.(pathname) ? 'active' : 'inactive',
-                    )}
-                    key={item.label}
-                    to={item.to}
-                    aria-current={item.matches?.(pathname) ? 'page' : undefined}
-                  >
-                    <MenuIconGraphic name={item.icon} />
-                    <span>{item.label}</span>
-                    {badgeFor(item) ? <span className={appSidebarStyles.menuBadge}>{badgeFor(item)}</span> : null}
-                  </Link>
+                  <Fragment key={item.label}>
+                    <Link
+                      className={sidebarMenuItemClassName(
+                        item.matches?.(pathname) ? 'active' : 'inactive',
+                      )}
+                      to={item.to}
+                      aria-current={item.matches?.(pathname) ? 'page' : undefined}
+                    >
+                      <MenuIconGraphic name={item.icon} />
+                      <span>{item.label}</span>
+                      {/* 둘러보기 표시는 아래 이유 줄이 같은 뜻을 말하므로 접근 가능한 이름에서는 뺍니다. */}
+                      {badgeFor(item) ? <span className={appSidebarStyles.menuBadge} aria-hidden={badgeFor(item) === '둘러보기' ? true : undefined}>{badgeFor(item)}</span> : null}
+                    </Link>
+                    {noteFor(item) ? <p className={appSidebarStyles.menuNote}>{noteFor(item)}</p> : null}
+                  </Fragment>
                 ) : (
                   <span
                     className={sidebarMenuItemClassName('pending')}

@@ -22,7 +22,7 @@ type CloseState =
 export function useMyPartnerRecruitmentsViewModel(
   closeUseCase: Pick<ClosePartnerRecruitmentUseCase, 'execute'> = appContainer.resolve('closePartnerRecruitmentUseCase'),
 ) {
-  const { hasCompany } = useAuthSession()
+  const { partnerWriteLock } = useAuthSession()
   const [page, setPage] = useState(1)
   const query: PartnerRecruitmentQuery = { ...defaultPartnerRecruitmentQuery, mineOnly: true, sort: 'RECENT', page }
   const { phase, page: result, retry } = usePartnerRecruitmentBrowse(query)
@@ -52,6 +52,9 @@ export function useMyPartnerRecruitmentsViewModel(
         case 'forbidden':
           setCloseState({ status: 'failed', recruitment: target, message: recruitmentCloseMessages.notMine })
           return
+        case 'active-business-required':
+          setCloseState({ status: 'failed', recruitment: target, message: recruitmentCloseMessages.activeBusinessRequired })
+          return
         case 'not-found':
           setCloseState({ status: 'failed', recruitment: target, message: recruitmentCloseMessages.notFound })
           return
@@ -62,7 +65,8 @@ export function useMyPartnerRecruitmentsViewModel(
   }
 
   return {
-    hasCompany,
+    /** 쓰기가 잠긴 이유입니다. 비어 있을 때 안내와 작성 링크가 이것으로 갈립니다. */
+    writeLock: partnerWriteLock,
     phase,
     recruitments,
     total: result?.total ?? 0,
@@ -70,7 +74,7 @@ export function useMyPartnerRecruitmentsViewModel(
     page,
     goToPage: setPage,
     retry,
-    createPath: hasCompany ? appPaths.partnerNew : appPaths.profile,
+    createPath: partnerWriteLock === null ? appPaths.partnerNew : appPaths.profile,
     detailPathFor: (id: number) => `${appPaths.partnerDetail}?${new URLSearchParams({ recruitmentId: String(id) })}`,
     editPathFor: (id: number) => `${appPaths.partnerEdit}?${new URLSearchParams({ recruitmentId: String(id) })}`,
     /** 확인 상자에 이름을 보여 주려고 마감할 글을 함께 둡니다. */

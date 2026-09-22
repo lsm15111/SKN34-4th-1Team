@@ -25,6 +25,7 @@ export class PartnerProposalRepositoryImpl implements PartnerProposalRepository 
     } catch (error) {
       if (error instanceof AccountApiError) {
         if (error.code === 'COMPANY_REQUIRED') return { outcome: 'company-required' }
+        if (error.code === 'ACTIVE_BUSINESS_REQUIRED') return { outcome: 'active-business-required' }
         if (error.code === 'RECRUITMENT_NOT_FOUND') return { outcome: 'recruitment-not-found' }
         if (error.code === 'PROPOSAL_OWN_RECRUITMENT') return { outcome: 'own-recruitment' }
         if (error.code === 'RECRUITMENT_CLOSED') return { outcome: 'recruitment-closed' }

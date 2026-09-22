@@ -9,6 +9,7 @@ import { HelpTip } from '../../../shared/workspace/HelpTip'
 import { WorkspacePageHeader } from '../../../shared/workspace/WorkspacePageHeader'
 import { appPaths } from '../../../shared/routes/appPaths'
 import { SavedSupportProgramPickerDialog } from '../../../shared/support-program/SavedSupportProgramPickerDialog'
+import { partnerLockMessages } from '../../../shared/auth/partnerAccess'
 import { usePartnerRecruitmentCreateViewModel } from '../viewmodel/usePartnerRecruitmentCreateViewModel'
 import { partnerRecruitmentStyles } from './PartnerRecruitment.styles'
 import { PartnerRecruitmentFormFields } from './PartnerRecruitmentFormFields'
@@ -25,6 +26,7 @@ export function PartnerRecruitmentCreatePage() {
     isSubmitting,
     submit,
     canCreate,
+    writeLock,
     profilePath,
     savedProgramsPath,
     ownCompany,
@@ -51,17 +53,17 @@ export function PartnerRecruitmentCreatePage() {
   }
 
   if (!canCreate || ownCompany === null) {
+    // 잠긴 이유(개인·기업 미등록·휴업)는 사이드바·머리글과 같은 문구입니다. 기업 요약이 없는 계정은 미등록으로 안내합니다.
+    const lock = writeLock ?? { kind: 'unregistered' as const, ...partnerLockMessages.unregistered }
     return (
       <>
         <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 관리' }} title="모집글 작성" />
         <div className={workspacePageStyles.content}>
-          <section className={workspacePageStyles.card} aria-label="기업 등록 필요">
-            <h2 className={workspacePageStyles.cardTitle}>기업을 등록한 뒤 모집글을 쓸 수 있습니다</h2>
-            <p className={workspacePageStyles.emptyNote}>
-              모집글에는 사업자등록번호 조회로 확인한 기업명이 표시됩니다. 프로필에서 사업자등록번호를 조회하고 기업을 등록해 주세요.
-            </p>
+          <section className={workspacePageStyles.card} aria-label={lock.kind === 'suspended' ? '계속사업자만 작성 가능' : '기업 등록 필요'}>
+            <h2 className={workspacePageStyles.cardTitle}>{lock.title}</h2>
+            <p className={workspacePageStyles.emptyNote}>{lock.body}</p>
             <div className={partnerRecruitmentStyles.linkRow}>
-              <Link className={workspacePageStyles.primaryButton} to={profilePath}>프로필에서 기업 등록</Link>
+              <Link className={workspacePageStyles.primaryButton} to={profilePath}>{lock.actionLabel}</Link>
             </div>
           </section>
         </div>

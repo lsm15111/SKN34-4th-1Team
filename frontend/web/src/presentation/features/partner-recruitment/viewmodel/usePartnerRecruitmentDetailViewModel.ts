@@ -20,6 +20,7 @@ export type LinkCopyState = 'idle' | 'copied' | 'failed'
 export const proposalSendMessages = {
   empty: '제안 메시지를 입력해 주세요.',
   companyRequired: '프로필에서 기업을 등록한 뒤 제안할 수 있습니다.',
+  activeBusinessRequired: '제안은 계속사업자만 보낼 수 있습니다. 사업자 상태가 바뀌면 프로필에서 다시 확인해 주세요.',
   recruitmentNotFound: '모집글을 더 이상 찾을 수 없습니다.',
   ownRecruitment: '내 모집글에는 제안할 수 없습니다.',
   recruitmentClosed: '마감된 모집글에는 제안할 수 없습니다.',
@@ -29,6 +30,7 @@ export const proposalSendMessages = {
 
 export const recruitmentCloseMessages = {
   notMine: '내가 쓴 모집글만 마감할 수 있습니다.',
+  activeBusinessRequired: '모집글은 계속사업자만 마감할 수 있습니다. 사업자 상태가 바뀌면 프로필에서 다시 확인해 주세요.',
   alreadyClosed: '이미 마감된 모집글입니다.',
   notFound: '모집글을 더 이상 찾을 수 없습니다.',
   failed: '모집글을 마감하지 못했습니다. 잠시 후 다시 시도해 주세요.',
@@ -53,7 +55,7 @@ export function usePartnerRecruitmentDetailViewModel(
   sendUseCase: Pick<SendPartnerProposalUseCase, 'execute'> = appContainer.resolve('sendPartnerProposalUseCase'),
   closeUseCase: Pick<ClosePartnerRecruitmentUseCase, 'execute'> = appContainer.resolve('closePartnerRecruitmentUseCase'),
 ) {
-  const { hasCompany } = useAuthSession()
+  const { partnerWriteLock } = useAuthSession()
   const [searchParams] = useSearchParams()
   const recruitmentId = readRecruitmentId(searchParams.getAll('recruitmentId'))
   const { phase, recruitment: loadedRecruitment } = usePartnerRecruitmentDetail(recruitmentId)
@@ -77,8 +79,8 @@ export function usePartnerRecruitmentDetailViewModel(
   async function submitProposal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (recruitment === null || sendState.status === 'sending') return
-    if (!hasCompany) {
-      setSendState({ status: 'failed', message: proposalSendMessages.companyRequired })
+    if (partnerWriteLock !== null) {
+      setSendState({ status: 'failed', message: partnerWriteLock.kind === 'suspended' ? proposalSendMessages.activeBusinessRequired : proposalSendMessages.companyRequired })
       return
     }
     if (!proposalMessage.trim()) {
@@ -96,6 +98,9 @@ export function usePartnerRecruitmentDetailViewModel(
           return
         case 'company-required':
           setSendState({ status: 'failed', message: proposalSendMessages.companyRequired })
+          return
+        case 'active-business-required':
+          setSendState({ status: 'failed', message: proposalSendMessages.activeBusinessRequired })
           return
         case 'recruitment-not-found':
           setSendState({ status: 'failed', message: proposalSendMessages.recruitmentNotFound })
@@ -132,6 +137,9 @@ export function usePartnerRecruitmentDetailViewModel(
         case 'forbidden':
           setCloseState({ status: 'failed', message: recruitmentCloseMessages.notMine })
           return
+        case 'active-business-required':
+          setCloseState({ status: 'failed', message: recruitmentCloseMessages.activeBusinessRequired })
+          return
         case 'not-found':
           setCloseState({ status: 'failed', message: recruitmentCloseMessages.notFound })
           return
@@ -154,7 +162,8 @@ export function usePartnerRecruitmentDetailViewModel(
   return {
     phase,
     recruitment,
-    hasCompany,
+    /** 제안을 보낼 수 없는 이유입니다. 폼은 남기되 보내기를 잠그고 이유와 프로필 링크를 보여 줍니다. */
+    writeLock: partnerWriteLock,
     profilePath: appPaths.profile,
     proposalsPath: appPaths.proposals,
     proposalMessage,

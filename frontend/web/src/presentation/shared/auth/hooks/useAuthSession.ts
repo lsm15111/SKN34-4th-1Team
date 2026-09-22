@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { appContainer } from '../../../../app/appContainer'
 import { useAppDispatch, useAppSelector } from '../../../../app/hooks'
-import type { AccountRole } from '../../../../domain/entities/Account'
+import { type AccountRole, hasActiveBusiness } from '../../../../domain/entities/Account'
 import type { DevLogInUseCase } from '../../../../domain/usecases/DevLogInUseCase'
 import type { GetCurrentAccountUseCase } from '../../../../domain/usecases/GetCurrentAccountUseCase'
 import type { LogOutUseCase } from '../../../../domain/usecases/LogOutUseCase'
@@ -14,6 +14,7 @@ import {
   signedIn,
   signedOut,
 } from '../state/authSlice'
+import { partnerWriteLockFor } from '../partnerAccess'
 
 type CurrentAccountUseCase = Pick<GetCurrentAccountUseCase, 'execute'>
 type SignOutUseCase = Pick<LogOutUseCase, 'execute'>
@@ -91,8 +92,12 @@ export function useAuthSession(
   return {
     account,
     devLogInError,
-    /** 프로필에서 기업을 등록했는지입니다. 모집글 작성·프로필 일치 표시가 같은 기준을 씁니다. */
+    /** 프로필에서 기업을 등록했는지입니다. 받은 제안 읽기·프로필 일치 표시가 이 기준을 씁니다. */
     hasCompany: account?.company !== null && account?.company !== undefined,
+    /** 계속사업자 기업인지입니다. 모집글 작성·수정·마감과 제안 보내기는 이것만 봅니다. */
+    hasActiveBusiness: account !== null && hasActiveBusiness(account),
+    /** 파트너 쓰기가 잠긴 이유입니다. 없으면 null. 사이드바·파트너 화면이 같은 문구를 보여 줍니다. */
+    partnerWriteLock: partnerWriteLockFor(account),
     isAuthenticated,
     isDevLoggingIn,
     logInAsDeveloper,

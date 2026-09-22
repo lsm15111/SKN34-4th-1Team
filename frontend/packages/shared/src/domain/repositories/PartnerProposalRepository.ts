@@ -9,6 +9,7 @@ import type {
 export type SendPartnerProposalResult =
   | { outcome: 'sent'; proposal: PartnerProposal }
   | { outcome: 'company-required' }
+  | { outcome: 'active-business-required' }
   | { outcome: 'recruitment-not-found' }
   | { outcome: 'own-recruitment' }
   | { outcome: 'recruitment-closed' }

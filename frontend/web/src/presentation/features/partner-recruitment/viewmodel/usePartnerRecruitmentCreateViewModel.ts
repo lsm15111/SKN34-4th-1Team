@@ -21,6 +21,7 @@ const DAY_MS = 86_400_000
 export const recruitmentCreateMessages = {
   ...recruitmentFormMessages,
   companyRequired: '프로필에서 기업을 등록한 뒤 모집글을 쓸 수 있습니다.',
+  activeBusinessRequired: '모집글은 계속사업자만 쓸 수 있습니다. 사업자 상태가 바뀌면 프로필에서 다시 확인해 주세요.',
   programNotFound: '고른 공고를 더 이상 찾을 수 없습니다. 관심 공고함에서 다시 골라 주세요.',
   programClosed: '접수가 끝난 공고에는 모집글을 쓸 수 없습니다. 관심 공고함에서 다른 공고를 골라 주세요.',
   alreadyExists: '이 공고에는 이미 내 모집글이 있습니다. 공고당 모집글은 하나입니다.',
@@ -69,7 +70,7 @@ export function usePartnerRecruitmentCreateViewModel(useCases?: Partial<ViewMode
     createRecruitment: useCases?.createRecruitment ?? appContainer.resolve('createPartnerRecruitmentUseCase'),
   }
   const navigate = useNavigate()
-  const { account, hasCompany } = useAuthSession()
+  const { account, partnerWriteLock } = useAuthSession()
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   // 관심 공고는 화면에 들어올 때가 아니라 팝업을 열 때만 불러옵니다.
   const savedProgramChoices = useSavedSupportProgramChoices(isPickerOpen, resolved.browseSavedPrograms)
@@ -142,6 +143,9 @@ export function usePartnerRecruitmentCreateViewModel(useCases?: Partial<ViewMode
         case 'company-required':
           form.setError({ field: null, message: recruitmentCreateMessages.companyRequired })
           return
+        case 'active-business-required':
+          form.setError({ field: null, message: recruitmentCreateMessages.activeBusinessRequired })
+          return
         case 'program-not-found':
           setSelectedProgram(null)
           form.setError({ field: 'program', message: recruitmentCreateMessages.programNotFound })
@@ -175,8 +179,9 @@ export function usePartnerRecruitmentCreateViewModel(useCases?: Partial<ViewMode
     maximumRecruitmentDeadline,
     isSubmitting,
     submit,
-    /** 기업 등록 전에는 폼 대신 등록 안내를 보여 줍니다. */
-    canCreate: hasCompany,
+    /** 쓰기가 잠긴 계정(개인·기업 미등록·휴업)은 폼 대신 이유를 보여 줍니다. */
+    canCreate: partnerWriteLock === null,
+    writeLock: partnerWriteLock,
     profilePath: appPaths.profile,
     savedProgramsPath: appPaths.savedPrograms,
     /** 모집글에 표시되는 우리 기업입니다. 세션의 등록 기업 요약을 쓰고 상세 값은 프로필 API가 맡습니다. */

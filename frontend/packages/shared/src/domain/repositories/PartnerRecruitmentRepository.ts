@@ -6,10 +6,11 @@ import type {
 } from '../entities/PartnerRecruitment'
 import type { PartnerRecruitmentPage, PartnerRecruitmentQuery } from '../entities/PartnerRecruitmentQuery'
 
-/** 작성 실패 사유는 화면이 다르게 안내해야 하므로 예외가 아닌 결과로 구분합니다. */
+/** 작성 실패 사유는 화면이 다르게 안내해야 하므로 예외가 아닌 결과로 구분합니다. `active-business-required`는 휴업 기업입니다. */
 export type CreatePartnerRecruitmentResult =
   | { outcome: 'created'; recruitment: PartnerRecruitment }
   | { outcome: 'company-required' }
+  | { outcome: 'active-business-required' }
   | { outcome: 'program-not-found' }
   | { outcome: 'program-closed' }
   | { outcome: 'deadline-not-allowed'; latestAllowedDeadline: string | null }
@@ -20,6 +21,7 @@ export type UpdatePartnerRecruitmentResult =
   | { outcome: 'updated'; recruitment: PartnerRecruitment }
   | { outcome: 'not-found' }
   | { outcome: 'forbidden' }
+  | { outcome: 'active-business-required' }
   | { outcome: 'closed' }
   | { outcome: 'deadline-not-allowed'; latestAllowedDeadline: string | null }
 
@@ -27,6 +29,7 @@ export type ClosePartnerRecruitmentResult =
   | { outcome: 'closed'; recruitment: PartnerRecruitment }
   | { outcome: 'not-found' }
   | { outcome: 'forbidden' }
+  | { outcome: 'active-business-required' }
   | { outcome: 'already-closed' }
 
 /** 파트너 모집 기능이 Data Layer의 HTTP 세부사항과 분리되도록 하는 Domain 포트입니다. */

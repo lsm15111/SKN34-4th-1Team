@@ -44,6 +44,7 @@ export class PartnerRecruitmentRepositoryImpl implements PartnerRecruitmentRepos
     } catch (error) {
       if (error instanceof AccountApiError) {
         if (error.code === 'COMPANY_REQUIRED') return { outcome: 'company-required' }
+        if (error.code === 'ACTIVE_BUSINESS_REQUIRED') return { outcome: 'active-business-required' }
         if (error.code === 'RECRUITMENT_PROGRAM_NOT_FOUND') return { outcome: 'program-not-found' }
         if (error.code === 'RECRUITMENT_PROGRAM_CLOSED') return { outcome: 'program-closed' }
         if (error.code === 'RECRUITMENT_DEADLINE_NOT_ALLOWED') {
@@ -65,6 +66,7 @@ export class PartnerRecruitmentRepositoryImpl implements PartnerRecruitmentRepos
       if (error instanceof AccountApiError) {
         if (error.code === 'RECRUITMENT_NOT_FOUND') return { outcome: 'not-found' }
         if (error.code === 'RECRUITMENT_ACTION_FORBIDDEN') return { outcome: 'forbidden' }
+        if (error.code === 'ACTIVE_BUSINESS_REQUIRED') return { outcome: 'active-business-required' }
         if (error.code === 'RECRUITMENT_CLOSED') return { outcome: 'closed' }
         if (error.code === 'RECRUITMENT_DEADLINE_NOT_ALLOWED') {
           return {
@@ -84,6 +86,7 @@ export class PartnerRecruitmentRepositoryImpl implements PartnerRecruitmentRepos
       if (error instanceof AccountApiError) {
         if (error.code === 'RECRUITMENT_NOT_FOUND') return { outcome: 'not-found' }
         if (error.code === 'RECRUITMENT_ACTION_FORBIDDEN') return { outcome: 'forbidden' }
+        if (error.code === 'ACTIVE_BUSINESS_REQUIRED') return { outcome: 'active-business-required' }
         if (error.code === 'RECRUITMENT_CLOSED') return { outcome: 'already-closed' }
       }
       throw error
