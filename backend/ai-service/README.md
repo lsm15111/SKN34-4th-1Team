@@ -935,6 +935,16 @@ HWP/HWPX 위치 응답이 서로 다른 답변을 같은 텍스트 칸에 배치
 문서 생성 실패 로그에는 모델 호출/응답 검증 단계, 예외 종류, 고정 검증 사유, 입력 개수와 소요 시간만 기록합니다. 답변·문서 본문·외부 예외 메시지는 기록하지 않습니다.
 기입 대상의 `kind`는 `TEXT` 또는 `CHECKBOX`이며, `groupId`는 선택 그룹입니다. 정확히 일치하는 유일한 체크박스 값은 Core에서 직접 처리하므로 AI 요청에는 남은 답변만 포함될 수 있습니다. 서로 다른 답변을 같은 HWP/HWPX 문단에 넣는 응답은 거절합니다.
 
+## 신청 문서 미리보기 변환
+
+`POST /internal/v1/application-preparations/document/render`는 Core가 저장한 생성 파일(HWP·HWPX·DOCX·XLSX)을
+미리보기용 PDF로 바꿉니다. 같은 `DOCUMENT_INTERNAL_TOKEN`으로 인증하고 `sourceBase64`·`sourceSha256`·`format`만 받으며,
+답변·모델·파일 수정이 없습니다. 이미지의 LibreOffice(writer·calc)와 고정 버전 H2Orestart 확장(v0.7.14, sha256 검사)이
+`soffice --headless --convert-to pdf`를 매 요청마다 새 임시 프로필로 실행합니다(`DOCUMENT_RENDER_COMMAND`, 선택 `DOCUMENT_RENDER_ARGS`,
+`DOCUMENT_RENDER_TIMEOUT_SECONDS` 기본 120, `DOCUMENT_RENDER_CONCURRENCY` 기본 1). 변환기가 없으면 503 `APPLICATION_DOCUMENT_RENDER_UNAVAILABLE`,
+실패는 503 `…_RENDER_FAILED`, 시한 초과는 504 `…_RENDER_TIMEOUT`이며 원본 해시가 다르면 422입니다.
+결과는 원본과 글꼴·표 간격이 다를 수 있는 화면 확인용이며 제출 파일이 아닙니다. LibreOffice 한 번에 수백 MB를 쓰므로 실행 환경 메모리 한도를 2GiB로 둡니다.
+
 ## 신청 양식 발견 전용 timeout
 
 신청 양식 발견만 `APPLICATION_FORM_DISCOVERY_MODEL_TIMEOUT_SECONDS`(기본 210초),

@@ -71,7 +71,7 @@ const detail = {
   updatedAt: '2026-09-11T01:00:00+09:00',
   form: structuredClone(firstForm),
 }
-const repository = { onlineInputGuide: vi.fn(), documents: vi.fn(), submitDocumentJob: vi.fn(), documentJob: vi.fn(), documentJobs: vi.fn(), confirmDocumentMappingMigration: vi.fn(), downloadDocument: vi.fn(), downloadDocumentArchive: vi.fn(), generateDraft: vi.fn(), saveContent: vi.fn(), confirmContent: vi.fn(), discoveryJobs: vi.fn(), discoveryJob: vi.fn(), availability: vi.fn(), forms: vi.fn(), discover: vi.fn(), list: vi.fn(), delete: vi.fn(), get: vi.fn(), create: vi.fn(), interpret: vi.fn(), replaceInputs: vi.fn(), updateProgress: vi.fn() }
+const repository = { onlineInputGuide: vi.fn(), documents: vi.fn(), submitDocumentJob: vi.fn(), documentJob: vi.fn(), documentJobs: vi.fn(), confirmDocumentMappingMigration: vi.fn(), downloadDocument: vi.fn(), documentPreview: vi.fn(), downloadDocumentArchive: vi.fn(), generateDraft: vi.fn(), saveContent: vi.fn(), confirmContent: vi.fn(), discoveryJobs: vi.fn(), discoveryJob: vi.fn(), availability: vi.fn(), forms: vi.fn(), discover: vi.fn(), list: vi.fn(), delete: vi.fn(), get: vi.fn(), create: vi.fn(), interpret: vi.fn(), replaceInputs: vi.fn(), updateProgress: vi.fn() }
 
 function completedDiscovery(result: { items: ApplicationForm[]; warnings: string[]; cached: boolean }) {
   return { id: 77, sourceCode: result.items[0].sourceCode, sourceProgramId: result.items[0].sourceProgramId,
@@ -422,7 +422,7 @@ it('opens an in-browser preview of a PDF draft and marks where the saved answers
   expect((open as HTMLButtonElement).disabled).toBe(false)
   fireEvent.click(open)
   const panel = await screen.findByRole('region', { name: '신청문서 1 미리보기' })
-  await within(panel).findByText(/2쪽/)
+  await within(panel).findByText('2쪽', { selector: 'strong' })
   expect(panel.textContent).toContain('답변 1개의 자리를 표시했어요')
   expect(within(panel).getByLabelText('1쪽')).toBeTruthy()
   expect(within(panel).getByLabelText('2쪽')).toBeTruthy()
@@ -445,20 +445,25 @@ it('reports answers the preview could not find in the PDF text and preview failu
   fireEvent.click(await screen.findByRole('button', { name: '미리보기' }))
   const panel = await screen.findByRole('region', { name: '신청문서 1 미리보기' })
   await within(panel).findByText(/찾지 못한 값: 새봄테크/)
-  expect(panel.textContent).toContain('2개는 문서 글자에서 찾지 못했어요')
+  expect(panel.textContent).toContain('1개는 문서 글자에서 찾지 못했어요')
   fireEvent.click(screen.getByRole('button', { name: '미리보기 닫기' }))
   fireEvent.click(screen.getByRole('button', { name: '미리보기' }))
   expect((await screen.findByRole('alert')).textContent).toContain('PDF 구조를 읽지 못했습니다.')
 })
 
-it('keeps the preview closed for native formats until a converter exists', async () => {
+it('previews a native draft through the server conversion and says the rendering is converted', async () => {
   repository.get.mockResolvedValue(readyPreparation())
   repository.documents.mockResolvedValue([documentFile])
+  repository.documentPreview.mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }))
+  loadPdfPreview.mockResolvedValue({ pageCount: 1, found: ['새봄테크'], missing: [], pages: [{ index: 0, width: 100, height: 100, render: async () => {}, highlights: [] }] })
   mount('/app/application-preparations/12/documents')
-  const open = await screen.findByRole('button', { name: '미리보기' })
-  expect((open as HTMLButtonElement).disabled).toBe(true)
-  expect(screen.getByText(/PDF 변환 도구를 붙인 뒤 지원해요/)).toBeTruthy()
-  expect(loadPdfPreview).not.toHaveBeenCalled()
+  fireEvent.click(await screen.findByRole('button', { name: '미리보기' }))
+  const panel = await screen.findByRole('region', { name: '신청문서 1 미리보기' })
+  await within(panel).findByText('1쪽', { selector: 'strong' })
+  expect(panel.textContent).toContain('PDF로 변환해 보여 드려요')
+  expect(repository.documentPreview).toHaveBeenCalledWith(12, 81, expect.any(AbortSignal))
+  expect(repository.downloadDocument).not.toHaveBeenCalled()
+  expect(loadPdfPreview).toHaveBeenCalledWith(expect.any(Blob), ['새봄테크', '새봄테크'])
 })
 
 it('downloads binary data using the original extension and reports download errors', async () => {

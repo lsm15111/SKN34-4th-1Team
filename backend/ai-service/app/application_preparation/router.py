@@ -24,26 +24,65 @@ async def document_configuration():
     return {"contractVersion": CONTRACT, "pipelineVersion": PIPELINE_VERSION, "engineVersions": ENGINES}
 
 
-@router.post("/document/generate")
-@router.post("/document/map")
-async def generate_document_file(request: Request, service: Annotated[ApplicationPreparationService, Depends(get_service)]):
+def _require_document_token(request: Request) -> None:
+    """Core ↔ AI 내부 토큰. 짧으면 실행 환경이 준비되지 않은 것이고, 다르면 거절한다."""
     import hmac
-    import json
     import os
-    from pydantic import ValidationError
-    from app.application_preparation.document_contract import DocumentError, GenerateDocumentRequest, MapDocumentRequest
-    from app.application_preparation.document_pipeline import generate_document, map_document
 
     token = os.getenv("DOCUMENT_INTERNAL_TOKEN", "")
     if len(token) < 32:
         raise HTTPException(503, detail={"code": "APPLICATION_DOCUMENT_MCP_NOT_READY"})
     if not hmac.compare_digest(request.headers.get("authorization", ""), "Bearer " + token):
         raise HTTPException(401, detail={"code": "UNAUTHORIZED"})
+
+
+async def _read_document_body(request: Request, limit: int) -> bytearray:
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
-        if len(body) > 80 * 1024 * 1024:
+        if len(body) > limit:
             raise HTTPException(413, detail={"code": "APPLICATION_DOCUMENT_LIMIT_EXCEEDED"})
+    return body
+
+
+@router.post("/document/render")
+async def render_document_file(request: Request):
+    """생성된 원본 형식 파일을 미리보기용 PDF로 바꾼다. 파일을 수정하거나 모델을 부르지 않는다."""
+    import base64
+    import hashlib
+    import json
+    from pydantic import ValidationError
+    from app.application_preparation.document_contract import CONTRACT, DocumentError
+    from app.application_preparation.document_render import RenderDocumentRequest, render_pdf
+
+    _require_document_token(request)
+    body = await _read_document_body(request, 48 * 1024 * 1024)
+    try:
+        payload = RenderDocumentRequest.model_validate(json.loads(body))
+        source = base64.b64decode(payload.sourceBase64, validate=True)
+        if hashlib.sha256(source).hexdigest() != payload.sourceSha256:
+            raise ValueError("sha256 mismatch")
+    except (ValidationError, ValueError):
+        raise HTTPException(422, detail={"code": "APPLICATION_DOCUMENT_VALIDATION_FAILED"}) from None
+    try:
+        output = await render_pdf(source, payload.format)
+    except DocumentError as error:
+        logger.warning("application_document_rejected mode=render code=%s reason=%s", error.code, error.reason)
+        raise HTTPException(504 if error.code == "APPLICATION_DOCUMENT_RENDER_TIMEOUT" else 503, detail={"code": error.code}) from None
+    return {"contractVersion": CONTRACT, "sourceSha256": payload.sourceSha256, "format": "pdf",
+            "outputBase64": base64.b64encode(output).decode("ascii"), "outputSha256": hashlib.sha256(output).hexdigest()}
+
+
+@router.post("/document/generate")
+@router.post("/document/map")
+async def generate_document_file(request: Request, service: Annotated[ApplicationPreparationService, Depends(get_service)]):
+    import json
+    from pydantic import ValidationError
+    from app.application_preparation.document_contract import DocumentError, GenerateDocumentRequest, MapDocumentRequest
+    from app.application_preparation.document_pipeline import generate_document, map_document
+
+    _require_document_token(request)
+    body = await _read_document_body(request, 80 * 1024 * 1024)
     try:
         mapping = request.url.path.endswith("/map")
         payload = (MapDocumentRequest if mapping else GenerateDocumentRequest).model_validate(json.loads(body))

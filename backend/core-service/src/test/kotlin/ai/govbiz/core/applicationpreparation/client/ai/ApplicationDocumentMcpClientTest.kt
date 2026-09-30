@@ -93,4 +93,29 @@ class ApplicationDocumentMcpClientTest {
         assertFalse(error.message!!.contains("private upstream"))
         server.verify()
     }
+
+    @Test fun rendersAPreviewPdfAndKeepsRendererFailuresTyped() {
+        val request = ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentRenderRequest(sourceBase64 = "dGVzdA==", sourceSha256 = "a".repeat(64), format = "hwpx")
+        server.expect(requestTo("http://ai.test/internal/v1/application-preparations/document/render"))
+            .andExpect(header("Authorization", "Bearer " + "t".repeat(32)))
+            .andExpect(content().json(json.writeValueAsString(request)))
+            .andRespond(withSuccess(json.writeValueAsString(mapOf("contractVersion" to "application-document-mcp-v1", "sourceSha256" to request.sourceSha256,
+                "format" to "pdf", "outputBase64" to "JVBERi0=", "outputSha256" to "c".repeat(64))), MediaType.APPLICATION_JSON))
+        server.expect(requestTo("http://ai.test/internal/v1/application-preparations/document/render"))
+            .andRespond(withStatus(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON)
+                .body("""{"detail":{"code":"APPLICATION_DOCUMENT_RENDER_UNAVAILABLE","stderr":"never expose"}}"""))
+        server.expect(requestTo("http://ai.test/internal/v1/application-preparations/document/render"))
+            .andRespond { throw java.net.SocketTimeoutException("private upstream address") }
+        val rendered = client.render(request)
+        assertEquals("pdf", rendered.format)
+        assertEquals("JVBERi0=", rendered.outputBase64)
+        val typed = assertThrows(ApplicationDocumentMcpException::class.java) { client.render(request) }
+        assertEquals("APPLICATION_DOCUMENT_RENDER_UNAVAILABLE", typed.code)
+        assertFalse(typed.message!!.contains("never expose"))
+        // 변환은 파일을 바꾸지 않으므로 전송 실패도 결과 불명이 아니라 미리보기 실패다.
+        val transport = assertThrows(ApplicationDocumentMcpException::class.java) { client.render(request) }
+        assertEquals("APPLICATION_DOCUMENT_RENDER_FAILED", transport.code)
+        assertFalse(transport.message!!.contains("private upstream"))
+        server.verify()
+    }
 }

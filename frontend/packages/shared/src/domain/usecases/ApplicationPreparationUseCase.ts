@@ -37,6 +37,10 @@ export class ApplicationPreparationUseCase {
     return this.repository.confirmDocumentMappingMigration(id, revision, token, signal)
   }
   downloadDocument(id: number, fileId: number, signal?: AbortSignal) { return this.repository.downloadDocument(id, fileId, signal) }
+  documentPreview(id: number, fileId: number, signal?: AbortSignal) {
+    if (!Number.isSafeInteger(fileId) || fileId <= 0) throw new Error('미리보기할 문서가 올바르지 않습니다.')
+    return this.repository.documentPreview(id, fileId, signal)
+  }
   downloadDocumentArchive(id: number, revision: number, signal?: AbortSignal) {
     if (!Number.isSafeInteger(revision) || revision <= 0) throw new Error('내려받을 답변 버전이 올바르지 않습니다.')
     return this.repository.downloadDocumentArchive(id, revision, signal)

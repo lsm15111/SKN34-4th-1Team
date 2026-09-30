@@ -11,7 +11,7 @@ import type {
 import type { ApplicationPreparationRepository, ReplaceApplicationPreparationInputsOptions } from '../../domain/repositories/ApplicationPreparationRepository'
 import type { ApplicationPreparationListQuery } from '../../domain/entities/ApplicationPreparation'
 import { ApplicationPreparationError } from '../../domain/errors/ApplicationPreparationError'
-import { applicationPreparationRequest as request, downloadApplicationDocument, downloadApplicationDocumentArchive } from '../api/applicationPreparationApi'
+import { applicationPreparationRequest as request, downloadApplicationDocument, downloadApplicationDocumentArchive, downloadApplicationDocumentPreview } from '../api/applicationPreparationApi'
 import {
   applicationPreparationPageSchema,
   applicationPreparationSchema,
@@ -95,6 +95,7 @@ export class ApplicationPreparationRepositoryImpl implements ApplicationPreparat
     return result
   }
   downloadDocument(id: number, fileId: number, signal?: AbortSignal) { return downloadApplicationDocument(id, fileId, signal) }
+  documentPreview(id: number, fileId: number, signal?: AbortSignal) { return downloadApplicationDocumentPreview(id, fileId, signal) }
   downloadDocumentArchive(id: number, revision: number, signal?: AbortSignal) { return downloadApplicationDocumentArchive(id, revision, signal) }
   async generateDraft(id: number, sectionKey: string, input: GenerateApplicationDraft, signal?: AbortSignal) {
     const result = await request(`/${id}/sections/${encodeURIComponent(sectionKey)}/drafts`, applicationPreparationSchema, 'POST', input, signal, 'preparation')

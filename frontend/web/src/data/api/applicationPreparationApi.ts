@@ -71,6 +71,11 @@ export function downloadApplicationDocument(id: number, fileId: number, signal?:
   return downloadApplicationBinary(`/api/v1/application-preparations/${id}/documents/${fileId}/download`, signal)
 }
 
+/** 미리보기용 PDF. 원본 형식 파일은 서버가 변환한 결과이고 저장 파일은 그대로다. */
+export function downloadApplicationDocumentPreview(id: number, fileId: number, signal?: AbortSignal): Promise<Blob> {
+  return downloadApplicationBinary(`/api/v1/application-preparations/${id}/documents/${fileId}/preview`, signal)
+}
+
 export function downloadApplicationDocumentArchive(id: number, revision: number, signal?: AbortSignal): Promise<Blob> {
   return downloadApplicationBinary(`/api/v1/application-preparations/${id}/documents/archive?revision=${revision}`, signal)
 }

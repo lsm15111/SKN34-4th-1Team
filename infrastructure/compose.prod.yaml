@@ -141,7 +141,7 @@ services:
   ai-service:
     <<: *runtime
     image: ${AI_SERVICE_IMAGE:?Set a release image built from backend/ai-service}
-    mem_limit: 1g
+    mem_limit: 2g
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Set the existing OpenAI API key on EC2 only}
       OPENAI_BASE_URL: https://api.openai.com/v1

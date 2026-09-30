@@ -10,7 +10,7 @@ import { WorkspacePageHeader } from '../../../shared/workspace/WorkspacePageHead
 import { workspacePageStyles } from '../../../shared/workspace/WorkspacePage.styles'
 import { applicationPreparationStyles as s } from './ApplicationPreparation.styles'
 import { ApplicationDocumentPreview } from './ApplicationDocumentPreview'
-import { previewSupported, previewUnsupportedHint } from './documentPreviewSupport'
+import { previewSupported } from './documentPreviewSupport'
 
 export function ApplicationDocumentPage() {
   const account = useAppSelector(selectCurrentAccount)
@@ -237,12 +237,11 @@ function DocumentResults({ id }: { id: number }) {
       {preparation && <><p className={s.label}>문서에 포함된 작성 항목</p><ul className={s.fieldList}>{preparation.form.sections.map((section) => <li key={section.key}>{section.title}</li>)}</ul></>}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={s.primary} disabled={downloading !== null || archiving} onClick={() => { void download(file) }}>{downloading === file.id ? '다운로드 중…' : `신청문서 ${index + 1} 다운로드`}</button>
-        <button type="button" className={s.button} disabled={!previewSupported(file)} title={previewSupported(file) ? undefined : previewUnsupportedHint}
+        {previewSupported(file) && <button type="button" className={s.button}
           aria-expanded={previewFileId === file.id} onClick={() => setPreviewFileId((current) => current === file.id ? null : file.id)}>
           {previewFileId === file.id ? '미리보기 닫기' : '미리보기'}
-        </button>
+        </button>}
       </div>
-      {!previewSupported(file) && <p className={s.muted}>{previewUnsupportedHint}</p>}
       {previewFileId === file.id && <ApplicationDocumentPreview id={id} file={file} values={filledValues(file)} label={`신청문서 ${index + 1} 미리보기`} />}
       {file.filledAnswerCount !== null && file.unfilledAnswerCount !== null && <p className={s.muted}>{file.filledAnswerCount}개 기입 / {file.unfilledAnswerCount}개 미기입</p>}
       {file.unfilledAnswers.length > 0 && <details className={s.warning}>

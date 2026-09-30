@@ -58,6 +58,16 @@ ENV DOCUMENT_HWPX_COMMAND=/opt/document-tools/hwpx/bin/python \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 && rm -rf /var/lib/apt/lists/*
+# Preview rendering only: LibreOffice headless turns generated HWP/HWPX/DOCX/XLSX drafts into PDF for the browser.
+# H2Orestart (Java extension, pinned release) adds the Hangul import filters; NanumGothic keeps Korean text readable.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libreoffice-writer libreoffice-calc libreoffice-java-common default-jre-headless fonts-nanum \
+    && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:cbea23bc37861361bbc534bc0675e5bc67b36f712072490f82a9bf410d7c04d8 \
+    https://github.com/ebandal/H2Orestart/releases/download/v0.7.14/H2Orestart.oxt /opt/document-tools/H2Orestart.oxt
+RUN HOME=/tmp unopkg add --shared /opt/document-tools/H2Orestart.oxt && \
+    HOME=/tmp unopkg list --shared | grep -q ebandal.libreoffice.H2Orestart
+ENV DOCUMENT_RENDER_COMMAND=/usr/bin/soffice
 COPY --from=builder /opt/document-tools /opt/document-tools
 COPY --from=kordoc-builder /usr/local/bin/node /usr/local/bin/node
 COPY --from=kordoc-builder /opt/kordoc /opt/kordoc

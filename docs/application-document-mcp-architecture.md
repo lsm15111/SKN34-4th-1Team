@@ -83,6 +83,10 @@ FFDetr는 별도 외부 서비스가 아니라 기존 PDF MCP의 `govbiz_pdf_det
 - fingerprint는 원본 hash + 입력 revision + 지도/계획 정책과 선택 도구 commit을 포함한 pipelineVersion으로 계산한다. 실제 지도·planHash·검증 결과는 placements_json의 mcp에 보존한다. V38은 fingerprint 고유키를 추가하며 기존 파일은 이력 다운로드로 유지한다.
 - 외부 호출은 DB transaction 밖이다. 최종 Repository.save에서 소유권과 revision을 잠그고 재검사한다.
 
+## 미리보기 변환
+
+`POST /internal/v1/application-preparations/document/render`는 Core가 저장한 생성 파일을 화면 확인용 PDF로만 바꾼다. 같은 내부 토큰을 쓰고 `sourceBase64`·`sourceSha256`·`format`(hwp·hwpx·docx·xlsx)만 받으며, 답변·지도·WritePlan을 싣지 않고 모델도 부르지 않는다. 이미지의 LibreOffice(writer·calc, Java)와 고정 버전 H2Orestart 0.7.14(`ADD --checksum`)가 `soffice --headless --convert-to pdf`를 요청마다 새 임시 `UserInstallation` 프로필로 실행하고, 기본 동시 1개·120초 시한이다. 변환 PDF는 원본 편집 주소를 갖지 않으므로 nativeLocator·WritePlan·검증에 쓰지 않으며, Core는 파일 ID·원본 SHA-256으로 Redis에 24시간 캐시할 뿐 저장 파일을 바꾸지 않는다. 실패 코드는 `APPLICATION_DOCUMENT_RENDER_UNAVAILABLE`(변환기 없음)·`RENDER_FAILED`·`RENDER_TIMEOUT`이며 결과 불명으로 분류하지 않는다.
+
 ## kordoc
 
 HWP는 Core의 hwplib 구조를 단일 기준으로 사용해 kordoc을 호출하지 않는다. HWPX/PDF 주 분석에 문맥이 없거나 중복된 비어 있지 않은 항목이 있으면 읽기 보조가 필요하다고 판단한다. 그 외에는 SKIPPED_PRIMARY_SUFFICIENT를 기록한다. 별도 읽기 전용 복사본과 `parse_document`만 허용하며 OCR/수식 OCR 다운로드는 끈다. 주 편집기의 원문과 정확히 일치하는 문자열만 연결하며 kordoc 셀 주소를 편집 주소로 전용하지 않는다. 필요한 보조 호출 실패는 생성 실패이다. OS 수준의 완전한 악성 프로세스 sandbox를 제공하는 것은 아니며 운영 실행 계정 권한도 제한해야 한다.

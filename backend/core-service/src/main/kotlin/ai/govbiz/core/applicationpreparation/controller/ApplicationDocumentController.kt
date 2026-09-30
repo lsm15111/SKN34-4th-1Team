@@ -43,6 +43,16 @@ class ApplicationDocumentController(private val service: ApplicationDocumentServ
         return attachment(file.fileName, file.mediaType, file.bytes)
     }
 
+    /** 브라우저 미리보기용 PDF. 원본 형식 파일은 AI Service가 변환한 결과이며 저장 파일은 그대로다. */
+    @GetMapping("/{fileId}/preview")
+    fun preview(account: Account, @PathVariable @Min(1) id: Long, @PathVariable @Min(1) fileId: Long): ResponseEntity<ByteArray> {
+        val file = service.preview(account, id, fileId)
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .contentType(MediaType.APPLICATION_PDF).contentLength(file.bytes.size.toLong())
+            .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(file.fileName, StandardCharsets.UTF_8).build().toString())
+            .header("X-Content-Type-Options", "nosniff").body(file.bytes)
+    }
+
     @GetMapping("/archive")
     fun archive(account: Account, @PathVariable @Min(1) id: Long, @RequestParam @Min(1) revision: Long): ResponseEntity<ByteArray> {
         val archive = service.archive(account, id, revision)

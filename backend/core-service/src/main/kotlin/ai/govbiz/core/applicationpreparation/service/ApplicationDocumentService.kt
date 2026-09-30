@@ -47,6 +47,8 @@ class ApplicationDocumentService(
     private val json: tools.jackson.databind.ObjectMapper,
     @param:org.springframework.beans.factory.annotation.Value("\${app.application-document.unknown-outcome-lock-ttl:PT24H}")
     private val unknownOutcomeLockTtl: java.time.Duration,
+    @param:org.springframework.beans.factory.annotation.Value("\${app.application-document.preview-cache-ttl:PT24H}")
+    private val previewCacheTtl: java.time.Duration,
 ) {
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     private fun fingerprint(source: String, revision: Long, pipeline: String, engine: String? = null) =
@@ -59,6 +61,34 @@ class ApplicationDocumentService(
 
     fun download(account: Account, id: Long, fileId: Long): ApplicationDocumentFile =
         files.findOwned(account.id, id, fileId) ?: throw ApplicationPreparationNotFoundException()
+
+    /**
+     * 저장된 파일의 PDF 미리보기. PDF는 그대로 돌려주고, 한글·워드·엑셀은 AI Service의 LibreOffice 변환을 거친다.
+     * 변환 결과는 파일 ID·원본 해시로 Redis에 잠시 두어 같은 파일을 다시 열 때 변환을 반복하지 않는다. 저장 파일은 바꾸지 않는다.
+     */
+    fun preview(account: Account, id: Long, fileId: Long): ApplicationDocumentFile {
+        val file = download(account, id, fileId)
+        val format = file.fileName.substringAfterLast('.').lowercase()
+        if (format == "pdf") return file
+        if (format !in setOf("hwp", "hwpx", "docx", "xlsx"))
+            throw ApplicationDocumentException("APPLICATION_DOCUMENT_UNSUPPORTED", "미리보기를 지원하지 않는 파일 형식입니다.")
+        val sourceSha256 = sha256(file.bytes)
+        val cacheKey = "application-document-preview:$fileId:$sourceSha256"
+        val pdfName = file.fileName.replaceFirst(Regex("\\.[^.]+$"), "") + ".pdf"
+        redis.opsForValue().get(cacheKey)?.let { cached ->
+            return file.copy(fileName = pdfName, mediaType = "application/pdf", bytes = java.util.Base64.getDecoder().decode(cached))
+        }
+        val result = callMcp { mcp.render(ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentRenderRequest(
+            sourceBase64 = java.util.Base64.getEncoder().encodeToString(file.bytes), sourceSha256 = sourceSha256, format = format)) }
+        val output = try { java.util.Base64.getDecoder().decode(result.outputBase64) } catch (_: IllegalArgumentException) {
+            throw ApplicationDocumentException("APPLICATION_DOCUMENT_RENDER_FAILED", "미리보기 결과의 형식을 확인하지 못했습니다.")
+        }
+        if (result.contractVersion != "application-document-mcp-v1" || result.sourceSha256 != sourceSha256 || result.format != "pdf" ||
+            output.size !in 1..32 * 1024 * 1024 || sha256(output) != result.outputSha256 || !String(output, 0, 4, Charsets.US_ASCII).startsWith("%PDF"))
+            throw ApplicationDocumentException("APPLICATION_DOCUMENT_RENDER_FAILED", "미리보기 결과가 원본과 일치하지 않습니다.")
+        redis.opsForValue().set(cacheKey, result.outputBase64, previewCacheTtl)
+        return file.copy(fileName = pdfName, mediaType = "application/pdf", bytes = output)
+    }
 
     /** 답변 버전 하나의 파일을 묶는다. 저장된 LONGBLOB만 읽으며 새 파일을 저장하지 않는다. */
     fun archive(account: Account, id: Long, revision: Long): ApplicationDocumentArchiveResult {

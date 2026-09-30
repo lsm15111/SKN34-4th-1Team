@@ -31,6 +31,8 @@ export interface ApplicationPreparationRepository {
   confirmDocumentMappingMigration(id: number, expectedRevision: number, approvalToken: string,
     signal?: AbortSignal): Promise<ApplicationDocumentMigrationConfirmation>
   downloadDocument(id: number, fileId: number, signal?: AbortSignal): Promise<Blob>
+  /** 파일의 PDF 미리보기. PDF는 그대로, 한글·워드·엑셀은 서버가 변환한 PDF다. */
+  documentPreview(id: number, fileId: number, signal?: AbortSignal): Promise<Blob>
   /** 한 답변 버전의 파일을 모두 내려받는다. 파일이 하나면 그 파일, 여럿이면 zip이다. */
   downloadDocumentArchive(id: number, revision: number, signal?: AbortSignal): Promise<Blob>
   generateDraft(id: number, sectionKey: string, input: GenerateApplicationDraft, signal?: AbortSignal): Promise<ApplicationPreparation>

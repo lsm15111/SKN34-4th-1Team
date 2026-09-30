@@ -62,6 +62,8 @@ import ai.govbiz.core.applicationpreparation.client.ai.dto.AiApplicationDraftReq
 import ai.govbiz.core.applicationpreparation.client.ai.dto.AiApplicationDraftPayload
 import ai.govbiz.core.applicationpreparation.client.ai.ApplicationDocumentMcpClient
 import ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentGenerationRequest
+import ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentRenderRequest
+import ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentRenderPayload
 import ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentGenerationPayload
 import ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentConfigurationPayload
 import ai.govbiz.core.applicationpreparation.client.ai.dto.AiDocumentMappingPayload
@@ -1167,6 +1169,51 @@ class ApplicationPreparationApiIntegrationTest {
         // 기존 답변·파일·지도는 그대로다.
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM application_document_file WHERE preparation_id=?", Int::class.java, fixture.preparationId))
         org.junit.jupiter.api.Assertions.assertNotNull(documentFiles.findOwned(ownerId, fixture.preparationId, fixture.oldFileId))
+    }
+
+    @Test
+    fun previewsNativeDraftsAsPdfThroughTheRendererOnceAndServesPdfDraftsDirectly() {
+        val created = mvc.perform(post(BASE).cookie(owner).header(HttpHeaders.ORIGIN, ORIGIN).contentType(MediaType.APPLICATION_JSON).content(payload()))
+            .andExpect(status().isCreated()).andReturn().response
+        val id = json.readTree(created.contentAsString).path("id").asLong()
+        val native = documentFiles.save(ownerId, id, 1, "신청서_초안_v1.hwpx", "application/hwp+zip", byteArrayOf(80, 75, 3, 4, 9), "a".repeat(64), emptyList(), fingerprint = "d".repeat(64))
+        // 같은 답변 버전에 파일이 둘이면 지문으로 구분해 저장한다(지문 없는 저장은 그 버전의 기존 파일을 돌려준다).
+        val pdf = documentFiles.save(ownerId, id, 1, "신청서_초안_v1.pdf", "application/pdf", "%PDF-1.4 stored".toByteArray(), "a".repeat(64), emptyList(), fingerprint = "e".repeat(64))
+        val sourceSha = java.security.MessageDigest.getInstance("SHA-256").digest(native.bytes).joinToString("") { "%02x".format(it) }
+        val rendered = "%PDF-1.4 rendered".toByteArray()
+        val renderedSha = java.security.MessageDigest.getInstance("SHA-256").digest(rendered).joinToString("") { "%02x".format(it) }
+        val fallback = AiDocumentRenderRequest(sourceBase64 = "", sourceSha256 = "", format = "hwpx")
+        `when`(documentMcp.render(any(AiDocumentRenderRequest::class.java) ?: fallback)).thenAnswer { invocation ->
+            val request = invocation.getArgument<AiDocumentRenderRequest>(0)
+            assertEquals(sourceSha, request.sourceSha256)
+            assertEquals("hwpx", request.format)
+            AiDocumentRenderPayload("application-document-mcp-v1", request.sourceSha256, "pdf",
+                java.util.Base64.getEncoder().encodeToString(rendered), renderedSha)
+        }
+        redis.delete("application-document-preview:${native.id}:$sourceSha")
+        val first = mvc.perform(get("$BASE/$id/documents/${native.id}/preview").cookie(owner)).andExpect(status().isOk())
+            .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+            .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, org.hamcrest.Matchers.startsWith("inline")))
+            .andReturn().response.contentAsByteArray
+        org.junit.jupiter.api.Assertions.assertArrayEquals(rendered, first)
+        // 같은 파일을 다시 열면 Redis에 둔 변환 결과를 쓰고 변환기를 다시 부르지 않는다.
+        org.junit.jupiter.api.Assertions.assertArrayEquals(rendered,
+            mvc.perform(get("$BASE/$id/documents/${native.id}/preview").cookie(owner)).andExpect(status().isOk()).andReturn().response.contentAsByteArray)
+        verify(documentMcp, times(1)).render(any(AiDocumentRenderRequest::class.java) ?: fallback)
+        assertTrue(redis.getExpire("application-document-preview:${native.id}:$sourceSha", java.util.concurrent.TimeUnit.SECONDS) in 1..86_400)
+        // 저장 파일은 그대로다.
+        org.junit.jupiter.api.Assertions.assertArrayEquals(native.bytes, requireNotNull(documentFiles.findOwned(ownerId, id, native.id)).bytes)
+        // PDF 초안은 변환 없이 그대로, 타인은 404, 변환기 오류는 코드 그대로.
+        org.junit.jupiter.api.Assertions.assertArrayEquals(pdf.bytes,
+            mvc.perform(get("$BASE/$id/documents/${pdf.id}/preview").cookie(owner)).andExpect(status().isOk()).andReturn().response.contentAsByteArray)
+        mvc.perform(get("$BASE/$id/documents/${native.id}/preview").cookie(other)).andExpect(status().isNotFound())
+        redis.delete("application-document-preview:${native.id}:$sourceSha")
+        // 답변이 걸린 mock을 다시 스텁할 때는 doThrow().when()을 써야 스텁 중에 기존 answer가 실행되지 않는다.
+        org.mockito.Mockito.doThrow(ApplicationDocumentMcpException("APPLICATION_DOCUMENT_RENDER_UNAVAILABLE", "변환기 없음"))
+            .`when`(documentMcp).render(any(AiDocumentRenderRequest::class.java) ?: fallback)
+        mvc.perform(get("$BASE/$id/documents/${native.id}/preview").cookie(owner)).andExpect(status().isUnprocessableContent())
+            .andExpect(jsonPath("$.code").value("APPLICATION_DOCUMENT_RENDER_UNAVAILABLE"))
     }
 
     private fun changedMappingFixture(): MigrationFixture {
