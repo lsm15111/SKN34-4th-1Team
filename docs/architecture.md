@@ -132,6 +132,7 @@ Frontend는 `/app/application-preparations`의 목록(상태 칩 `?status=`, 필
 작업은 단계(PREPARING·MAPPING·WRITING·SAVING)를 기록하고 SUCCEEDED면 파일 ID를, FAILED면 사용자용 실패 문구와(입력 위치 변경이면) 승인 안내를 돌려줍니다.
 유료 AI 호출 뒤 결과를 확인하지 못한 실행은 UNKNOWN으로 남아 그 준비 건의 새 작업을 막고, `unknown-outcome-lock-ttl`(기본 24시간)이 지나면 실패로 내려 다시 받습니다.
 QUEUED 1시간이 지나면 만료, RUNNING 30분이 지나면 유료 AI 호출 전(재시작 등으로 끊긴 실행)은 실패, 호출 뒤는 결과 불명으로 정리합니다. 동기 `POST …/documents`는 같은 규칙을 거치는 기존 계약으로 남아 있지만 웹은 호출하지 않습니다.
+결과 화면의 미리보기는 생성된 PDF를 기존 다운로드 API로 받아 브라우저의 pdf.js가 그리고, 저장된 답변 값을 페이지 텍스트에서 찾아 강조합니다. Core는 미리보기용 API를 따로 두지 않으며, 한글·워드·엑셀은 PDF 변환 도구(LibreOffice + H2Orestart 사이드카, 별도 작업)를 붙인 뒤 같은 화면으로 엽니다.
 공식 첨부 SHA-256이 선택한 양식 버전과 일치할 때 원본의 문단·표 셀 또는 PDF 페이지를 분석합니다.
 저장된 바인딩이 있는 HWP·HWPX·DOCX·XLSX는 작성 계획을 AI에 다시 묻지 않고 바인딩에서 결정적으로 만듭니다(빈 칸은 입력, 인쇄된 빈칸 표시는 그 구간 교체,
 라벨 뒤는 삽입, 예시 문구는 전체 교체, 체크박스·필드는 set_check·set_field). 한 문단에 여러 답변이 묶인 경우만 그 답변들에 한해 모델에 배치를 묻고,

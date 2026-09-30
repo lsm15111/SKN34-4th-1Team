@@ -15,6 +15,10 @@ import { ApplicationPreparationEditorPage, ApplicationPreparationListPage } from
 import { supportProgramDetailPath } from '../../../shared/routes/appPaths'
 import { ApplicationDocumentPage } from './ApplicationDocumentPage'
 import { chooseOption, optionValues, selectedValue } from '../../../../test/selectField'
+import { loadPdfPreview as loadPdfPreviewModule } from './pdfPreview'
+
+vi.mock('./pdfPreview', () => ({ loadPdfPreview: vi.fn() }))
+const loadPdfPreview = vi.mocked(loadPdfPreviewModule)
 
 const original = appContainer.resolve('applicationPreparationUseCase')
 const originalCatalog = appContainer.resolve('browseSupportProgramsUseCase')
@@ -398,6 +402,63 @@ it('prevents generating with a stale revision and aborts requests after leaving'
   const signal = repository.get.mock.calls[0][1] as AbortSignal
   unmount()
   expect(signal.aborted).toBe(true)
+})
+
+it('opens an in-browser preview of a PDF draft and marks where the saved answers were printed', async () => {
+  const ready = readyPreparation()
+  ready.form.sections[1].facts[0].value = '스마트 공정 과제'
+  repository.get.mockResolvedValue(ready)
+  repository.documents.mockResolvedValue([{ ...documentFile, id: 90, fileName: '신청서_초안_v3.pdf', mediaType: 'application/pdf',
+    unfilledAnswers: [{ fieldId: 'voucher-plan:project-title', fieldLabel: '바우처 활용 계획 / 과제명', value: '스마트 공정 과제', reason: 'INPUT_LOCATION_NOT_FOUND' }],
+    filledAnswerCount: 1, unfilledAnswerCount: 1 }])
+  repository.downloadDocument.mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }))
+  const render = vi.fn(async () => {})
+  loadPdfPreview.mockResolvedValue({ pageCount: 2, found: ['새봄테크'], missing: [], pages: [
+    { index: 0, width: 120, height: 160, render, highlights: [{ x: 10, y: 20, width: 30, height: 8 }] },
+    { index: 1, width: 120, height: 160, render, highlights: [] },
+  ] })
+  mount('/app/application-preparations/12/documents')
+  const open = await screen.findByRole('button', { name: '미리보기' })
+  expect((open as HTMLButtonElement).disabled).toBe(false)
+  fireEvent.click(open)
+  const panel = await screen.findByRole('region', { name: '신청문서 1 미리보기' })
+  await within(panel).findByText(/2쪽/)
+  expect(panel.textContent).toContain('답변 1개의 자리를 표시했어요')
+  expect(within(panel).getByLabelText('1쪽')).toBeTruthy()
+  expect(within(panel).getByLabelText('2쪽')).toBeTruthy()
+  expect(repository.downloadDocument).toHaveBeenCalledWith(12, 90, expect.any(AbortSignal))
+  // 미기입으로 기록된 답변은 강조 대상에서 빠지고, 기입된 값만 넘긴다.
+  expect(loadPdfPreview).toHaveBeenCalledWith(expect.any(Blob), ['새봄테크'])
+  await waitFor(() => expect(render).toHaveBeenCalledTimes(2))
+  fireEvent.click(screen.getByRole('button', { name: '미리보기 닫기' }))
+  expect(screen.queryByRole('region', { name: '신청문서 1 미리보기' })).toBeNull()
+  expect(repository.downloadDocument).toHaveBeenCalledTimes(1)
+})
+
+it('reports answers the preview could not find in the PDF text and preview failures', async () => {
+  repository.get.mockResolvedValue(readyPreparation())
+  repository.documents.mockResolvedValue([{ ...documentFile, id: 90, fileName: '신청서_초안_v3.pdf', mediaType: 'application/pdf' }])
+  repository.downloadDocument.mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }))
+  loadPdfPreview.mockResolvedValueOnce({ pageCount: 1, found: [], missing: ['새봄테크'], pages: [{ index: 0, width: 100, height: 100, render: async () => {}, highlights: [] }] })
+    .mockRejectedValueOnce(new Error('PDF 구조를 읽지 못했습니다.'))
+  mount('/app/application-preparations/12/documents')
+  fireEvent.click(await screen.findByRole('button', { name: '미리보기' }))
+  const panel = await screen.findByRole('region', { name: '신청문서 1 미리보기' })
+  await within(panel).findByText(/찾지 못한 값: 새봄테크/)
+  expect(panel.textContent).toContain('2개는 문서 글자에서 찾지 못했어요')
+  fireEvent.click(screen.getByRole('button', { name: '미리보기 닫기' }))
+  fireEvent.click(screen.getByRole('button', { name: '미리보기' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('PDF 구조를 읽지 못했습니다.')
+})
+
+it('keeps the preview closed for native formats until a converter exists', async () => {
+  repository.get.mockResolvedValue(readyPreparation())
+  repository.documents.mockResolvedValue([documentFile])
+  mount('/app/application-preparations/12/documents')
+  const open = await screen.findByRole('button', { name: '미리보기' })
+  expect((open as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.getByText(/PDF 변환 도구를 붙인 뒤 지원해요/)).toBeTruthy()
+  expect(loadPdfPreview).not.toHaveBeenCalled()
 })
 
 it('downloads binary data using the original extension and reports download errors', async () => {

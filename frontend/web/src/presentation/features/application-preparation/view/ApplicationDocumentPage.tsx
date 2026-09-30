@@ -9,6 +9,8 @@ import { appPaths } from '../../../shared/routes/appPaths'
 import { WorkspacePageHeader } from '../../../shared/workspace/WorkspacePageHeader'
 import { workspacePageStyles } from '../../../shared/workspace/WorkspacePage.styles'
 import { applicationPreparationStyles as s } from './ApplicationPreparation.styles'
+import { ApplicationDocumentPreview } from './ApplicationDocumentPreview'
+import { previewSupported, previewUnsupportedHint } from './documentPreviewSupport'
 
 export function ApplicationDocumentPage() {
   const account = useAppSelector(selectCurrentAccount)
@@ -49,6 +51,8 @@ function DocumentResults({ id }: { id: number }) {
   const [archiving, setArchiving] = useState(false)
   /** 지금 따라가고 있는 생성 작업. 진행 카드가 서버가 기록한 단계를 보여 준다. */
   const [job, setJob] = useState<ApplicationDocumentGenerationJob | null>(null)
+  /** 미리보기를 연 파일. 한 번에 하나만 그린다. */
+  const [previewFileId, setPreviewFileId] = useState<number | null>(null)
   const downloadController = useRef<AbortController | null>(null)
   const migrationController = useRef<AbortController | null>(null)
   const back = `${appPaths.applicationPreparations}/${id}`
@@ -60,6 +64,13 @@ function DocumentResults({ id }: { id: number }) {
   const unanswered = preparation?.form.sections.flatMap((section) => section.fields
     .filter((field) => !section.facts.some((fact) => fact.fieldKey === field.key && fact.status === 'PROVIDED'))
     .map((field) => `${section.title} · ${field.label}`)) ?? []
+  /** 이 파일에 실제로 기입된 답변 값. 저장된 PROVIDED 사실 중 미기입으로 기록된 항목은 뺀다. */
+  const filledValues = (file: ApplicationDocument) => {
+    const unfilled = new Set(file.unfilledAnswers.map((answer) => answer.fieldId))
+    return preparation?.form.sections.flatMap((section) => section.facts
+      .filter((fact) => fact.status === 'PROVIDED' && fact.value !== null && !unfilled.has(`${section.key}:${fact.fieldKey}`))
+      .map((fact) => fact.value as string)) ?? []
+  }
   const reasonLabel = (reason: ApplicationDocument['unfilledAnswers'][number]['reason']) => reason === 'AUTO_FILL_UNSUPPORTED' ? '자동 기입 미지원' : '입력 위치 확인 불가'
   const changeTypeLabel: Record<ApplicationDocumentMigrationNotice['changes'][number]['changeType'], string> = {
     TARGET_ADDED: '새 입력칸', TARGET_REMOVED: '입력칸 사라짐', TARGET_CHANGED: '입력칸 변경',
@@ -224,7 +235,15 @@ function DocumentResults({ id }: { id: number }) {
       <p className="break-all font-semibold">{file.fileName}</p>
       <p className={s.muted}>원본과 같은 {extension} 형식 · 답변 버전 {file.inputRevision} · {Math.ceil(file.size / 1024)} KB</p>
       {preparation && <><p className={s.label}>문서에 포함된 작성 항목</p><ul className={s.fieldList}>{preparation.form.sections.map((section) => <li key={section.key}>{section.title}</li>)}</ul></>}
-      <button type="button" className={s.primary} disabled={downloading !== null || archiving} onClick={() => { void download(file) }}>{downloading === file.id ? '다운로드 중…' : `신청문서 ${index + 1} 다운로드`}</button>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={s.primary} disabled={downloading !== null || archiving} onClick={() => { void download(file) }}>{downloading === file.id ? '다운로드 중…' : `신청문서 ${index + 1} 다운로드`}</button>
+        <button type="button" className={s.button} disabled={!previewSupported(file)} title={previewSupported(file) ? undefined : previewUnsupportedHint}
+          aria-expanded={previewFileId === file.id} onClick={() => setPreviewFileId((current) => current === file.id ? null : file.id)}>
+          {previewFileId === file.id ? '미리보기 닫기' : '미리보기'}
+        </button>
+      </div>
+      {!previewSupported(file) && <p className={s.muted}>{previewUnsupportedHint}</p>}
+      {previewFileId === file.id && <ApplicationDocumentPreview id={id} file={file} values={filledValues(file)} label={`신청문서 ${index + 1} 미리보기`} />}
       {file.filledAnswerCount !== null && file.unfilledAnswerCount !== null && <p className={s.muted}>{file.filledAnswerCount}개 기입 / {file.unfilledAnswerCount}개 미기입</p>}
       {file.unfilledAnswers.length > 0 && <details className={s.warning}>
         <summary className={s.label}>자동 기입 못한 답변 보기 ({file.unfilledAnswers.length})</summary>
