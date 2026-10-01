@@ -95,7 +95,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
   const [programLoadVersion, setProgramLoadVersion] = useState(0)
   const [activeJobs, setActiveJobs] = useState<ApplicationFormDiscoveryJob[]>([])
   const [availability, setAvailability] = useState<AvailabilityLookup | null>(null)
-  /** 구글 설문으로 신청하는 공고의 설문 주소입니다. 이런 공고는 양식 조회·분석 없이 설문으로 바로 보냅니다. */
+  /** 구글 설문으로 신청하는 공고의 설문 주소입니다. 이런 공고는 양식 조회·분석 없이 ②에서 설문 답을 미리 채워 엽니다. */
   const [googleFormUrl, setGoogleFormUrl] = useState<string | null>(null)
   const [forms, setForms] = useState<ApplicationForm[]>([])
   const [selectedFormVersionId, setSelectedFormVersionId] = useState('')
@@ -187,8 +187,8 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
 
   /**
    * 공고의 저장된 양식을 조회하고, 그 공고로 이미 시작한 분석 작업이 있으면 이어받습니다(모두 GET · AI 호출 없음).
-   * 공고 고르기 패널에서 이미 조회한 결과가 있으면 그 결과를 그대로 씁니다. 구글 설문으로 신청하는 공고는 설문에서 직접
-   * 작성하도록 안내하고 양식·분석 작업을 쓰지 않습니다. 신청 경로를 모르면 같은 때에 상세를 한 번 읽어 확인합니다.
+   * 공고 고르기 패널에서 이미 조회한 결과가 있으면 그 결과를 그대로 씁니다. 구글 설문으로 신청하는 공고는 설문 답을
+   * 미리 채워 열도록 하고 양식·분석 작업을 쓰지 않습니다. 신청 경로를 모르면 같은 때에 상세를 한 번 읽어 확인합니다.
    */
   const lookup = useCallback((target: SelectableSupportProgram, known?: ApplicationFormAvailability) => {
     availabilityController.current?.abort()

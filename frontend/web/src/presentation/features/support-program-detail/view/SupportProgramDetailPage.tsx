@@ -352,18 +352,15 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
           <div className={s.divider} />
           <div id="support-program-more" className={`${s.more} ${moreOpen ? '' : s.moreHidden}`}>
             <nav aria-label="관련 작업" className="contents">
-              {googleFormUrl ? (
-                <a className={s.row} href={googleFormUrl} target="_blank" rel="noreferrer">
-                  <span className={s.rowIcon}><Icon name="document" /></span><span className={s.rowLabel}>구글 설문으로 신청 ↗</span>
-                </a>
-              ) : save.isAuthenticated ? (
+              {/* 구글 설문 공고는 같은 화면에서 설문 답을 미리 채워 엽니다. */}
+              {save.isAuthenticated ? (
                 <Link className={s.row} to={applicationPreparationPath}>
-                  <span className={s.rowIcon}><Icon name="document" /></span><span className={s.rowLabel}>이 공고로 신청 문서 작성</span>
+                  <span className={s.rowIcon}><Icon name="document" /></span><span className={s.rowLabel}>{googleFormUrl ? '구글 설문 답변 미리 채우기' : '이 공고로 신청 문서 작성'}</span>
                 </Link>
               ) : (
                 // 신청 문서 작성은 로그인 화면이라 비로그인에는 로그인 뒤 그 화면으로 이어지는 링크를 둡니다.
                 <Link className={s.row} to={loginPathFor(applicationPreparationPath)}>
-                  <span className={s.rowIcon}><Icon name="document" /></span><span className={s.rowLabel}>로그인하고 이 공고로 신청 문서 작성</span>
+                  <span className={s.rowIcon}><Icon name="document" /></span><span className={s.rowLabel}>{googleFormUrl ? '로그인하고 구글 설문 답변 미리 채우기' : '로그인하고 이 공고로 신청 문서 작성'}</span>
                 </Link>
               )}
               <Link className={s.row} to={save.isAuthenticated ? appPaths.combinationReviewNew : loginPathFor(appPaths.combinationReviewNew)}>
@@ -376,8 +373,8 @@ function SupportProgramDetail({ program, searchReturnTo, fromPipeline }: {
                 <b className={s.sourceNoteLead}>신청 전 확인</b> · 지원 자격, 제출 서류, 신청 방법은 공고 원문을 기준으로 해요.
               </p>
               {isOfficialNoticeList ? <p className={s.sourceNote}>제목으로 해당 공지를 확인해 주세요.</p> : null}
-              {program.applicationRoute.url && !googleFormUrl ? (
-                <a className={s.sourceLink} href={program.applicationRoute.url} target="_blank" rel="noreferrer">신청 사이트 열기 ↗</a>
+              {program.applicationRoute.url ? (
+                <a className={s.sourceLink} href={program.applicationRoute.url} target="_blank" rel="noreferrer">{googleFormUrl ? '구글 설문 열기' : '신청 사이트 열기'} ↗</a>
               ) : null}
               <a className={s.sourceLink} href={program.sourceUrl} target="_blank" rel="noreferrer">
                 {isOfficialNoticeList ? '공식 공지 목록' : `${program.sourceName} 원문 보기`} ↗

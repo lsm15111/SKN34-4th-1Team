@@ -23,6 +23,7 @@ import {
 } from '../models/ApplicationPreparationDto'
 
 import { applicationOnlineInputGuideSchema } from '@govbiz/shared/data/models/ApplicationOnlineInputGuideDto'
+import { applicationGoogleFormSchema } from '@govbiz/shared/data/models/ApplicationGoogleFormDto'
 
 const cursor = (query: ApplicationPreparationListQuery = {}) =>
   `?size=20${query.beforeId === undefined ? '' : `&beforeId=${query.beforeId}`}${query.status === undefined ? '' : `&status=${query.status}`}`
@@ -60,6 +61,10 @@ export class ApplicationPreparationRepositoryImpl implements ApplicationPreparat
   }
 
   async availability(sourceCode: string, sourceProgramId: string, signal?: AbortSignal) {
+  googleForm(sourceCode: string, sourceProgramId: string, signal?: AbortSignal) {
+    return request(`/google-form?${new URLSearchParams({ sourceCode, sourceProgramId })}`, applicationGoogleFormSchema, 'GET', undefined, signal)
+  }
+
     const schema = z.object({
       state: z.object({ sourceCode: z.string(), sourceProgramId: z.string(),
         status: z.enum(['PENDING', 'AVAILABLE', 'NO_FORM', 'DOCUMENT_UNAVAILABLE', 'TOO_LARGE', 'RETRY_WAITING', 'STALE', 'REVIEW_REQUIRED']),
