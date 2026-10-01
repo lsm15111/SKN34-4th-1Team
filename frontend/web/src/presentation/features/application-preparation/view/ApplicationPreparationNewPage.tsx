@@ -202,9 +202,25 @@ function FormChoice({ vm }: { vm: NewViewModel }) {
   </section>
 }
 
-/** ② 양식 · 분야의 내용입니다. 저장된 양식 조회 중 · 실패 · 분석 진행 · 양식 카드 · 양식 없음 중 하나를 보여 줍니다. */
+/**
+ * 구글 설문으로 신청하는 공고의 ②입니다. 질문과 답은 구글 설문에서 직접 작성하도록 설문으로 바로 보내고,
+ * 양식 조회·입력칸 분석(유료 AI)·신청 문서 작성은 하지 않습니다.
+ */
+function GoogleFormRedirect({ url, title }: { url: string; title: string }) {
+  return <section className={n.card} aria-labelledby="new-google-form-title">
+    <h3 className={n.cardTitle} id="new-google-form-title">구글 설문으로 신청하는 공고예요</h3>
+    <p className={n.muted}>이 공고는 신청서를 구글 설문으로 받아요. 질문을 확인하고 답을 구글 설문에서 직접 작성해 제출해 주세요.
+      신청 문서 작성과 양식 분석(AI)은 하지 않아요.</p>
+    <div className={n.centeredAction}>
+      <a className={n.primary} href={url} target="_blank" rel="noreferrer">구글 설문 열기 ↗<span className="sr-only">: {title} (새 창)</span></a>
+    </div>
+  </section>
+}
+
+/** ② 양식 · 분야의 내용입니다. 구글 설문 안내 · 저장된 양식 조회 중 · 실패 · 분석 진행 · 양식 카드 · 양식 없음 중 하나를 보여 줍니다. */
 function FormSectionBody({ vm }: { vm: NewViewModel }) {
   const program = vm.program
+  if (vm.googleFormUrl && program) return <GoogleFormRedirect url={vm.googleFormUrl} title={program.title} />
   const lookup = vm.availability
   const discoveryError = vm.discoveryError
   const officialOnly = discoveryError instanceof ApplicationPreparationError
@@ -249,6 +265,7 @@ function FormSectionBody({ vm }: { vm: NewViewModel }) {
 
 /** [작성 시작]을 아직 누를 수 없는 이유입니다. 조회 중에는 ②의 스켈레톤이 알리므로 따로 적지 않습니다. */
 function startBlockedReason(vm: NewViewModel): string | null {
+  if (vm.googleFormUrl) return '구글 설문에서 직접 신청해요'
   if (vm.selectedForm && !vm.discovery) return null
   if (vm.discovery) return '분석이 끝나면 시작할 수 있어요'
   if (vm.availability?.status === 'failed') return '저장된 양식을 확인하면 시작할 수 있어요'

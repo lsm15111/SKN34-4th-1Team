@@ -7,7 +7,7 @@ import type {
   ApplicationFormDiscoveryJob,
   ApplicationServiceField,
 } from '../../../../domain/entities/ApplicationPreparation'
-import type { SupportProgram } from '../../../../domain/entities/SupportProgram'
+import type { SupportProgram, SupportProgramDetail } from '../../../../domain/entities/SupportProgram'
 import type { SupportProgramCatalog, SupportProgramCatalogFilters } from '../../../../domain/entities/SupportProgramCatalog'
 import { ApplicationPreparationError } from '../../../../domain/errors/ApplicationPreparationError'
 import { appPaths } from '../../../shared/routes/appPaths'
@@ -15,8 +15,13 @@ import { defaultProgramSelectionFilters, joinFilterValues, splitFilterValues } f
 import { useSavedSupportProgramChoices } from '../../../shared/support-program/useSavedSupportProgramChoices'
 import type { WorkspaceToastNotice } from '../../../shared/workspace/WorkspaceToast'
 
-/** 신청 준비가 공고 선택에 쓰는 필드입니다. 검색 결과·관심 공고·상세 조회 어느 쪽에서 골라도 같습니다. */
-export type SelectableSupportProgram = Omit<SupportProgram, 'matchedReasons' | 'recommendationScore' | 'eligibilityReview' | 'analysisSummary'>
+/**
+ * 신청 준비가 공고 선택에 쓰는 필드입니다. 검색 결과·관심 공고·상세 조회 어느 쪽에서 골라도 같습니다.
+ * 신청 경로는 상세 조회에서 고른 공고에만 있고, 없으면 양식 조회와 함께 상세를 한 번 읽어 확인합니다.
+ */
+export type SelectableSupportProgram = Omit<SupportProgram, 'matchedReasons' | 'recommendationScore' | 'eligibilityReview' | 'analysisSummary'> & {
+  applicationRoute?: SupportProgramDetail['applicationRoute']
+}
 
 /** 저장된 양식 조회(AI 호출 없음) 상태입니다. ready는 양식이 있든 없든 조회를 마친 상태입니다. */
 export type AvailabilityLookup =
@@ -90,6 +95,8 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
   const [programLoadVersion, setProgramLoadVersion] = useState(0)
   const [activeJobs, setActiveJobs] = useState<ApplicationFormDiscoveryJob[]>([])
   const [availability, setAvailability] = useState<AvailabilityLookup | null>(null)
+  /** 구글 설문으로 신청하는 공고의 설문 주소입니다. 이런 공고는 양식 조회·분석 없이 설문으로 바로 보냅니다. */
+  const [googleFormUrl, setGoogleFormUrl] = useState<string | null>(null)
   const [forms, setForms] = useState<ApplicationForm[]>([])
   const [selectedFormVersionId, setSelectedFormVersionId] = useState('')
   const [serviceField, setServiceField] = useState<ApplicationServiceField>('GENERAL')
@@ -180,21 +187,34 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
 
   /**
    * 공고의 저장된 양식을 조회하고, 그 공고로 이미 시작한 분석 작업이 있으면 이어받습니다(모두 GET · AI 호출 없음).
-   * 공고 고르기 패널에서 이미 조회한 결과가 있으면 그 결과를 그대로 씁니다.
+   * 공고 고르기 패널에서 이미 조회한 결과가 있으면 그 결과를 그대로 씁니다. 구글 설문으로 신청하는 공고는 설문에서 직접
+   * 작성하도록 안내하고 양식·분석 작업을 쓰지 않습니다. 신청 경로를 모르면 같은 때에 상세를 한 번 읽어 확인합니다.
    */
   const lookup = useCallback((target: SelectableSupportProgram, known?: ApplicationFormAvailability) => {
     availabilityController.current?.abort()
     const controller = new AbortController()
     availabilityController.current = controller
+    setGoogleFormUrl(null)
     setAvailability(known ? { status: 'ready', result: known } : { status: 'loading' })
     applyForms(known ? storedForms(known) : [])
     void (async () => {
       try {
-        const [result, jobs] = await Promise.all([
+        const [route, result, jobs] = await Promise.all([
+          target.applicationRoute
+            ?? programDetailUseCase.execute({ sourceCode: target.sourceCode, sourceProgramId: target.id }, controller.signal)
+              .then((detail) => detail?.applicationRoute ?? null)
+              // 상세를 못 읽어도 양식 조회는 그대로 보여 줍니다. 신청 경로 확인만 건너뜁니다.
+              .catch(() => null),
           known ?? useCase.availability(target.sourceCode, target.id, controller.signal),
           useCase.discoveryJobs(controller.signal).catch(() => [] as ApplicationFormDiscoveryJob[]),
         ])
         if (controller.signal.aborted) return
+        if (route?.type === 'GOOGLE_FORMS' && route.url) {
+          setGoogleFormUrl(route.url)
+          setAvailability(null)
+          applyForms([])
+          return
+        }
         if (!known) { setAvailability({ status: 'ready', result }); applyForms(storedForms(result)) }
         const active = jobs.find((job) => job.sourceCode === target.sourceCode && job.sourceProgramId === target.id
           && (job.status === 'QUEUED' || job.status === 'RUNNING'))
@@ -207,7 +227,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
         if (availabilityController.current === controller) availabilityController.current = null
       }
     })()
-  }, [applyForms, track, useCase])
+  }, [applyForms, programDetailUseCase, track, useCase])
 
   /** 공고를 정합니다. 다른 공고의 분석 확인은 멈추지만(서버 작업은 계속), 그 공고를 다시 고르면 이어받습니다. */
   const choose = useCallback((next: SelectableSupportProgram, known?: ApplicationFormAvailability) => {
@@ -255,11 +275,11 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
 
   /** 유료 분석은 이 클릭에서만 시작합니다. 이미 양식이 있으면 입력칸별 재분석입니다. */
   const discoverForms = useCallback(() => {
-    if (!program || submittingGuard.current) return
+    if (!program || googleFormUrl || submittingGuard.current) return
     const target = program
     void track((signal) => useCase.discover(target.sourceCode, target.id, signal, crypto.randomUUID()),
       { reanalysis: forms.length > 0, resumed: false, startedAt: Date.now() })
-  }, [forms.length, program, track, useCase])
+  }, [forms.length, googleFormUrl, program, track, useCase])
 
   const selectForm = useCallback((formVersionId: string) => {
     const form = forms.find((candidate) => candidate.formVersionId === formVersionId)
@@ -305,6 +325,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
     activeJobs: hasAddressProgram ? [] : activeJobs,
     programLoad,
     availability,
+    googleFormUrl,
     noFormReason: availability?.status === 'ready' ? noFormReason(availability.result) : null,
     forms,
     selectedForm,

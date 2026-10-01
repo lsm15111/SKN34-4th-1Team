@@ -155,6 +155,21 @@ describe('공식 신청 경로와 제외 대상 표시', () => {
     expect(screen.queryByText('지원 규모')).toBeNull()
   })
 
+  it('구글 설문으로 신청하는 공고는 신청 문서 작성 대신 구글 설문으로 바로 보낸다', async () => {
+    vi.spyOn(appContainer.resolve('getSupportProgramDetailUseCase'), 'execute').mockResolvedValue({
+      ...supportProgramDetails[0],
+      applicationRoute: { method: null, url: 'https://forms.gle/abcDEF123', type: 'GOOGLE_FORMS' },
+    })
+    renderDetail()
+    await screen.findByRole('heading', { name: supportPrograms[0].title })
+    expect(screen.getByText('온라인 신청 (구글 설문)')).toBeTruthy()
+    const form = screen.getByRole('link', { name: '구글 설문으로 신청 ↗' })
+    expect(form.getAttribute('href')).toBe('https://forms.gle/abcDEF123')
+    expect(form.getAttribute('target')).toBe('_blank')
+    expect(screen.queryByRole('link', { name: /신청 문서 작성/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /신청 사이트 열기|구글 설문 신청서 열기/ })).toBeNull()
+  })
+
   it('신청 경로를 모르면 원문 확인을 안내하고 신청 링크를 두지 않는다', async () => {
     vi.spyOn(appContainer.resolve('getSupportProgramDetailUseCase'), 'execute').mockResolvedValue(supportProgramDetails[0])
     renderDetail()

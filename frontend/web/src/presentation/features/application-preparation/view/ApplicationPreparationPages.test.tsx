@@ -1158,7 +1158,8 @@ describe('application preparation creation and detail', () => {
     expect(startButton().disabled).toBe(false)
     // 고른 공고를 주소에 적어 새로고침·재방문 때 같은 공고(와 진행 중인 분석)로 돌아옵니다. 다시 불러오지는 않습니다.
     expect(screen.getByTestId('location').textContent).toBe(`/app/application-preparations/new?sourceCode=${supportPrograms[0].sourceCode}&sourceProgramId=${supportPrograms[0].id}`)
-    expect(getProgramDetail).not.toHaveBeenCalled()
+    // 공고를 다시 불러오지 않고, 신청 경로(구글 설문 여부) 확인을 위해 상세를 한 번만 읽습니다.
+    expect(getProgramDetail).toHaveBeenCalledTimes(1)
     // 패널에서 조회한 결과를 그대로 씁니다(두 번 조회했지만 모두 행을 고를 때뿐).
     expect(repository.availability).toHaveBeenCalledTimes(2)
     expect(repository.discover).not.toHaveBeenCalled()
@@ -1306,6 +1307,26 @@ describe('application preparation creation and detail', () => {
     expect(startButton().disabled).toBe(true)
     expect(startReason()).toBe('양식을 분석하면 시작할 수 있어요')
     expect(follows(card, startButton())).toBe(true)
+    expect(repository.discover).not.toHaveBeenCalled()
+    expect(repository.create).not.toHaveBeenCalled()
+  })
+
+  it('sends a Google Form program straight to the form without looking up or analyzing application forms', async () => {
+    repository.availability.mockResolvedValue(availabilityOf('PENDING', 'NOT_ANALYZED'))
+    getProgramDetail.mockImplementation(async (identity: { sourceCode: string; sourceProgramId: string }) => ({
+      ...structuredClone(supportProgramDetails[0]), sourceCode: identity.sourceCode, id: identity.sourceProgramId,
+      applicationRoute: { method: '구글 설문으로 신청', url: 'https://forms.gle/abcDEF123', type: 'GOOGLE_FORMS' as const },
+    }))
+    mount(newPath)
+    const card = await screen.findByRole('region', { name: '구글 설문으로 신청하는 공고예요' })
+    expect(formSection().contains(card)).toBe(true)
+    const link = within(card).getByRole('link', { name: /구글 설문 열기/ })
+    expect(link.getAttribute('href')).toBe('https://forms.gle/abcDEF123')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(within(formSection()).queryByRole('button', { name: '입력칸별로 분석' })).toBeNull()
+    expect(screen.queryByText('저장된 신청 양식이 없어요')).toBeNull()
+    expect(startButton().disabled).toBe(true)
+    expect(startReason()).toBe('구글 설문에서 직접 신청해요')
     expect(repository.discover).not.toHaveBeenCalled()
     expect(repository.create).not.toHaveBeenCalled()
   })
