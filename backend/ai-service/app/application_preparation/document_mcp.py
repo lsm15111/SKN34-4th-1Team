@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 GOVBIZ_PDF_ERROR = re.compile(r"\bPDF_(?:GEOMETRY|TABLE_GEOMETRY|DETECTION)_[A-Z_]+\b")
 ALLOWED = {
     "hwpx": frozenset({"inspect_editable_regions", "analyze_form", "get_table_map", "find_cell_by_label", "govbiz_hwpx_fit",
-                       "preview_addressed_edits", "apply_addressed_edits", "verify_targets", "govbiz_verify_hwpx_edits"}),
+                       "govbiz_hwpx_prepare_answer_styles", "preview_addressed_edits", "apply_addressed_edits", "verify_targets", "govbiz_verify_hwpx_edits"}),
     "pdf": frozenset({"pdf_get_text", "pdf_get_text_layout", "pdf_detect_paragraphs", "pdf_find_text", "pdf_replace_single", "pdf_extract_bbox_text", "govbiz_verify_pdf_deletion", "govbiz_pdf_text_regions", "govbiz_pdf_detect_inputs"}),
     "kordoc": frozenset({"parse_document"}),
 }

@@ -62,6 +62,9 @@ def validate_hwpx(path: Path):
                 ElementTree.fromstring(data)
 
 
+CHOICE_MARKS = {"■", "√", "○"}  # a marked printed option keeps the printed look
+
+
 class HwpxDocumentAdapter:
     async def inspect(self, path: Path, fields=(), *, analyze=True) -> DocumentMap:
         validate_hwpx(path)
@@ -141,7 +144,13 @@ class HwpxDocumentAdapter:
             fit = await session.call("govbiz_hwpx_fit", {"path": str(path), "values": {cell: text for cell, (text, _) in filled.items()}})
             if any(verdict["overflow"] for verdict in fit["cells"].values()):
                 raise DocumentError("OVERFLOW", reason="HWPX_CELL_ROW_BALLOON")
-            preview = await session.call("preview_addressed_edits", {"path": str(path), "edits": edits})
+            # An answer alone in a colored or decorated run (an example, a bold label) gets a plain black copy of that style.
+            prepared = path.parent / "prepared.hwpx"
+            answers = sorted({facts[op.valueRef] if op.literal is None else op.literal for op in plan.operations
+                              if op.valueRef is not None and (op.literal or "").strip() not in CHOICE_MARKS})
+            styles = await session.call("govbiz_hwpx_prepare_answer_styles", {"path": str(path), "out_path": str(prepared), "answers": answers})
+            source = prepared if styles.get("count") else path
+            preview = await session.call("preview_addressed_edits", {"path": str(source), "edits": edits})
             counts = preview["counts"]
             if counts["requested"] != len(edits) or counts["resolved"] != len(edits) or counts["unresolved"] != 0 or preview["unresolved"]:
                 raise DocumentError("MAPPING_FAILED")
@@ -152,7 +161,7 @@ class HwpxDocumentAdapter:
             expected = []
             for edit in preview["edits"]:
                 expected.extend(edit.get("verify_expansion") or [{"target": edit["target"], "expected_text": edit["after_text"]}])
-            verified = await session.call("govbiz_verify_hwpx_edits", {"source_path": str(path), "output_path": str(output), "expected_targets": expected})
+            verified = await session.call("govbiz_verify_hwpx_edits", {"source_path": str(source), "output_path": str(output), "expected_targets": expected})
             if verified["verified"] is not True or verified["counts"]["verified"] != len(expected):
                 raise DocumentError("VALIDATION_FAILED")
         data = read_output(output, path.parent)

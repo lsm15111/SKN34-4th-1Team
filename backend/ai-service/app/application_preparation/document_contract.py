@@ -20,7 +20,7 @@ MAP_VERSION = "native-map-v16-pdf-reading-order-choice-lines"
 PLAN_VERSION = "confirmed-facts-bound-v7-printed-slots-skipped-facts"
 ENGINES = {
     "hwp": "kr.dogfoot/hwplib@1.1.11+govbiz-ranges-v1",
-    "hwpx": "pblsketch/Hangeul-mcp@b6fef153714e0cc9ce566df0da4082fc57c4fda4+govbiz-ranges-v4-body-positions+python-hwpx@6.6.0-fit",
+    "hwpx": "pblsketch/Hangeul-mcp@b6fef153714e0cc9ce566df0da4082fc57c4fda4+govbiz-ranges-v4-body-positions+answer-style-v1+python-hwpx@6.6.0-fit",
     "pdf": "AryanBV/pdf-edit-mcp@d4527e62b59433ad02f31a0511db218a2eeec1d3+govbiz-deletion-proof-v4+FFDetr@56f4e4235e28dcb2953513dc020bb191a2f54cfe+pdfbox-v6",
     "docx": "govbiz/ooxml-native@2",
     "xlsx": "govbiz/xlsx-native@2+openpyxl-3.1.5",

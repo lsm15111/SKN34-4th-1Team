@@ -1684,3 +1684,59 @@ def test_hwp_mapping_answer_omits_scope_and_server_derives_it_from_bound_tables(
     assert [b.factId for b in selection.bindings] == ["company:name", "consent"]
     # 바인딩된 표 전체(편집 가능한 것만) + 체크박스 그룹 전원. 제목 문단과 다른 표는 제외.
     assert selection.scopeTargetIds == ["s0-p1-t0-r0-c0-p0", "s0-p1-t0-r0-c1-p0", "s0-p1-t0-r1-c1-p0", "s0-p2-f0", "s0-p2-f1"]
+
+
+HEADER = ('<hh:head xmlns:hh="h"><hh:refList><hh:charProperties itemCnt="4">'
+          '<hh:charPr id="0" height="1000" textColor="#000000"><hh:underline type="NONE" shape="SOLID" color="#000000"/></hh:charPr>'
+          '<hh:charPr id="1" height="1000" textColor="#0000FF"><hh:italic/><hh:bold/>'
+          '<hh:underline type="BOTTOM" shape="SOLID" color="#0000FF"/><hh:strikeout shape="CONTINUOUS" color="#000000"/></hh:charPr>'
+          '<hh:charPr id="2" height="1000" textColor="#808080"/>'
+          '<hh:charPr id="3" height="1000" textColor="#FF0000"><hh:bold/></hh:charPr>'
+          '</hh:charProperties></hh:refList></hh:head>')
+
+
+def test_answer_styles_are_plain_black_copies_of_every_colored_or_decorated_style(tmp_path):
+    import zipfile
+    from app.application_preparation.hwpx_mcp_extension import ANSWER_STYLES, ANSWER_TEXTS, prepare_answer_styles
+    source = tmp_path / "source.hwpx"
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr("mimetype", "application/hwp+zip", compress_type=zipfile.ZIP_STORED)
+        archive.writestr("Contents/header.xml", HEADER, compress_type=zipfile.ZIP_DEFLATED)
+        archive.writestr("Contents/section0.xml", "<hs:sec/>", compress_type=zipfile.ZIP_DEFLATED)
+    try:
+        assert prepare_answer_styles(str(source), str(tmp_path / "prepared.hwpx")) == {"count": 3}
+        assert ANSWER_STYLES == {"1": "4", "2": "5", "3": "6"} and ANSWER_TEXTS == set()
+        with zipfile.ZipFile(tmp_path / "prepared.hwpx") as prepared:
+            assert [(info.filename, info.compress_type) for info in prepared.infolist()][0] == ("mimetype", zipfile.ZIP_STORED)
+            assert prepared.read("Contents/section0.xml") == b"<hs:sec/>"
+            header = prepared.read("Contents/header.xml").decode()
+        original = HEADER.replace('itemCnt="4"', 'itemCnt="7"')
+        assert header.startswith(original[:original.index("</hh:charProperties>")])
+        assert ('<hh:charPr id="4" height="1000" textColor="#000000"><hh:underline type="NONE" shape="SOLID" color="#0000FF"/>'
+                '<hh:strikeout shape="NONE" color="#000000"/></hh:charPr>') in header
+        assert '<hh:charPr id="5" height="1000" textColor="#000000"/>' in header
+        assert '<hh:charPr id="6" height="1000" textColor="#000000"></hh:charPr>' in header
+        assert prepare_answer_styles(str(source), str(tmp_path / "again.hwpx"), [" 단독 ", ""]) == {"count": 3}
+        assert ANSWER_TEXTS == {"단독"}
+        assert prepare_answer_styles(str(source), str(tmp_path.parent / "elsewhere.hwpx")) == {"count": 0, "reason": "PATH"}
+        assert ANSWER_STYLES == {} and ANSWER_TEXTS == set()
+    finally:
+        ANSWER_STYLES.clear()
+        ANSWER_TEXTS.clear()
+
+
+def test_an_answer_alone_in_its_run_takes_the_plain_style_but_a_kept_label_keeps_the_example_style(monkeypatch):
+    from app.application_preparation import hwpx_mcp_extension as extension
+    monkeypatch.setattr(extension, "ANSWER_STYLES", {"2": "9"})
+    replaced = '<hp:p><hp:run charPrIDRef="1"><hp:t>기업명: </hp:t></hp:run><hp:run charPrIDRef="2"><hp:t>예시 회사</hp:t></hp:run></hp:p>'
+    assert extension.replace_plain_text_runs(replaced, "기업명: 가상기업") == replaced.replace(
+        '<hp:run charPrIDRef="2"><hp:t>예시 회사</hp:t>', '<hp:run charPrIDRef="9"><hp:t>가상기업</hp:t>')
+    monkeypatch.setattr(extension, "ANSWER_TEXTS", {"단독"})
+    kept_letters = '<hp:p><hp:run charPrIDRef="2"><hp:t>단독/공동/각자대표</hp:t></hp:run></hp:p>'
+    assert extension.replace_plain_text_runs(kept_letters, "단독") == '<hp:p><hp:run charPrIDRef="9"><hp:t>단독</hp:t></hp:run></hp:p>'
+    assert 'charPrIDRef="2"><hp:t>단독/공동</hp:t>' in extension.replace_plain_text_runs(kept_letters, "단독/공동")
+    appended = '<hp:p><hp:run charPrIDRef="2"><hp:t>예) </hp:t></hp:run></hp:p>'
+    assert 'charPrIDRef="2"><hp:t>예) 가상기업</hp:t>' in extension.replace_plain_text_runs(appended, "예) 가상기업")
+    assert 'charPrIDRef="9"' in extension.fill_empty_run('<hp:p><hp:run charPrIDRef="2"/></hp:p>', "가상기업")
+    assert 'charPrIDRef="1"' in extension.fill_empty_run('<hp:p><hp:run charPrIDRef="1"/></hp:p>', "가상기업")
+

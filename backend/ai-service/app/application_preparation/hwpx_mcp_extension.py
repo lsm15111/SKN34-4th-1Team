@@ -12,6 +12,92 @@ from pathlib import Path
 
 NAMESPACE = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 EMPTY_STRUCTURE = {"tc", "subList", "p", "run", "t", "linesegarray", "lineseg", "cellAddr", "cellSpan", "cellSz", "cellMargin"}
+# Colored or decorated charPr id -> plain black clone, and the answers being written, set by prepare_answer_styles
+# for this session's edits.
+ANSWER_STYLES: dict[str, str] = {}
+ANSWER_TEXTS: set[str] = set()
+
+
+def is_example_color(color: str) -> bool:
+    """Writing-example text colors: blue, or a gray lighter than body text (the same rule as Core's HWP check)."""
+    match = re.fullmatch(r"#([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})", color or "")
+    if not match:
+        return False
+    red, green, blue = (int(part, 16) for part in match.groups())
+    is_blue = blue >= 128 and blue > red + 40 and blue > green + 40
+    return is_blue or max(red, green, blue) - min(red, green, blue) <= 24 and 110 <= (red + green + blue) // 3 <= 210
+
+
+def example_char_prs(header: str) -> set[str]:
+    return {attrs["id"] for match in re.finditer(r"<hh:charPr\b([^>]*)>", header)
+            if "id" in (attrs := dict(re.findall(r'(\w+)="([^"]*)"', match.group(1))))
+            and is_example_color(attrs.get("textColor", ""))}
+
+
+def is_plain_black(charpr: str) -> bool:
+    return ('textColor="#000000"' in charpr and not re.search(r"<hh:(?:italic|bold)\s*/>", charpr)
+            and not re.search(r'<hh:underline\b[^>]*?\btype="(?!NONE")', charpr)
+            and not re.search(r'<hh:strikeout\b[^>]*?\bshape="(?!NONE")', charpr)
+            and not re.search(r'<hh:outline\b[^>]*?\btype="(?!NONE")', charpr))
+
+
+def prepare_answer_styles(path: str, out_path: str, answers: list[str] | None = None) -> dict:
+    """Copy the package with a plain black clone of every colored or decorated charPr, so an answer written into a
+    blue/gray/red example or a bold label's run does not keep that look (Core writes HWP answers the same way).
+    The clones are only referenced by runs that hold one of [answers] alone."""
+    import zipfile
+    source, target = Path(path), Path(out_path)
+    ANSWER_STYLES.clear()
+    ANSWER_TEXTS.clear()
+    if source.is_symlink() or source.resolve().parent != target.resolve().parent:
+        return {"count": 0, "reason": "PATH"}
+    ANSWER_TEXTS.update(answer.strip() for answer in answers or () if answer.strip())
+    with zipfile.ZipFile(source) as archive:
+        header = archive.read("Contents/header.xml").decode("utf-8")
+        charprs = list(re.finditer(r"<hh:charPr\b[^>]*?(?:/>|>.*?</hh:charPr>)", header, re.S))
+        if all(is_plain_black(match.group(0)) for match in charprs):
+            return {"count": 0}
+        next_id = max(int(value) for value in re.findall(r'<hh:charPr\b[^>]*\bid="(\d+)"', header)) + 1
+        clones = []
+        for match in charprs:
+            charpr = match.group(0)
+            old_id = re.search(r'\bid="(\d+)"', charpr).group(1)
+            if is_plain_black(charpr):
+                continue
+            clone = re.sub(r'\bid="\d+"', f'id="{next_id}"', charpr, count=1)
+            clone = re.sub(r'textColor="#[0-9A-Fa-f]{6}"', 'textColor="#000000"', clone, count=1)
+            clone = re.sub(r"<hh:(?:italic|bold)\s*/>", "", clone)
+            clone = re.sub(r'(<hh:underline\b[^>]*?\btype=")[^"]*"', r'\1NONE"', clone)
+            clone = re.sub(r'(<hh:strikeout\b[^>]*?\bshape=")[^"]*"', r'\1NONE"', clone)
+            clone = re.sub(r'(<hh:outline\b[^>]*?\btype=")[^"]*"', r'\1NONE"', clone)
+            clones.append(clone)
+            ANSWER_STYLES[old_id] = str(next_id)
+            next_id += 1
+        closing = header.rindex("</hh:charProperties>")
+        header = header[:closing] + "".join(clones) + header[closing:]
+        header = re.sub(r'(<hh:charProperties\b[^>]*\bitemCnt=")(\d+)(")',
+                        lambda m: f"{m.group(1)}{int(m.group(2)) + len(clones)}{m.group(3)}", header, count=1)
+        with zipfile.ZipFile(target, "w") as output:
+            for info in archive.infolist():
+                data = header.encode("utf-8") if info.filename == "Contents/header.xml" else archive.read(info)
+                output.writestr(info, data, compress_type=info.compress_type)
+    return {"count": len(clones)}
+
+
+def _answer_run_style(xml: str, node: int) -> str:
+    """Point the run holding text node [node] at the plain clone of its example style, if there is one."""
+    matches = list(re.finditer(r"<hp:t>([^<]*)</hp:t>", xml))
+    if not ANSWER_STYLES or node >= len(matches):
+        return xml
+    start = xml.rfind("<hp:run", 0, matches[node].start())
+    end = xml.find(">", start)
+    if start < 0 or end < 0:
+        return xml
+    tag = xml[start:end]
+    reference = re.search(r'charPrIDRef="([^"]*)"', tag)
+    if not reference or reference.group(1) not in ANSWER_STYLES:
+        return xml
+    return xml[:start] + tag.replace(reference.group(0), f'charPrIDRef="{ANSWER_STYLES[reference.group(1)]}"') + xml[end:]
 
 
 def fill_empty_run(xml: str, value: str) -> str | None:
@@ -29,10 +115,10 @@ def fill_empty_run(xml: str, value: str) -> str | None:
     text = escape(value)
     empty_text = re.search(r"<hp:t\s*/>", xml)
     if empty_text:
-        return xml[:empty_text.start()] + f"<hp:t>{text}</hp:t>" + xml[empty_text.end():]
+        return _answer_run_style(xml[:empty_text.start()] + f"<hp:t>{text}</hp:t>" + xml[empty_text.end():], 0)
     run = re.search(r"<hp:run\b([^<>]*?)/>", xml)
     if run:
-        return xml[:run.start()] + f"<hp:run{run.group(1)}><hp:t>{text}</hp:t></hp:run>" + xml[run.end():]
+        return _answer_run_style(xml[:run.start()] + f"<hp:run{run.group(1)}><hp:t>{text}</hp:t></hp:run>" + xml[run.end():], 0)
     return None
 
 
@@ -82,6 +168,11 @@ def replace_plain_text_runs(xml: str, value: str) -> str | None:
     for match, old_text, new_text in reversed(list(zip(matches, texts, revised))):
         if old_text != new_text:
             result = result[:match.start(1)] + escape(new_text) + result[match.end(1):]
+    written = revised[insertion_node].strip()
+    if written and (written == inserted.strip() or written in ANSWER_TEXTS):
+        # The run now holds only the answer ("단독/공동/각자대표" -> "단독" keeps two of its letters):
+        # do not keep an example's or label's look on it.
+        result = _answer_run_style(result, insertion_node)
     return result
 
 
@@ -303,6 +394,7 @@ def main():
     from hangeul_mcp.server import mcp
     mcp.tool(name="govbiz_verify_hwpx_edits")(verify_edits)
     mcp.tool(name="govbiz_hwpx_fit")(fit_cells)
+    mcp.tool(name="govbiz_hwpx_prepare_answer_styles")(prepare_answer_styles)
     serve()
 
 

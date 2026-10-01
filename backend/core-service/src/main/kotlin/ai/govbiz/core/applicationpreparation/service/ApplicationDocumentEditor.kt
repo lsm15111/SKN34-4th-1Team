@@ -169,12 +169,7 @@ class ApplicationDocumentEditor {
                     val end = replacement.first
                     val position = end.toLong()
                     val originalStyle = paragraph.charShape?.positonShapeIdPairList?.lastOrNull { it.position <= position }?.shapeId?.toInt() ?: 0
-                    val blackStyle = file.docInfo.charShapeList[originalStyle].clone().also {
-                        it.charColor.value = 0
-                        it.property.isItalic = false; it.property.isBold = false; it.property.isStrikeLine = false
-                        it.property.underLineSort = UnderLineSort.None
-                        it.ratios.setForAll(100); it.charSpaces.setForAll(0)
-                    }
+                    val blackStyle = answerShape(file, originalStyle.toLong(), resetSpacing = true)
                     val blackStyleId = file.docInfo.charShapeList.size.toLong()
                     file.docInfo.charShapeList.add(blackStyle)
                     if (paragraph.charShape == null) paragraph.createCharShape()
@@ -355,7 +350,7 @@ class ApplicationDocumentEditor {
             operations.sortedByDescending { it.start }.forEach { op ->
                 val value = if (op.operation == "delete_range") "" else (op.literal ?: values.getValue(op.valueRef!!).value).replace("\r\n", "\n")
                 require(value.none { Character.isSurrogate(it) || (it.code < 32 && it != '\n') })
-                replaceHwpRange(file, paragraph, op.start, op.end, value)
+                replaceHwpRange(file, paragraph, op.start, op.end, value, plain = op.literal !in CHOICE_MARKS)
                 text = text.substring(0, op.start) + value + text.substring(op.end)
             }
             require(hwpText(paragraph) == text)
@@ -399,14 +394,26 @@ class ApplicationDocumentEditor {
         } + hwpChoices(file).map { ApplicationDocumentTarget(it.id, it.caption, it.context.take(1000), kind = "CHECKBOX", groupId = it.group) }
     }
 
-    private fun replaceHwpRange(file: HWPFile, paragraph: Paragraph, start: Int, end: Int, value: String) {
+    /**
+     * 답을 쓸 글자 모양입니다. 앞 글자의 글꼴·크기·장평·자간은 칸에 맞춘 값이라 그대로 두고, 파란·기울임 예시나 굵은 라벨
+     * 서식을 따라가지 않도록 검은색·꾸밈 없음으로 맞춥니다. [resetSpacing]이면 이전 기입 방식대로 장평 100·자간 0으로도 맞춥니다.
+     */
+    private fun answerShape(file: HWPFile, styleId: Long, resetSpacing: Boolean = false) = file.docInfo.charShapeList[styleId.toInt()].clone().also {
+        it.charColor.value = 0
+        it.property.isItalic = false; it.property.isBold = false; it.property.isStrikeLine = false
+        it.property.underLineSort = UnderLineSort.None
+        if (resetSpacing) { it.ratios.setForAll(100); it.charSpaces.setForAll(0) }
+    }
+
+    /** [plain]이면 [value]를 답 글자 모양으로 쓰고, 아니면(인쇄된 □를 바꾼 ■ 같은 선택 표시) 원래 모양을 유지합니다. */
+    private fun replaceHwpRange(file: HWPFile, paragraph: Paragraph, start: Int, end: Int, value: String, plain: Boolean = true) {
         if (paragraph.text == null) paragraph.createText()
         if (paragraph.charShape == null) paragraph.createCharShape()
         val pairs = paragraph.charShape.positonShapeIdPairList
         val styles = paragraph.text.charList.indices.map { offset -> pairs.lastOrNull { it.position <= offset }?.shapeId ?: 0L }.toMutableList()
         val priorStyle = pairs.lastOrNull { it.position <= start }?.shapeId ?: 0L
-        val answerStyle = if (value.isEmpty()) priorStyle else file.docInfo.charShapeList.size.toLong().also {
-            file.docInfo.charShapeList.add(file.docInfo.charShapeList[priorStyle.toInt()].clone().also { shape -> shape.charColor.value = 0 })
+        val answerStyle = if (value.isEmpty() || !plain) priorStyle else file.docInfo.charShapeList.size.toLong().also {
+            file.docInfo.charShapeList.add(answerShape(file, priorStyle))
         }
         repeat(end - start) { paragraph.text.charList.removeAt(start); styles.removeAt(start) }
         if (value.isNotEmpty()) {
@@ -479,12 +486,18 @@ class ApplicationDocumentEditor {
         val metrics = java.awt.font.FontRenderContext(null, true, true)
         fun layout(paragraph: Paragraph, available: Int, vertical: Int): Int {
             require(available > 1000)
-            val prototype = paragraph.lineSeg?.lineSegItemList?.firstOrNull()?.clone() ?: LineSegItem()
+            val stored = paragraph.lineSeg?.lineSegItemList?.firstOrNull()
+            val prototype = stored?.clone() ?: LineSegItem()
             val styles = paragraph.charShape?.positonShapeIdPairList.orEmpty()
             val fontSize = styles.maxOfOrNull { file.docInfo.charShapeList[it.shapeId.toInt()].baseSize }?.coerceAtLeast(800) ?: 1000
             val fontAtSize = font.deriveFont(fontSize / 100f)
-            val lineHeight = kotlin.math.ceil(fontAtSize.getLineMetrics("가Ag", metrics).height * 100.0).toInt().coerceAtLeast(fontSize)
-            val spacing = maxOf(150, fontSize / 5)
+            // 한/글이 이 문단에 저장해 둔 줄 높이·간격을 그대로 씁니다. 서버 글꼴로 잰 값은 조금씩 커서 한 줄 답에도 행이
+            // 높아지고 꽉 찬 1쪽 서식이 2쪽으로 넘어갔습니다. 저장된 값이 없을 때만 글꼴로 잽니다.
+            val measured = kotlin.math.ceil(fontAtSize.getLineMetrics("가Ag", metrics).height * 100.0).toInt().coerceAtLeast(fontSize)
+            val lineHeight = stored?.lineHeight?.takeIf { it > 0 } ?: measured
+            val spacing = if (stored != null && stored.lineHeight > 0) stored.lineSpace else maxOf(150, fontSize / 5)
+            val textHeight = stored?.textPartHeight?.takeIf { it > 0 } ?: lineHeight
+            val baseline = stored?.distanceBaseLineToLineVerticalPosition?.takeIf { it > 0 } ?: (lineHeight * .8).toInt()
             val starts = mutableListOf(0L)
             var width = 0.0
             var offset = 0L
@@ -493,7 +506,9 @@ class ApplicationDocumentEditor {
                 if (code == 10) { starts += offset + char.charSize; width = 0.0 }
                 else if (code >= 32) {
                     val advance = maxOf(fontAtSize.getStringBounds(code.toChar().toString(), metrics).width * 100, if (code >= 0x2e80) fontSize.toDouble() else 0.0)
-                    if (width > 0 && width + advance > available * 0.94) { starts += offset; width = 0.0 }
+                    // 서버 글꼴(나눔고딕)은 한/글 글꼴보다 넓어 여유까지 두면 한 줄 답(전화번호·이메일)도 두 줄로 잡아 행을 키웠습니다.
+                    // 한/글은 열 때 줄을 다시 나누고 모자란 높이는 늘리므로, 칸 폭을 넘을 때만 줄을 나눕니다.
+                    if (width > 0 && width + advance > available) { starts += offset; width = 0.0 }
                     width += advance
                 }
                 offset += char.charSize
@@ -503,8 +518,8 @@ class ApplicationDocumentEditor {
                 val line = prototype.clone()
                 line.textStartPosition = start
                 line.lineVerticalPosition = vertical + index * (lineHeight + spacing)
-                line.lineHeight = lineHeight; line.textPartHeight = lineHeight
-                line.distanceBaseLineToLineVerticalPosition = (lineHeight * .8).toInt()
+                line.lineHeight = lineHeight; line.textPartHeight = textHeight
+                line.distanceBaseLineToLineVerticalPosition = baseline
                 line.lineSpace = spacing; line.segmentWidth = available
                 line.startPositionFromColumn = 0
                 line.tag.setFirstSegmentAtLine(true)
@@ -530,11 +545,24 @@ class ApplicationDocumentEditor {
             }
             h.property.lineChange = LineChange.Normal
             val width = (h.width - h.leftMargin - h.rightMargin).toInt()
-            var cursor = 0
-            cell.paragraphList.forEach { cursor += layout(it, width, cursor) }
-            val required = cursor + h.topMargin + h.bottomMargin
-            if (required > h.height) {
-                val delta = required - h.height
+            fun bottom(): Int = cell.paragraphList.mapNotNull { it.lineSeg?.lineSegItemList?.lastOrNull() }
+                .maxOfOrNull { it.lineVerticalPosition + it.lineHeight + it.lineSpace } ?: 0
+            val before = bottom()
+            // 한/글이 잡아 둔 위치에서 시작해, 바뀐 문단만 다시 나누고 그 아래 문단은 늘어난 만큼만 내립니다.
+            var cursor = cell.paragraphList.firstOrNull()?.lineSeg?.lineSegItemList?.firstOrNull()?.lineVerticalPosition ?: 0
+            cell.paragraphList.forEach { paragraph ->
+                val lines = paragraph.lineSeg?.lineSegItemList.orEmpty()
+                if (paragraph in changed || lines.isEmpty()) cursor += layout(paragraph, width, cursor)
+                else {
+                    val shift = cursor - lines.first().lineVerticalPosition
+                    lines.forEach { it.lineVerticalPosition += shift }
+                    cursor = lines.last().let { it.lineVerticalPosition + it.lineHeight + it.lineSpace }
+                }
+            }
+            // 답 때문에 내용이 원래보다 길어지고 셀 높이도 넘을 때만, 넘친 만큼 행을 키웁니다.
+            val grown = minOf(cursor - before, cursor + h.topMargin + h.bottomMargin - h.height.toInt())
+            if (grown > 0) {
+                val delta = grown
                 val table = requireNotNull(locations.first { it.cell === cell }.table)
                 val row = h.rowIndex + h.rowSpan - 1
                 table.rowList.flatMap { it.cellList }.filter { it.listHeader.rowIndex <= row && it.listHeader.rowIndex + it.listHeader.rowSpan > row }.forEach { it.listHeader.height += delta }
