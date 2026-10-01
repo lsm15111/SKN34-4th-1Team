@@ -66,16 +66,41 @@ function availabilityReason(code: string): string {
   return '공식 문서와 양식 준비 상태를 확인해야 합니다.'
 }
 
+export type NoFormNotice = {
+  /** 공고 목록·① 요약·② 카드에 같이 쓰는 한 줄 제목입니다. */
+  title: string
+  /** 사용자가 할 일입니다. */
+  message: string
+  /** 지난 분석이 남긴 원인입니다. 아직 분석하지 않았거나 원문이 바뀐 경우에는 없습니다. */
+  detail: string | null
+}
+
 /**
- * 저장된 양식이 없는 이유입니다. 아직 분석하지 않았거나(PENDING) 원문이 바뀐 경우(STALE)는 그 사실을, 그 밖에는 지난 분석이
- * 남긴 이유를 알립니다.
+ * 저장된 양식이 없는 이유입니다. 첨부를 다 읽었는데 양식이 없는 것(NO_FORM)과 첨부를 읽지 못한 것(DOCUMENT_UNAVAILABLE·TOO_LARGE)은
+ * 양식이 있을 수도 있으므로 다르게 알리고, 일시 장애(RETRY_WAITING)는 자동으로 다시 확인한다고 알립니다.
  */
-function noFormReason(result: ApplicationFormAvailability): string | null {
+export function noFormNotice(result: ApplicationFormAvailability): NoFormNotice | null {
   const { status, reasonCode, nextRetryAt } = result.state
-  if (status === 'AVAILABLE') return null
-  if (status === 'PENDING') return '이 공고는 아직 신청 양식을 분석한 적이 없어요.'
-  if (status === 'STALE') return '공고나 공식 첨부가 바뀌어 양식을 다시 분석해야 해요.'
-  return `최근 분석: ${availabilityReason(reasonCode)}${nextRetryAt ? ` 다음 확인 ${nextRetryAt.replace('T', ' ')}` : ''}`
+  const detail = `최근 분석: ${availabilityReason(reasonCode)}`
+  switch (status) {
+    case 'AVAILABLE': return null
+    case 'PENDING': return { title: '아직 분석하지 않은 공고예요', message: '이 공고는 아직 신청 양식을 분석한 적이 없어요. 입력칸별로 분석해 보세요.', detail: null }
+    case 'STALE': return { title: '공고가 바뀌어 다시 분석해야 해요', message: '공고나 공식 첨부가 바뀌어 양식을 다시 분석해야 해요.', detail: null }
+    case 'NO_FORM': return {
+      title: '작성할 신청 양식이 없어요',
+      message: '공식 첨부에서 채워 낼 신청서 양식을 찾지 못했어요. 공고의 신청 방법(온라인 접수 등)을 확인해 주세요.', detail,
+    }
+    case 'DOCUMENT_UNAVAILABLE':
+    case 'TOO_LARGE': return {
+      title: '첨부를 읽지 못했어요',
+      message: '신청 양식이 있을 수 있지만 공식 첨부를 자동으로 읽지 못했어요. 원문에서 내려받아 직접 작성해 주세요.', detail,
+    }
+    case 'RETRY_WAITING': return {
+      title: '잠시 후 다시 확인해요',
+      message: `공식 사이트나 분석 서비스가 잠시 응답하지 않았어요. ${nextRetryAt ? `${nextRetryAt.replace('T', ' ')}에 ` : ''}자동으로 다시 확인해요.`, detail,
+    }
+    default: return { title: '양식을 확인하지 못했어요', message: '자동 분석을 마치지 못해 확인이 필요해요.', detail }
+  }
 }
 
 const activeJobStatuses: ApplicationFormDiscoveryJob['status'][] = ['QUEUED', 'RUNNING', 'UNKNOWN']
@@ -197,6 +222,8 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
     setGoogleFormUrl(null)
     setAvailability(known ? { status: 'ready', result: known } : { status: 'loading' })
     applyForms(known ? storedForms(known) : [])
+    // 저장된 분석이 남긴 안내(받지 못한 첨부·제외한 양식·직접 체크할 동의 항목)를 함께 보여 줍니다.
+    setDiscoveryWarnings(known?.state.warnings ?? [])
     void (async () => {
       try {
         const [route, result, jobs] = await Promise.all([
@@ -215,7 +242,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
           applyForms([])
           return
         }
-        if (!known) { setAvailability({ status: 'ready', result }); applyForms(storedForms(result)) }
+        if (!known) { setAvailability({ status: 'ready', result }); applyForms(storedForms(result)); setDiscoveryWarnings(result.state.warnings) }
         const active = jobs.find((job) => job.sourceCode === target.sourceCode && job.sourceProgramId === target.id
           && (job.status === 'QUEUED' || job.status === 'RUNNING'))
         if (active) {
@@ -326,7 +353,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
     programLoad,
     availability,
     googleFormUrl,
-    noFormReason: availability?.status === 'ready' ? noFormReason(availability.result) : null,
+    noForm: availability?.status === 'ready' ? noFormNotice(availability.result) : null,
     forms,
     selectedForm,
     selectedFormVersionId,

@@ -65,7 +65,7 @@ export const supportedApplicationFormsSchema = z.object({
   ),
 })
 export const discoveredApplicationFormsSchema = z.object({
-  items: z.array(applicationFormSchema).min(1).max(4).refine(
+  items: z.array(applicationFormSchema).min(1).max(8).refine(
     (forms) => new Set(forms.map(({ formVersionId }) => formVersionId)).size === forms.length,
     { message: '발견한 양식 버전 식별자가 중복되었습니다.' },
   ),

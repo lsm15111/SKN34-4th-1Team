@@ -60,15 +60,17 @@ export class ApplicationPreparationRepositoryImpl implements ApplicationPreparat
     return guide
   }
 
-  async availability(sourceCode: string, sourceProgramId: string, signal?: AbortSignal) {
   googleForm(sourceCode: string, sourceProgramId: string, signal?: AbortSignal) {
     return request(`/google-form?${new URLSearchParams({ sourceCode, sourceProgramId })}`, applicationGoogleFormSchema, 'GET', undefined, signal)
   }
 
+  async availability(sourceCode: string, sourceProgramId: string, signal?: AbortSignal) {
     const schema = z.object({
       state: z.object({ sourceCode: z.string(), sourceProgramId: z.string(),
         status: z.enum(['PENDING', 'AVAILABLE', 'NO_FORM', 'DOCUMENT_UNAVAILABLE', 'TOO_LARGE', 'RETRY_WAITING', 'STALE', 'REVIEW_REQUIRED']),
         reasonCode: z.string(), nextRetryAt: z.string().nullable(), attemptCount: z.number().int().nonnegative(),
+        // 이전 Core는 안내를 내려주지 않습니다.
+        warnings: z.array(z.string().min(1).max(500)).max(20).default([]),
       }), forms: z.object({ items: z.array(applicationFormSchema) }),
     })
     const result = await request(`/forms/availability?${new URLSearchParams({ sourceCode, sourceProgramId })}`, schema, 'GET', undefined, signal)

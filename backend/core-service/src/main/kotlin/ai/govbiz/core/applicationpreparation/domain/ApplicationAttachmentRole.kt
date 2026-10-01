@@ -26,6 +26,36 @@ enum class ApplicationAttachmentRole {
             return UNKNOWN
         }
 
+        /** 서식의 구조 신호: 별지·서식 번호, 서명·날인 칸, 빈 날짜 줄, 영문 서식의 서명·신청 칸입니다. */
+        private val structureSignals = listOf(
+            Regex("\\[\\s*서\\s*식|<\\s*서\\s*식|서\\s*식\\s*(제\\s*)?\\d|별\\s*지\\s*(제\\s*)?\\d|별\\s*첨\\s*\\d"),
+            Regex("\\(\\s*인\\s*\\)|\\(\\s*서\\s*명\\s*\\)|\\(\\s*직\\s*인\\s*\\)|서명\\s*또는\\s*날인"),
+            Regex("년\\s{2,}월\\s{2,}일"),
+            Regex("(?i)application\\s+form|\\bsignature\\b|\\(\\s*seal\\s*\\)|name\\s+of\\s+(the\\s+)?applicant"),
+        )
+        /** 문서 이름 신호: 신청서·계획서·동의서 같은 서식명입니다. 공고문 본문에서는 "신청서를 제출" 같은 언급으로도 나옵니다. */
+        private val titleSignals = listOf(
+            Regex("신\\s*청\\s*서|지\\s*원\\s*서|계\\s*획\\s*서|제\\s*안\\s*서|참\\s*가\\s*신\\s*청"),
+            Regex("동\\s*의\\s*서|서\\s*약\\s*서|확\\s*약\\s*서"),
+        )
+        /** 파일명이 서식을 가리키는 표현입니다. "(양식)" 같은 표기, 조사서·명세서, 영문 서식명을 포함합니다. */
+        private val formNameKeywords = listOf("양식", "서식", "조사서", "명세서", "확인서", "신청", "application", "template")
+        private val checkMark = "(?:[□☐■]|\\[\\s*]|［\\s*］|\\(\\s*\\))"
+        private val consentCheck = Regex("동\\s*의\\s*(?:함|합니다|하지\\s*않음?|여부)?\\s*[:：]?\\s*$checkMark|$checkMark\\s*(?:미\\s*)?동\\s*의")
+
+        /**
+         * 공고문처럼 보이는 첨부라도 본문에 서식 신호가 있으면 AI 양식 분석을 보냅니다. 신호가 하나도 없으면 작성할 서식이 없는
+         * 안내 문서로 보고 유료 호출을 하지 않습니다. [structureOnly]이면 서식명 언급은 세지 않습니다.
+         */
+        fun hasFormSignal(text: String, structureOnly: Boolean = false): Boolean =
+            structureSignals.any { it.containsMatchIn(text) } || !structureOnly && titleSignals.any { it.containsMatchIn(text) }
+
+        /** 파일명만으로 서식임을 알 수 있는지입니다. 신청자 키워드보다 넓어서 역할 판정이 아닌 분석 대상 판정에만 씁니다. */
+        fun hasFormName(fileName: String): Boolean = normalize(fileName).let { name -> formNameKeywords.any { it in name } }
+
+        /** 신청자가 원본에서 직접 체크해야 하는 인쇄된 동의 항목("동의함 □", "[ ] 동의")이 있는지입니다. 이런 항목은 문항으로 만들지 않습니다. */
+        fun hasConsentCheck(text: String): Boolean = consentCheck.containsMatchIn(text)
+
         private fun normalize(fileName: String): String = fileName
             .substringBeforeLast('.', fileName)
             .lowercase()

@@ -1,6 +1,7 @@
 package ai.govbiz.core.supportprogram.client.ai.mapper
 
 import ai.govbiz.core._common.exception.AiServiceCallException
+import ai.govbiz.core._common.helper.AttachmentCopyHelper
 import ai.govbiz.core.supportprogram.client.ai.dto.AiSupportProgramAnalysisAmountPayload
 import ai.govbiz.core.supportprogram.client.ai.dto.AiSupportProgramAnalysisAttachmentRequest
 import ai.govbiz.core.supportprogram.client.ai.dto.AiSupportProgramAnalysisConditionPayload
@@ -101,7 +102,8 @@ object AiSupportProgramAnalysisMapper {
      * 제공처가 같은 문서를 한글 파일과 PDF 변환본으로 함께 올리면 확장자를 뺀 이름이 같은 첨부 중 하나만 보냅니다.
      */
     private fun selectAttachments(files: List<SupportProgramAttachmentText>): List<AiSupportProgramAnalysisAttachmentRequest> {
-        val ordered = withoutFormatCopies(files).sortedBy { if (NOTICE_KEYWORD in it.value.name) 0 else 1 }
+        val ordered = AttachmentCopyHelper.withoutFormatCopies(files.withIndex().toList()) { it.value.name }
+            .sortedBy { if (NOTICE_KEYWORD in it.value.name) 0 else 1 }
         var remaining = MAX_ATTACHMENT_TEXT_TOTAL
         return buildList {
             for ((index, file) in ordered) {
@@ -114,28 +116,6 @@ object AiSupportProgramAnalysisMapper {
             }
         }
     }
-
-    /**
-     * 확장자를 뺀 이름이 같은 첨부는 한 문서의 형식별 사본으로 보고, 표 구조가 남는 한글 원본(HWPX·HWP)을 PDF보다 먼저
-     * 남깁니다. 남긴 첨부는 원래 순서와 번호를 유지합니다.
-     */
-    private fun withoutFormatCopies(files: List<SupportProgramAttachmentText>): List<IndexedValue<SupportProgramAttachmentText>> {
-        val kept = files.withIndex()
-            // 이름이 비어 있으면 같은 문서인지 알 수 없어 각각 남깁니다.
-            .groupBy { it.value.name.trim().substringBeforeLast('.').trim().lowercase().ifBlank { "#${it.index}" } }
-            .values
-            .map { copies -> copies.minWith(compareBy({ formatRank(it.value.name) }, { it.index })) }
-        return kept.sortedBy { it.index }
-    }
-
-    private fun formatRank(name: String): Int =
-        when (name.substringAfterLast('.', "").lowercase()) {
-            "hwpx" -> 0
-            "hwp" -> 1
-            "docx" -> 2
-            "pdf" -> 3
-            else -> 4
-        }
 
     /**
      * 버전이 [EXPECTED_ANALYSIS_VERSION]과 다르면 [AiSupportProgramAnalysisVersionMismatchException]을, 그 밖의 규칙 위반은

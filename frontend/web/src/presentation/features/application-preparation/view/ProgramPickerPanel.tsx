@@ -9,6 +9,7 @@ import { SelectField } from '../../../shared/workspace/SelectField'
 import { MultiSelectField } from '../../../shared/workspace/MultiSelectField'
 import { toFilterChoiceOptions } from '../../../shared/workspace/filterChoiceOptions'
 import {
+  noFormNotice,
   programKey,
   storedForms,
   useProgramPickerViewModel,
@@ -60,7 +61,7 @@ function PickAvailability({ lookup, onRetry }: { lookup: AvailabilityLookup; onR
   const count = storedForms(lookup.result).length
   return count > 0
     ? <p className={p.availOk} role="status"><CheckIcon />양식 {count}개 · 바로 작성할 수 있어요</p>
-    : <p className={p.availNone} role="status">저장된 양식이 없어요 · 고른 뒤 입력칸별로 분석</p>
+    : <p className={p.availNone} role="status">{noFormNotice(lookup.result)?.title ?? '저장된 양식이 없어요'} · 고른 뒤 입력칸별로 분석</p>
 }
 
 function RowSkeletons({ label }: { label: string }) {

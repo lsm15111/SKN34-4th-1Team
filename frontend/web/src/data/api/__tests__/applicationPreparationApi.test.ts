@@ -85,6 +85,7 @@ it('downloads the native document with credentials and validates binary content'
   await expect(repository.downloadDocument(1, 8)).rejects.toThrow('응답 형식')
 })
 
+
 it.each([
   ['DOCX', '신청서.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
   ['XLSX', '신청서.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
@@ -250,20 +251,6 @@ describe('application preparation HTTP boundary', () => {
     })
   })
 
-  it('uses a form-discovery-specific message for an invalid AI response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      Response.json({ code: 'AI_SERVICE_INVALID_RESPONSE' }, { status: 502 }),
-    ))
-
-    await expect(new ApplicationPreparationRepositoryImpl().discover('BIZINFO', 'PBLN_1')).rejects.toMatchObject({
-      status: 502,
-      code: 'APPLICATION_FORM_AI_INVALID_RESPONSE',
-      message: expect.stringContaining('공식 첨부의 문항 근거'),
-    })
-  })
-
-  it('distinguishes an unavailable feature endpoint from a missing owned preparation', async () => {
-    vi.stubGlobal('fetch', vi.fn()
   it('reads the public Google Form of a program and explains a sign-in-only form', async () => {
     const form = { responderUrl: 'https://docs.google.com/forms/d/e/public-id/viewform', title: '특강 신청', questions: [
       { entryId: '11', label: '기업명', description: '', required: true, kind: 'SHORT_TEXT', options: [], allowsOther: false },
@@ -284,6 +271,20 @@ describe('application preparation HTTP boundary', () => {
     })
   })
 
+  it('uses a form-discovery-specific message for an invalid AI response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      Response.json({ code: 'AI_SERVICE_INVALID_RESPONSE' }, { status: 502 }),
+    ))
+
+    await expect(new ApplicationPreparationRepositoryImpl().discover('BIZINFO', 'PBLN_1')).rejects.toMatchObject({
+      status: 502,
+      code: 'APPLICATION_FORM_AI_INVALID_RESPONSE',
+      message: expect.stringContaining('공식 첨부의 문항 근거'),
+    })
+  })
+
+  it('distinguishes an unavailable feature endpoint from a missing owned preparation', async () => {
+    vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response('Not Found', { status: 404 }))
       .mockResolvedValueOnce(Response.json({ code: 'APPLICATION_PREPARATION_NOT_FOUND' }, { status: 404 }))
       .mockResolvedValueOnce(Response.json({ code: 'APPLICATION_PREPARATION_NOT_FOUND' }, { status: 404 })))
@@ -404,6 +405,15 @@ it('reads active snapshots through the availability HTTP contract without postin
 it.each(['PENDING', 'STALE', 'NO_FORM', 'DOCUMENT_UNAVAILABLE', 'TOO_LARGE', 'RETRY_WAITING', 'REVIEW_REQUIRED'])('preserves the reason for %s with no active forms', async (status) => {
   const response = { state: { sourceCode: 'BIZINFO', sourceProgramId: 'PBLN_1', status,
     reasonCode: 'SOURCE_CHECK_REQUIRED', nextRetryAt: null, attemptCount: 1 }, forms: { items: [] } }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(response)))
+  // 안내가 없는 이전 Core 응답은 빈 안내로 읽습니다.
+  await expect(new ApplicationPreparationRepositoryImpl().availability('BIZINFO', 'PBLN_1'))
+    .resolves.toEqual({ ...response, state: { ...response.state, warnings: [] } })
+})
+
+it('keeps the analysis warnings the availability response carries', async () => {
+  const response = { state: { sourceCode: 'BIZINFO', sourceProgramId: 'PBLN_1', status: 'NO_FORM', reasonCode: 'NO_FORM',
+    nextRetryAt: null, attemptCount: 1, warnings: ['미수집 첨부(지원 형식 PDF/HWP/HWPX/DOCX/XLSX 이외): 신청서식.zip'] }, forms: { items: [] } }
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(response)))
   await expect(new ApplicationPreparationRepositoryImpl().availability('BIZINFO', 'PBLN_1')).resolves.toEqual(response)
 })
