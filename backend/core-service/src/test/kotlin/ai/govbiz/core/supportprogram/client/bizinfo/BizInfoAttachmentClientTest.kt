@@ -148,6 +148,16 @@ class BizInfoAttachmentClientTest {
     }
 
     @Test
+    fun aProgramWithOnlyUnsupportedAttachmentsExplainsWhatWasNotCollected() {
+        stubPage(sectionedPage(listOf("신청서식 모음.zip" to download(0))))
+
+        val error = assertThrows(SupportProgramDocumentException::class.java) { client.collect("BIZINFO", sourceProgramId) }
+
+        assertEquals(Reason.UNSUPPORTED, error.reason)
+        assertTrue(error.warnings.any { it.contains("신청서식 모음.zip") })
+    }
+
+    @Test
     fun aCollectionFailureKeepsTheWarningsGatheredSoFar() {
         stubPage(sectionedPage(listOf("신청서.hwp" to download(0), "안내.zip" to "https://www.bizinfo.go.kr/cmm/fms/fileDown.do?atchFileId=FILE_9&fileSn=9")))
         server.expect(requestTo(download(0))).andRespond(withSuccess(byteArrayOf(0), MediaType.APPLICATION_OCTET_STREAM)

@@ -54,7 +54,8 @@ class BizInfoAttachmentClient(
                     addLink(links, warnings, anchor.absUrl("href"), label)
                 }
             }
-            if (links.isEmpty()) fail(Reason.UNSUPPORTED)
+            // 받을 수 있는 첨부가 없어도(ZIP만 있는 공고 등) 어떤 첨부를 왜 받지 못했는지는 안내로 남깁니다.
+            if (links.isEmpty()) throw SupportProgramDocumentException(Reason.UNSUPPORTED, warnings = warnings.distinct())
             if (warnings.distinct().size > 12) throw SupportProgramDocumentException(Reason.TOO_LARGE, warnings = warnings.distinct())
             // 같은 표제를 형식만 바꿔 함께 올린 사본은 한 문서로 묶어 개수 상한에 한 번만 셉니다. 같은 형식이면 발행기관(중기부)
             // 게시판 파일을 앞에 둡니다. 분석은 묶음에서 읽히는 첫 사본을 쓰므로, 우선 사본을 받거나 읽지 못해도 다른 사본으로 이어갑니다.

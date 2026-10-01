@@ -42,6 +42,18 @@ class ApplicationAttachmentRoleTest {
         assertTrue(ApplicationAttachmentRole.hasFormSignal("$notice\n[별지 제1호서식] 참가신청서", structureOnly = true))
     }
 
+    @Test
+    fun aFormEmbeddedInANoticeIsFoundByItsSignatureLineDateBlankOrLabelTable() {
+        // 실제 공고문 끝에 붙은 신청서(120389): "(서명 또는 인)"과 빈 날짜 줄
+        assertTrue(ApplicationAttachmentRole.hasFormSignal("신청업체 대표자 :              (서명 또는 인)", structureOnly = true))
+        assertTrue(ApplicationAttachmentRole.hasFormSignal("위와 같이 요청합니다.\n2026.    .    .", structureOnly = true))
+        // 표 칸이 한 줄씩 나오는 라벨 표(176739 수요기술조사서)
+        assertTrue(ApplicationAttachmentRole.hasFormSignal("기업명\n\n대표자명\n\n설립일\n\n소재지\n\n전화번호\n", structureOnly = true))
+        // 안내 문장과 연락처 몇 개, 채워진 날짜는 서식 신호가 아닙니다.
+        assertFalse(ApplicationAttachmentRole.hasFormSignal("신청서는 서명 또는 인감(이미지 파일)이 들어간 원본을 제출", structureOnly = true))
+        assertFalse(ApplicationAttachmentRole.hasFormSignal("담당자\n연락처\n이메일\n공고일 2026. 9. 14.", structureOnly = true))
+    }
+
     @ParameterizedTest
     @CsvSource(
         "(양식) 산학협력과제 수행 희망서.hwp, true",
@@ -51,6 +63,11 @@ class ApplicationAttachmentRoleTest {
         "2026 신청내역.xlsx, true",
         "행사 포스터.pdf, false",
         "Platform 소개.pdf, false",
+        "규제확인 서비스 안내.pdf, false",
+        "사업신청방법 안내.hwp, false",
+        "2026 신청안내.pdf, false",
+        "육상 양식장 지원 공고.hwp, false",
+        "제출서식모음.hwp, true",
     )
     fun formLikeFileNamesAreAnalyzedEvenWithoutKoreanSignalsInTheText(fileName: String, expected: Boolean) {
         assertEquals(expected, ApplicationAttachmentRole.hasFormName(fileName))
