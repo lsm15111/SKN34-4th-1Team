@@ -172,6 +172,8 @@ class ApplicationPreparationAgent:
             planning_document["targets"] = [target for target in planning_document["targets"] if target["targetId"] in allowed]
         for target in planning_document["targets"]:
             target["currentTextLength"] = len(target["currentText"])
+            # Font-color example text drives the server's own cleanup only; the model never deletes by color.
+            target["nativeLocator"].pop("exampleText", None)
         ids = [t["targetId"] for t in planning_document["targets"] if t["editable"]]
         if not ids:
             raise DocumentError("MAPPING_FAILED", reason="NO_EDITABLE_TARGETS")
@@ -273,6 +275,7 @@ class ApplicationPreparationAgent:
         mapping_document["targets"] = [t.model_dump(exclude=excluded, exclude_none=True) for t in targets]
         for target in mapping_document["targets"]:
             locator = target["nativeLocator"]
+            locator.pop("exampleText", None)
             if locator.get("geometryVerified") is False:
                 # Upstream paragraph estimates are not suitable for locating blank inputs.
                 target["nativeLocator"] = {"page": locator["page"], "geometryVerified": False}

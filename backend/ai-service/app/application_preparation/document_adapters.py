@@ -97,12 +97,16 @@ class HwpxDocumentAdapter:
                 tableClassificationEvidence=source_context.get("tableClassificationEvidence", []) if source_context else [],
                 reviewRequired=source_context.get("tableClassificationReviewRequired", False) if source_context else False,
             )
+            if item.get("exampleText"):
+                locator["exampleText"] = item["exampleText"]
             targets.append(NativeTarget(targetId=item["target"], nativeLocator=locator, kind=item["kind"],
                                         currentText=item["text"], context=context[:1000], editable=item["editable"],
                                         unsupportedReason=item.get("reason"), analysis=analysis))
             input_paragraph = _explicit_hwpx_input_paragraph(item, source_context)
             for paragraph in item.get("paragraphs", []):
                 paragraph_locator = {**locator, "target": paragraph["target"], "kind": "paragraph", "parent": item["target"]}
+                if paragraph.get("exampleText"):
+                    paragraph_locator["exampleText"] = paragraph["exampleText"]
                 if input_paragraph and paragraph["target"] != input_paragraph:
                     # The only printed input slot is a sibling. Keep the native edit address,
                     # but do not offer this empty layout paragraph as a Mapping binding.
@@ -201,8 +205,10 @@ def _filled_cells(targets: list[NativeTarget], operations: list, facts: dict[str
     written: dict[str, set[str]] = {}
     for target_id, edits in grouped.items():
         cell = by_id[target_id].nativeLocator.get("parent") or target_id
-        if cell.startswith("t") and cell in by_id:
-            written.setdefault(cell, set()).update(op.valueRef for op in edits if op.valueRef is not None)
+        fact_ids = {op.valueRef for op in edits if op.valueRef is not None}
+        # A cell where only an example is deleted is not fit-checked: removing text never grows a row.
+        if fact_ids and cell.startswith("t") and cell in by_id:
+            written.setdefault(cell, set()).update(fact_ids)
     filled = {}
     for cell, fact_ids in written.items():
         children = [target for target in targets if target.nativeLocator.get("parent") == cell]
@@ -348,7 +354,7 @@ class HwpDocumentAdapter:
         if not request.hwpTargets or len({t.id for t in request.hwpTargets}) != len(request.hwpTargets):
             raise DocumentError("MAPPING_FAILED")
         return DocumentMap(sourceSha256=request.sourceSha256, format="hwp", engineVersion=ENGINES["hwp"], targets=[
-            NativeTarget(targetId=t.id, nativeLocator={"paragraph": t.id, "group": t.groupId},
+            NativeTarget(targetId=t.id, nativeLocator={"paragraph": t.id, "group": t.groupId, "exampleText": t.exampleText},
                          kind="CHECKBOX" if t.kind == "CHECKBOX" else "paragraph", label=t.text if t.kind == "CHECKBOX" else "",
                          currentText=t.text, context=t.context, editable=t.editable, unsupportedReason=t.unsupportedReason)
             for t in request.hwpTargets

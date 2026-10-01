@@ -1,5 +1,6 @@
 import base64
 import logging
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -91,6 +92,105 @@ def deterministic_plan(request: GenerateDocumentRequest, document: DocumentMap) 
                 if group:
                     scope.extend(t.targetId for t in document.targets if t.kind == "CHECKBOX" and t.nativeLocator.get("group") == group and t.targetId not in scope)
     return PlanSelection(operations=operations, unresolvedTargets=[], scopeTargetIds=scope), deferred, list(skipped.values())
+
+
+HWP_CELL_PARAGRAPH = re.compile(r"(((.+-t\d+)-r\d+)-c\d+)-p\d+")
+
+
+def _cell_keys(target: NativeTarget) -> tuple[str, str | None, str | None]:
+    """(cell, table, row) of a text target; a paragraph outside any table is its own cell."""
+    locator = target.nativeLocator
+    if locator.get("table") is not None and locator.get("row") is not None:  # HWPX cell or cell paragraph
+        table = f"{locator.get('section')}/{locator['table']}"
+        return locator.get("parent") or target.targetId, table, f"{table}/{locator['row']}"
+    match = HWP_CELL_PARAGRAPH.fullmatch(target.targetId)  # HWP s0-p3-t0-r2-c1-p0: the innermost table wins
+    if match:
+        return match.group(1), match.group(3), match.group(2)
+    return target.targetId, None, None
+
+
+def _example_range(target: NativeTarget) -> tuple[int, int] | None:
+    """Where the example text (drawn blue or gray) sits, or None when it is split, repeated or truncated."""
+    example = target.nativeLocator.get("exampleText") or ""
+    if not example.strip() or len(example) >= 2000:
+        return None
+    start = target.currentText.find(example)
+    if start < 0 or target.currentText.find(example, start + 1) >= 0:
+        return None
+    return start, start + len(example)
+
+
+def _touches(start: int, end: int, operations: list[EditOperation]) -> bool:
+    """Whether a deletion of [start, end) would collide with an edit of the same paragraph (both editors reject it)."""
+    return any(op.operation.startswith("set_") or op.start == start or op.start < end and start < op.end
+               or op.start == op.end and start <= op.start < end for op in operations)
+
+
+def plan_example_cleanup(request: GenerateDocumentRequest, document: DocumentMap,
+                         selection: PlanSelection) -> tuple[PlanSelection, int]:
+    """Delete writing examples that the written answers made stale, and count the cells whose examples remain.
+
+    Deleted: (a) examples in a cell (or a paragraph outside tables) that received an answer, and (b) sample rows
+    of an answered table, i.e. unanswered rows whose every filled cell is example text. Kept: examples elsewhere,
+    which mark parts the user still writes; those are counted per cell. Only a whole, unique example range is
+    deleted. HWPX deletes only in paragraphs without an answer: its run-preserving editor refuses two separate
+    changes in one paragraph, and a cell edited as a whole cannot also have its paragraphs edited.
+    """
+    targets = {target.targetId: target for target in document.targets}
+    by_target: dict[str, list[EditOperation]] = {}
+    for op in selection.operations:
+        by_target.setdefault(op.targetId, []).append(op)
+    answered = [targets[op.targetId] for op in selection.operations if op.valueRef is not None]
+    answered_cells = {_cell_keys(target)[0] for target in answered}
+    answered_tables = {_cell_keys(target)[1] for target in answered} - {None}
+    answered_rows = {_cell_keys(target)[2] for target in answered} - {None}
+    edited_cells = {target.targetId for target in answered if target.kind == "cell"}
+    parents = {target.nativeLocator.get("parent") for target in document.targets}
+    leaves = [target for target in document.targets if target.targetId not in parents and target.kind != "CHECKBOX"]
+    saved_scope = set(request.scopeTargetIds)
+    in_form = (lambda target: target.targetId in saved_scope) if saved_scope else (
+        lambda target: _cell_keys(target)[0] in answered_cells or _cell_keys(target)[1] in answered_tables)
+
+    def deletable(target: NativeTarget) -> tuple[int, int] | None:
+        span = _example_range(target)
+        own = by_target.get(target.targetId, [])
+        if (span is None or not target.editable or not in_form(target) or target.nativeLocator.get("parent") in edited_cells
+                or own and (request.format == "hwpx" or _touches(*span, own))):
+            return None
+        return span
+
+    def all_example(target: NativeTarget) -> bool:
+        return ("".join(target.currentText.split()) == "".join(target.nativeLocator.get("exampleText", "").split())
+                and deletable(target) is not None)
+
+    rows: dict[str, list[NativeTarget]] = {}
+    for target in leaves:
+        _, table, row = _cell_keys(target)
+        if table in answered_tables and row not in answered_rows:
+            rows.setdefault(row, []).append(target)
+    sample_rows = {row for row, members in rows.items() if any(member.currentText.strip() for member in members)
+                   and all(not member.currentText.strip() or all_example(member) for member in members)}
+    deletions = []
+    for target in leaves:
+        cell, _, row = _cell_keys(target)
+        if (cell in answered_cells or row in sample_rows) and (span := deletable(target)) is not None:
+            deletions.append(EditOperation(targetId=target.targetId, operation="delete_range", expectedText=target.currentText,
+                                           start=span[0], end=span[1], valueRef=None, box=None,
+                                           reason="답을 쓴 칸·표의 작성 예시 문구를 삭제"))
+    deleted = {op.targetId for op in deletions}
+    remaining = set()
+    for target in leaves:
+        if target.targetId in deleted or not target.nativeLocator.get("exampleText", "").strip() or not in_form(target):
+            continue
+        span, own = _example_range(target), by_target.get(target.targetId, [])
+        # An answer over the example replaced it; a split example under an answer is taken as replaced as well.
+        if own and (span is None or _touches(*span, own)):
+            continue
+        remaining.add(_cell_keys(target)[0])
+    scope = list(selection.scopeTargetIds)
+    if not saved_scope:
+        scope.extend(target_id for target_id in dict.fromkeys(op.targetId for op in deletions) if target_id not in scope)
+    return selection.model_copy(update={"operations": [*selection.operations, *deletions], "scopeTargetIds": scope}), len(remaining)
 
 
 async def _plan_with_model(request: GenerateDocumentRequest, document: DocumentMap, agent) -> PlanSelection:
@@ -374,6 +474,7 @@ async def generate_document(request: GenerateDocumentRequest, agent) -> dict:
         path.write_bytes(source)
         document = await inspect_document(path, request)
         skipped: list[SkippedFact] = []
+        remaining_examples = 0
         if request.format == "pdf" and request.bindings and all(
                 binding.targetId.startswith("pdf-field:") for binding in request.bindings):
             by_target = {target.targetId: target for target in document.targets}
@@ -407,6 +508,9 @@ async def generate_document(request: GenerateDocumentRequest, agent) -> dict:
             # Answers longer than their cell are left out (and listed) instead of failing the whole document.
             selection, overflow = await HwpxDocumentAdapter().fit(path, document, selection, facts)
             skipped = [*skipped, *overflow]
+        if request.bindings and request.format in {"hwp", "hwpx"} and selection.operations:
+            # After the fit check, so an answer left out for overflow does not take its cell's example with it.
+            selection, remaining_examples = plan_example_cleanup(request, document, selection)
         plan = validate_plan(request, document, selection, skipped)
         document.documentAnalysis.mapping = DocumentAnalysisStage(
             status="PASSED", targetCount=len(plan.scopeTargetIds), resultCount=len(plan.operations),
@@ -437,5 +541,5 @@ async def generate_document(request: GenerateDocumentRequest, agent) -> dict:
                 "answerRevision": request.answerRevision, "outputBase64": base64.b64encode(output).decode(), "outputSha256": digest(output),
                 "planHash": plan.planHash, "mapVersion": document.mapVersion, "engineVersion": document.engineVersion,
                 "verification": verification, "placements": verification.get("placements", []),
-                "skippedFacts": [item.model_dump() for item in plan.skippedFacts],
+                "skippedFacts": [item.model_dump() for item in plan.skippedFacts], "remainingExampleCount": remaining_examples,
                 "documentMap": document.model_dump(), "writePlan": plan.model_dump()}

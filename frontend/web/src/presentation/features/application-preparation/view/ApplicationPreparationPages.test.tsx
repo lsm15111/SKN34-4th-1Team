@@ -350,6 +350,15 @@ it('shows each file with its format, size, fill meter and folded auto-fill misse
   expect(within(card).getByRole('button', { name: `받기: ${documentFile.fileName}` })).toBeTruthy()
 })
 
+it('tells the user how many cells still hold a writing example to delete before submitting', async () => {
+  repository.get.mockResolvedValue(readyPreparation())
+  repository.documents.mockResolvedValue([{ ...documentFile, remainingExampleCount: 3 }, { ...documentFile, id: 2, fileName: '두번째.hwpx' }])
+  mount('/app/application-preparations/12/documents')
+  const card = await screen.findByRole('article', { name: documentFile.fileName })
+  expect(card.textContent).toContain('직접 작성할 칸 3곳에 예시 문구가 남아 있어요. 제출 전에 지워 주세요.')
+  expect((await screen.findByRole('article', { name: '두번째.hwpx' })).textContent).not.toContain('예시 문구')
+})
+
 it('explains answers left out because the cell, blank or printed choice could not take them', async () => {
   repository.get.mockResolvedValue(readyPreparation())
   repository.documents.mockResolvedValue([{ ...documentFile, filledAnswerCount: 1, unfilledAnswerCount: 3, unfilledAnswers: [

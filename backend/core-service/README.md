@@ -1080,7 +1080,8 @@ Repository의 행 잠금·실행권 갱신 transaction과 공개 오류 계약�
 기입/미기입 답변을 분리하며 필수 binding 누락은 기존 `APPLICATION_DOCUMENT_MAPPING_FAILED`로 중단한다.
 AI Service가 칸 규칙·넘침 검사로 남긴 답(`skippedFacts`)과 PDF 상자에 들어가지 않아 `fillPdfFitting`이 뺀 답은 나머지 답으로 만든
 초안과 함께 미기입 답변(`reason`: `OVERFLOW`·`AMBIGUOUS_SLOT`·`SLOT_MISMATCH`·`INPUT_LOCATION_NOT_FOUND`, 넘침이면 `capacity`)으로
-저장·응답하고, HWP는 `applyHwpPlan`이 계획의 `skippedFacts`·`literal`을 함께 검증합니다.
+저장·응답하고, HWP는 `applyHwpPlan`이 계획의 `skippedFacts`·`literal`을 함께 검증합니다. AI Service가 답이 없는 표·칸에 남긴
+작성 예시의 칸 수(`remainingExampleCount`, 0..3000)는 파일 메타데이터 `answerSummary`에 저장해 문서 목록 응답으로 돌려주며, 이전 초안은 0입니다.
 label/required/status와 targetId/box 참조만 전달하며 raw native 지도·버전·scope는 복제하거나 저장하지 않는다.
 `DocumentMap`은 FILE native map이고 상위 업무 mapping과 동일한 계약이 아니다. FILE write authority는 기존
 DocumentMap/bindings/scope/WritePlan에 있으며 이관 비교·승인 흐름과 DB 스키마는 유지한다.

@@ -39,6 +39,7 @@ const documentsSchema = z.array(z.object({
     reason: z.enum(['INPUT_LOCATION_NOT_FOUND', 'AUTO_FILL_UNSUPPORTED', 'OVERFLOW', 'AMBIGUOUS_SLOT', 'SLOT_MISMATCH']),
     capacity: z.number().int().nonnegative().max(100000).nullable().optional(),
   })).max(200),
+  remainingExampleCount: z.number().int().nonnegative().max(3000).optional(),
 }).superRefine((file, context) => {
   if ((file.filledAnswerCount === null) !== (file.unfilledAnswerCount === null)
     || (file.unfilledAnswerCount !== null && file.unfilledAnswerCount !== file.unfilledAnswers.length)

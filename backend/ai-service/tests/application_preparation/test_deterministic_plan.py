@@ -136,3 +136,69 @@ def test_pdf_and_unbound_requests_keep_the_model_path(monkeypatch):
         unresolvedTargets=[], scopeTargetIds=["t1.r1.c2"])))
     asyncio.run(document_pipeline.generate_document(req, agent))
     agent.plan_document.assert_awaited_once()
+
+
+def example(name, text, sample=None, kind="paragraph", **locator):
+    """A text target whose blue/gray (example) part is [sample]; the whole text when sample is omitted."""
+    return NativeTarget(targetId=name, kind=kind, currentText=text,
+                        nativeLocator={"target": name, **locator, "exampleText": text if sample is None else sample})
+
+
+def test_examples_go_where_answers_were_written_and_stay_in_parts_the_user_still_writes(monkeypatch):
+    answer, scope = "s0-p1-t0-r0-c1-p0", []
+    targets = [
+        target(answer, "", kind="paragraph"),
+        example("s0-p1-t0-r0-c1-p1", "※ 법인명 기재"),        # (a) guidance in the answered cell
+        example("s0-p1-t0-r1-c0-p0", "홍길동"),               # (b) sample row of the answered table
+        example("s0-p1-t0-r1-c1-p0", "대리  ", "대리"),
+        target("s0-p1-t0-r1-c2-p0", "", kind="paragraph"),
+        target("s0-p1-t0-r2-c0-p0", "1", kind="paragraph"),  # a numbered row is not a sample row
+        example("s0-p1-t0-r2-c1-p0", "김철수"),
+        example("s0-p2-t0-r0-c0-p0", "예: 스마트팜 솔루션"),   # a table without answers keeps its example
+    ]
+    scope = [item.targetId for item in targets]
+    req = request(fmt="hwp", bindings=[{"factId": "company:name", "targetId": answer, "box": None}], scope=scope)
+    result, _ = generate(monkeypatch, req, targets, full=True)
+    deletions = [(op["targetId"], op["start"], op["end"]) for op in result["writePlan"]["operations"] if op["operation"] == "delete_range"]
+    assert deletions == [("s0-p1-t0-r0-c1-p1", 0, 8), ("s0-p1-t0-r1-c0-p0", 0, 3), ("s0-p1-t0-r1-c1-p0", 0, 2)]
+    assert all(op["valueRef"] is None and op["reason"] for op in result["writePlan"]["operations"] if op["operation"] == "delete_range")
+    assert result["remainingExampleCount"] == 2
+
+
+def test_an_example_the_answer_replaces_is_neither_deleted_nor_counted(monkeypatch):
+    answer = "s0-p1-t0-r0-c1-p0"
+    req = request(fmt="hwp", bindings=[{"factId": "company:name", "targetId": answer, "box": None}], scope=[answer])
+    result, _ = generate(monkeypatch, req, [example(answer, "예) 홍길동")], full=True)
+    assert [op["operation"] for op in result["writePlan"]["operations"]] == ["replace_range"]
+    assert result["remainingExampleCount"] == 0
+
+
+def test_hwp_deletes_an_example_beside_the_answer_but_hwpx_keeps_it_in_that_paragraph(monkeypatch):
+    text = "회사명: ____ (예: 가상전자)"
+    hwp = "s0-p1-t0-r0-c1-p0"
+    req = request(fmt="hwp", bindings=[{"factId": "company:name", "targetId": hwp, "box": None}], scope=[hwp])
+    result, _ = generate(monkeypatch, req, [example(hwp, text, "(예: 가상전자)")], full=True)
+    assert [(op["operation"], op["start"], op["end"]) for op in result["writePlan"]["operations"]] == [
+        ("replace_range", 5, 9), ("delete_range", 10, 19)]
+    assert result["remainingExampleCount"] == 0
+
+    cell = {"section": "Contents/section0.xml", "table": 1, "row": 0, "parent": "t1.r0.c1"}
+    targets = [target("t1.r0.c1", text + "\n※ 예시는 지우고 작성", kind="cell", section="Contents/section0.xml", table=1, row=0),
+               example("t1.r0.c1.p1", text, "(예: 가상전자)", **cell), example("t1.r0.c1.p2", "※ 예시는 지우고 작성", **cell)]
+    req = request(bindings=[{"factId": "company:name", "targetId": "t1.r0.c1.p1", "box": None}], scope=["t1.r0.c1.p1", "t1.r0.c1.p2"])
+    result, _ = generate(monkeypatch, req, targets, full=True)
+    assert [(op["targetId"], op["operation"]) for op in result["writePlan"]["operations"]] == [
+        ("t1.r0.c1.p1", "replace_range"), ("t1.r0.c1.p2", "delete_range")]
+    assert result["remainingExampleCount"] == 1
+
+
+def test_an_example_outside_the_saved_form_or_split_by_printed_text_is_kept(monkeypatch):
+    answer = "s0-p1-t0-r0-c1-p0"
+    targets = [target(answer, "", kind="paragraph"),
+               example("s0-p1-t0-r0-c1-p1", "홍길동 / 대리", "홍길동대리"),  # split by black text: kept, counted
+               example("s0-p1-t0-r0-c1-p2", "다른 서식 예시")]               # not in the saved form: untouched
+    req = request(fmt="hwp", bindings=[{"factId": "company:name", "targetId": answer, "box": None}],
+                  scope=[answer, "s0-p1-t0-r0-c1-p1"])
+    result, _ = generate(monkeypatch, req, targets, full=True)
+    assert [op["operation"] for op in result["writePlan"]["operations"]] == ["input"]
+    assert result["remainingExampleCount"] == 1

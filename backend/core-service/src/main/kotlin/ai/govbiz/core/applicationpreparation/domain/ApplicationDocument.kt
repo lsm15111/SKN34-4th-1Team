@@ -34,6 +34,7 @@ data class ApplicationDocumentFile(
     val bytes: ByteArray,
     val filledAnswerCount: Int? = null,
     val unfilledAnswers: List<ApplicationDocumentUnfilledAnswer> = emptyList(),
+    val remainingExampleCount: Int = 0,
 )
 
 /** Shared official-form address binding; contains no user answers. */

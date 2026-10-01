@@ -34,6 +34,17 @@ def example_char_prs(header: str) -> set[str]:
             and is_example_color(attrs.get("textColor", ""))}
 
 
+def paragraph_example_text(block: str, example_ids: set[str]) -> str:
+    """Text of the runs drawn in an example style, rendered like the engine's paragraph text (child tags dropped)."""
+    parts = []
+    for run in re.finditer(r"<hp:run\b([^>]*?)(?:/>|>(.*?)</hp:run>)", block, re.S):
+        reference = re.search(r'charPrIDRef="([^"]*)"', run.group(1))
+        if reference and reference.group(1) in example_ids and run.group(2):
+            raw = "".join(re.findall(r"<hp:t>(.*?)</hp:t>", run.group(2), re.S))
+            parts.append(re.sub(r"<[^>]*>", "", raw).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">"))
+    return "".join(parts)
+
+
 def is_plain_black(charpr: str) -> bool:
     return ('textColor="#000000"' in charpr and not re.search(r"<hh:(?:italic|bold)\s*/>", charpr)
             and not re.search(r'<hh:underline\b[^>]*?\btype="(?!NONE")', charpr)
@@ -379,7 +390,31 @@ def install_addressed_patches():
             if replace_plain_text_runs(item["block"], item["text"]) is None and fill_empty_run(item["block"], item["text"]) is None:
                 region["editable"] = False
                 region["reason"] = "UNSUPPORTED_BODY_STRUCTURE"
+        mark_example_text(path, package, result["regions"], blocks)
         return result
+
+    def mark_example_text(path, package, regions, blocks):
+        """Add exampleText (the text drawn in a blue/gray example style) to body and cell paragraphs."""
+        example_ids = example_char_prs(package.read("Contents/header.xml").decode("utf-8"))
+        if not example_ids:
+            return
+        cells = {cell.field_id: cell for cell in addressed.analyze(path).all_cells()}
+        for region in regions:
+            if region["kind"] == "body_para":
+                region["exampleText"] = paragraph_example_text(blocks[int(region["target"][1:]) - 1]["block"], example_ids)
+                continue
+            cell = cells.get(region["target"])
+            if region["kind"] != "cell" or cell is None:
+                continue
+            section = package.read(cell.section).decode("utf-8")
+            span = addressed._find_cell_span(section, cell.table_in_section, cell.row, cell.col)
+            if span is None:
+                continue
+            items = addressed._paragraph_blocks(section[span[0]:span[1]])
+            if [item["text"] for item in items] != [item["text"] for item in region.get("paragraphs", [])]:
+                continue  # the cell does not match the inspected paragraphs; offer no example ranges
+            for paragraph, item in zip(region["paragraphs"], items):
+                paragraph["exampleText"] = paragraph_example_text(item["block"], example_ids)
 
     addressed._body_paragraphs_in_section = paragraphs
     addressed.body_field_index = body_index

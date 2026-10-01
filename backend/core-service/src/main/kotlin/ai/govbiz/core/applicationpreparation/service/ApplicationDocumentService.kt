@@ -231,6 +231,8 @@ class ApplicationDocumentService(
         if (skipped.map { it.factId }.distinct().size != skipped.size || skipped.size >= writableFacts.size ||
             skipped.any { it.factId !in writableFactIds || it.reason !in ApplicationDocumentSkippedFact.REASONS })
             throw ApplicationDocumentException("APPLICATION_DOCUMENT_VALIDATION_FAILED", "문서 결과의 미기입 답변 목록을 확인하지 못했습니다.")
+        if (result.remainingExampleCount !in 0..3000)
+            throw ApplicationDocumentException("APPLICATION_DOCUMENT_VALIDATION_FAILED", "문서 결과의 남은 예시 칸 수를 확인하지 못했습니다.")
         val bytes = if (original.format.equals("hwp", true)) {
             if (result.verification["stage"] != "HWPLIB_REQUIRED" || !output.contentEquals(original.bytes))
                 throw ApplicationDocumentException("APPLICATION_DOCUMENT_VALIDATION_FAILED", "HWP 원본과 편집 처리 순서가 일치하지 않습니다.")
@@ -271,7 +273,7 @@ class ApplicationDocumentService(
             fingerprint = fingerprint,
             evidence = mapOf("documentMap" to result.documentMap, "writePlan" to result.writePlan, "verification" to verification, "pipelineVersion" to result.pipelineVersion),
             filledAnswerCount = writableFacts.size - skipped.size,
-            unfilledAnswers = unfilled))
+            unfilledAnswers = unfilled, remainingExampleCount = result.remainingExampleCount))
         } catch (error: ApplicationDocumentException) {
             if (error.code == "APPLICATION_DOCUMENT_OUTCOME_UNKNOWN") {
                 // 결과를 확인하지 못한 실행은 사람이 확인할 시간만 잠그고, 영구 잠금으로 남기지 않는다.

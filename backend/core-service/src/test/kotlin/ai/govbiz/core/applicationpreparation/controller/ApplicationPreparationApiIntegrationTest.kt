@@ -1408,7 +1408,8 @@ class ApplicationPreparationApiIntegrationTest {
             AiDocumentGenerationPayload("application-document-mcp-v1", "b".repeat(64), request.sourceSha256, request.answerRevision,
                 java.util.Base64.getEncoder().encodeToString(bytes), hash, "c".repeat(64), "native-map-v2", "test-stub",
                 mapOf("verified" to 1, "unresolved" to 0), written, emptyMap(), mapOf("answerRevision" to request.answerRevision),
-                skippedFacts = listOf(ApplicationDocumentSkippedFact("business-plan:summary", blanks[1].id, "OVERFLOW", 40)))
+                skippedFacts = listOf(ApplicationDocumentSkippedFact("business-plan:summary", blanks[1].id, "OVERFLOW", 40)),
+                remainingExampleCount = 3)
         }
 
         val discoveryResponse = mvc.perform(post("$BASE/forms/discover").cookie(owner).header(HttpHeaders.ORIGIN, ORIGIN).contentType(MediaType.APPLICATION_JSON)
@@ -1431,6 +1432,7 @@ class ApplicationPreparationApiIntegrationTest {
             .andExpect(jsonPath("$[0].unfilledAnswers[0].fieldId").value("business-plan:summary"))
             .andExpect(jsonPath("$[0].unfilledAnswers[0].reason").value("OVERFLOW"))
             .andExpect(jsonPath("$[0].unfilledAnswers[0].capacity").value(40))
+            .andExpect(jsonPath("$[0].remainingExampleCount").value(3))
     }
 
     @Test

@@ -1740,3 +1740,12 @@ def test_an_answer_alone_in_its_run_takes_the_plain_style_but_a_kept_label_keeps
     assert 'charPrIDRef="9"' in extension.fill_empty_run('<hp:p><hp:run charPrIDRef="2"/></hp:p>', "가상기업")
     assert 'charPrIDRef="1"' in extension.fill_empty_run('<hp:p><hp:run charPrIDRef="1"/></hp:p>', "가상기업")
 
+
+def test_example_text_is_the_text_of_blue_or_gray_runs():
+    from app.application_preparation.hwpx_mcp_extension import example_char_prs, is_example_color, paragraph_example_text
+    assert example_char_prs(HEADER) == {"1", "2"}
+    assert [is_example_color(color) for color in ("#0000FF", "#3366CC", "#808080", "#000000", "#FF0000", "#555555", "")] == [
+        True, True, True, False, False, False, False]
+    block = ('<hp:p><hp:run charPrIDRef="0"><hp:t>성명 </hp:t></hp:run><hp:run charPrIDRef="1"><hp:t>홍&amp;길<hp:tab/>동</hp:t></hp:run>'
+             '<hp:run charPrIDRef="2"/></hp:p>')
+    assert paragraph_example_text(block, {"1", "2"}) == "홍&길동"

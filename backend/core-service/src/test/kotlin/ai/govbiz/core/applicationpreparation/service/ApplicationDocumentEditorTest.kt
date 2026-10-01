@@ -314,6 +314,23 @@ class ApplicationDocumentEditorTest {
     }
 
     @Test
+    fun lightGrayGuidanceIsAnExampleButDarkGrayBodyTextIsNot() {
+        val file = BlankFileMaker.make()
+        fun style(color: Long) = file.docInfo.charShapeList.size.toLong().also {
+            file.docInfo.charShapeList.add(file.docInfo.charShapeList[0].clone().also { shape -> shape.charColor.value = color })
+        }
+        listOf("※ 5줄 이내로 작성" to style(0x808080L), "본문 글씨" to style(0x555555L)).forEach { (text, shape) ->
+            file.bodyText.sectionList[0].addNewParagraph().apply {
+                createText(); this.text.addString(text); createCharShape(); charShape.addParaCharShape(0, shape)
+            }
+        }
+        val original = ByteArrayOutputStream().also { HWPWriter.toStream(file, it) }.toByteArray()
+        val targets = editor.inspect(original, "HWP").targets
+        assertEquals("※ 5줄 이내로 작성", targets.single { it.text == "※ 5줄 이내로 작성" }.exampleText)
+        assertEquals("", targets.single { it.text == "본문 글씨" }.exampleText)
+    }
+
+    @Test
     fun replacesHwpxExampleRunsPreservingBlackLabelsBlueTitlesAndOtherEntries() {
         val header = """<hh:head xmlns:hh="urn:header"><hh:charProperties itemCnt="2"><hh:charPr id="0" textColor="#000000"/><hh:charPr id="1" textColor="#0000FF"/></hh:charProperties></hh:head>"""
         val section = """<hp:sec xmlns:hp="urn:paragraph"><hp:p><hp:run charPrIDRef="0"><hp:t>업체명:</hp:t></hp:run><hp:run charPrIDRef="1"><hp:t>예시 회사</hp:t></hp:run><hp:linesegarray/></hp:p><hp:p><hp:run charPrIDRef="1"><hp:t>파란 제목</hp:t></hp:run></hp:p><hp:p><hp:run charPrIDRef="1"><hp:t>구현 방법을 작성</hp:t></hp:run></hp:p></hp:sec>"""

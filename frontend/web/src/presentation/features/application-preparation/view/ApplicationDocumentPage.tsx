@@ -358,6 +358,9 @@ function DocumentResults({ id }: { id: number }) {
         <div className={s.progressTrack} aria-hidden="true"><div className={s.progressFill} style={{ width: `${Math.round((filled / total) * 100)}%` }} /></div>
         <p className={d.fillLabel}>{unfilled === 0 ? `${filled}개 모두 기입` : `${filled}개 기입 · ${unfilled}개 미기입`}</p>
       </div>}
+      {(file.remainingExampleCount ?? 0) > 0 && <p className={d.remainingExamples}>
+        직접 작성할 칸 {file.remainingExampleCount}곳에 예시 문구가 남아 있어요. 제출 전에 지워 주세요.
+      </p>}
       {file.unfilledAnswers.length > 0 && <details className={d.unfilled}>
         <summary className={d.unfilledSummary}>자동 기입 못한 답변 보기 ({file.unfilledAnswers.length})</summary>
         <div aria-label="자동 기입하지 못한 답변">

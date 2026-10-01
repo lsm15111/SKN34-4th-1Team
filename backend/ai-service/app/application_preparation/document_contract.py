@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 CONTRACT = "application-document-mcp-v1"
 MAP_VERSION = "native-map-v16-pdf-reading-order-choice-lines"
-PLAN_VERSION = "confirmed-facts-bound-v7-printed-slots-skipped-facts"
+PLAN_VERSION = "confirmed-facts-bound-v8-printed-slots-example-cleanup"
 ENGINES = {
     "hwp": "kr.dogfoot/hwplib@1.1.11+govbiz-ranges-v1",
     "hwpx": "pblsketch/Hangeul-mcp@b6fef153714e0cc9ce566df0da4082fc57c4fda4+govbiz-ranges-v4-body-positions+answer-style-v1+python-hwpx@6.6.0-fit",

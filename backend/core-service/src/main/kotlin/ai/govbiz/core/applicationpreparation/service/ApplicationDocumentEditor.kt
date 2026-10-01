@@ -634,13 +634,17 @@ class ApplicationDocumentEditor {
 
     private fun isBlue(red: Int, green: Int, blue: Int) = blue >= 128 && blue > red + 40 && blue > green + 40
 
+    /** 작성 예시·안내 글자색입니다: 파란색, 또는 본문(검정·진회색)보다 옅은 회색. */
+    private fun isExample(red: Int, green: Int, blue: Int) =
+        isBlue(red, green, blue) || maxOf(red, green, blue) - minOf(red, green, blue) <= 24 && (red + green + blue) / 3 in 110..210
+
     private fun hwpExample(file: HWPFile, paragraph: Paragraph): String {
         var offset = 0L
         return paragraph.text?.charList?.joinToString("") { char ->
             val style = paragraph.charShape?.positonShapeIdPairList?.lastOrNull { it.position <= offset }?.shapeId?.toInt() ?: 0
             offset += char.charSize
             val color = file.docInfo.charShapeList[style].charColor
-            if (char.code.toInt() >= 32 && isBlue(color.r.toInt(), color.g.toInt(), color.b.toInt())) char.code.toInt().toChar().toString() else ""
+            if (char.code.toInt() >= 32 && isExample(color.r.toInt(), color.g.toInt(), color.b.toInt())) char.code.toInt().toChar().toString() else ""
         } ?: ""
     }
 
@@ -650,7 +654,7 @@ class ApplicationDocumentEditor {
             val style = paragraph.charShape?.positonShapeIdPairList?.lastOrNull { it.position <= offset }?.shapeId ?: 0L
             offset += char.charSize
             val color = file.docInfo.charShapeList[style.toInt()].charColor
-            if (char.code.toInt() >= 32 && isBlue(color.r.toInt(), color.g.toInt(), color.b.toInt())) null else char to style
+            if (char.code.toInt() >= 32 && isExample(color.r.toInt(), color.g.toInt(), color.b.toInt())) null else char to style
         }
         // Offsets in range annotations cannot safely be reused after deleting characters.
         require(paragraph.rangeTag?.rangeTagItemList.isNullOrEmpty())

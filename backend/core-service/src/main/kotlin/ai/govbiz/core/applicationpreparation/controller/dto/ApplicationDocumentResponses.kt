@@ -14,6 +14,8 @@ data class ApplicationDocumentResponse(
     val filledAnswerCount: Int?,
     val unfilledAnswerCount: Int?,
     val unfilledAnswers: List<ApplicationDocumentUnfilledAnswerResponse>,
+    /** 답을 쓰지 않은 칸에 작성 예시(파란·회색 글씨)가 남아 있는 칸 수입니다. 이전 초안은 0입니다. */
+    val remainingExampleCount: Int = 0,
 )
 
 data class ApplicationDocumentGenerationJobRequest(

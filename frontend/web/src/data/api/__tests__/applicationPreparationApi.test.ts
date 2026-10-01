@@ -99,6 +99,16 @@ it('reads answers left out of a draft with their reason and, for an overflowing 
   await expect(repository.documents(1)).rejects.toThrow()
 })
 
+it('reads how many cells still hold a writing example and rejects an impossible count', async () => {
+  const file = { id: 8, inputRevision: 3, fileName: '신청서.hwpx', mediaType: 'application/hwp+zip', size: 4,
+    filledAnswerCount: 1, unfilledAnswerCount: 0, unfilledAnswers: [], remainingExampleCount: 2 }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json([file]))
+    .mockResolvedValueOnce(Response.json([{ ...file, remainingExampleCount: -1 }])))
+  const repository = new ApplicationPreparationRepositoryImpl()
+  expect(await repository.documents(1)).toEqual([file])
+  await expect(repository.documents(1)).rejects.toThrow()
+})
+
 it.each([
   ['DOCX', '신청서.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
   ['XLSX', '신청서.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
