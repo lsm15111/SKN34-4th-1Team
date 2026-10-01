@@ -61,6 +61,31 @@ def test_a_count_goes_into_the_blank_of_its_own_option():
             == "■ 기본부스 3 개     □ 독립부스 ___개")
 
 
+@pytest.mark.parametrize("text,value,expected", [
+    # units printed in parentheses or not in the first unit list
+    ("(백만원)", "150", "150 (백만원)"),
+    ("          (천원)", "3,000", "    3,000 (천원)"),
+    ("    인", "12", " 12 인"),
+    ("달러", "5,000", "5,000 달러"),
+    ("톤", "30", "30 톤"),
+    # options inside one pair of parentheses
+    ("(동의함 □ 동의하지 않음 □)", "동의하지 않음", "(동의함 □ 동의하지 않음 ■)"),
+    ("(대상 □ 비대상 □)", "대상", "(대상 ■ 비대상 □)"),
+    # one digit per printed box
+    ("(우 □□□□□)", "04524", "(우 04524)"),
+    ("□□□-□□-□□□□□", "123-45-67890", "123-45-67890"),
+    # a placeholder after a label is replaced, the label stays
+    ("기업명 ㅇㅇㅇ", "가상기업", "기업명 가상기업"),
+    ("대표자: ○○○", "홍길동", "대표자: 홍길동"),
+])
+def test_units_bracketed_options_digit_boxes_and_label_placeholders(text, value, expected):
+    assert written(text, value) == expected
+
+
+def test_digit_boxes_refuse_a_number_of_another_length():
+    assert answer_slots("(우 □□□□□)", "1234", "우편번호") == SLOT_MISMATCH
+
+
 @pytest.mark.parametrize("text", ["11.1~11.8", "※ 5줄 이내 작성", "1) 자동차 브레이크,  2) 배터리 양극재 소재"])
 def test_guidance_notes_dates_and_example_lists_are_replaced_as_a_whole(text):
     assert written(text, "답변") == "답변"

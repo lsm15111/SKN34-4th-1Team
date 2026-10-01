@@ -20,12 +20,16 @@ GAP = re.compile(SPACE + "{2,}")
 CHOICE_MARK = re.compile(r"[□☐❏]|[\[［]" + SPACE + r"*[\]］]")
 FILL_BLANK = re.compile(r"_{2,}|＿{2,}|[(（]" + SPACE + r"*[)）]")
 # A bullet keeps its place in front of the answer. "※"/"*" start a guidance note, which is replaced as a whole.
-BULLET = re.compile("^" + SPACE + r"*(?:[○❍◦•·∙ㅇ▪◆◇◎●☞▶►▷■\-–—]|(?P<number>(?:\d{1,2}|[가나다라마바사아자차카타파하])[.)]|\(\d{1,2}\)|[①-⑳])(?=" + SPACE + "|$))" + SPACE + "*")
+BULLET = re.compile("^" + SPACE + r"*(?:[○❍◦•·∙ㅇ▪◆◇◎●☞▶►▷■\-–—]|(?P<number>(?:\d{1,2}|[가나다라마바사아자차카타파하])[.)]|\(\d{1,2}\)|[①-⑳]))(?=" + SPACE + "|$)" + SPACE + "*")
 EXAMPLE = re.compile(r"^(?:[(（]?예시?[)）:：]|예시|ex\)|e\.g\.)", re.IGNORECASE)
 # "000", "○○○", "0000.00.00." but not "18:00" or "7,025.00".
-PLACEHOLDER = re.compile(r"(?<![0-9A-Za-z])(?<![0-9A-Za-z][,.\-:/])[0○◯OoＯ〇xX×](?:[,.\-:/ ]*[0○◯OoＯ〇xX×])+(?![0-9A-Za-z])")
-UNIT = re.compile(r"(?:백만원|천만원|천원|만원|억원|개사|개월|시간|가구|명|개|건|곳|원|세|회|차|년|월|일|분|평|㎡|호|기|대|종|주|박|점|%|％|won|hours?)(?![가-힣A-Za-z])")
+PLACEHOLDER = re.compile(r"(?<![0-9A-Za-z])(?<![0-9A-Za-z][,.\-:/])[0○◯OoＯ〇xX×ㅇ](?:[,.\-:/ ]*[0○◯OoＯ〇xX×ㅇ])+(?![0-9A-Za-z])")
+UNIT = re.compile(r"(?:백만원|천만원|천원|만원|억원|백만달러|천달러|달러|USD|개소|개사|개월|시간|가구|명|개|건|곳|원|세|회|차|년|월|일|분|평|㎡|호|기|대|종|주|박|점|톤|kg|㎏|ha|인|%|％|won|hours?)(?![가-힣A-Za-z])")
 SIGN = re.compile(r"[(（]" + SPACE + "*(?:인|印|서명|날인|직인|서명" + SPACE + "*또는" + SPACE + "*(?:날인|인))" + SPACE + r"*[)）]")
+# A unit printed in parentheses after the blank: "      (백만원)".
+PAREN_UNIT = re.compile(r"[(（]" + SPACE + "*(?:" + UNIT.pattern + ")" + SPACE + r"*[)）]")
+# One box per digit: "(우 □□□□□)", "□□□-□□-□□□□□".
+DIGIT_BOXES = re.compile(r"[□☐](?:[ \-]?[□☐]){2,}")
 QUANTITY_PREFIX = set("총약만제월연주일각")
 SEPARATORS = SPACES + "/,|·・、;\n"
 DATE_VALUE = re.compile(r"((?:19|20)\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})")
@@ -59,6 +63,8 @@ def answer_slots(text: str, value: str, label: str) -> list[Slot] | str:
     rest = text[body:]
     if (dates := _date_slots(text, value)) is not None:
         return dates
+    if (digits := _digit_box_slots(text, body, value)) is not None:
+        return digits
     if CHOICE_MARK.search(rest):
         return _choice_slots(text, body, value, field)
     if EXAMPLE.match(rest.strip()):
@@ -72,13 +78,14 @@ def answer_slots(text: str, value: str, label: str) -> list[Slot] | str:
         mark_end = len(bullet.group().rstrip(SPACES))
         return [Slot(mark_end, len(text), " " + value, "글머리표 뒤에 저장된 답변을 삽입")]
     core = rest.strip()
-    if UNIT.fullmatch(core) or SIGN.fullmatch(core):
+    if UNIT.fullmatch(core) or SIGN.fullmatch(core) or PAREN_UNIT.fullmatch(core):
         start = body + len(rest) - len(rest.lstrip())
         return [_aligned(start, start, value + ("" if core in {"%", "％"} else " "), "단위·서명 표시 앞에 저장된 답변을 삽입", body, right=True)]
     if not any(c.isalnum() for c in rest):
         return [Slot(body, len(text), value, "구분 기호만 있는 빈칸을 저장된 답변으로 교체")]
-    if PLACEHOLDER.search(rest):
-        return [Slot(body, len(text), value, "자리표시자 예시를 저장된 답변으로 교체")]
+    placeholders = list(PLACEHOLDER.finditer(text, body))
+    if placeholders:
+        return _placeholder_slots(text, body, placeholders, value)
     gaps = [slot for gap in GAP.finditer(text, body) if (slot := _gap_slot(text, body, gap, value)) is not None]
     if gaps:
         return _pick(text, body, gaps, field)
@@ -86,6 +93,34 @@ def answer_slots(text: str, value: str, label: str) -> list[Slot] | str:
     if stripped.endswith((":", "：")):
         return [Slot(len(stripped), len(text), " " + value, "라벨 뒤에 저장된 답변을 삽입")]
     return [Slot(body, len(text), value, "예시 문구를 저장된 답변으로 교체")]
+
+
+def _digit_box_slots(text: str, body: int, value: str) -> list[Slot] | str | None:
+    """"(우 □□□□□)": a number answer goes one digit per printed box. None when the paragraph has no digit boxes."""
+    boxes = [i for match in DIGIT_BOXES.finditer(text, body) for i in range(match.start(), match.end()) if text[i] in "□☐"]
+    if not boxes:
+        return None
+    if not re.fullmatch(r"[\d\s\-().]+", value):
+        return None  # not a number: the boxes may be printed choices
+    digits = re.sub(r"\D", "", value)
+    if len(digits) != len(boxes):
+        return SLOT_MISMATCH
+    return [Slot(box, box + 1, digit, "숫자 칸에 한 자리씩 입력") for box, digit in zip(boxes, digits)]
+
+
+def _placeholder_slots(text: str, body: int, placeholders: list[re.Match], value: str) -> list[Slot]:
+    """"기업명 ㅇㅇㅇ" keeps its label and writes over the placeholder; "홍○○", "OO 어린이집" or a placeholder inside
+    example prose is an example as a whole and is replaced as a whole."""
+    if len(placeholders) == 1:
+        match = placeholders[0]
+        label = text[body:match.start()]
+        after = text[match.end():].strip()
+        if (label.strip() and label[-1] in SPACES + ":：" and len(label_key(label)) <= 15
+                and (not after or UNIT.fullmatch(after) or PAREN_UNIT.fullmatch(after))):
+            left = "" if label[-1] in SPACES else " "
+            right = " " if after and text[match.end():match.end() + 1] not in SPACES else ""
+            return [Slot(match.start(), match.end(), left + value + right, "라벨 뒤 자리표시자를 저장된 답변으로 교체")]
+    return [Slot(body, len(text), value, "자리표시자 예시를 저장된 답변으로 교체")]
 
 
 def _aligned(start: int, end: int, written: str, reason: str, gap_start: int, right: bool) -> Slot:
@@ -130,7 +165,7 @@ def _gap_slot(text: str, body: int, gap: re.Match, value: str) -> Slot | None:
     unit = UNIT.match(following)
     # "주 생 산 품" starts with a unit-like syllable but is a letter-spaced label.
     unit_after = bool(unit and not re.match(SPACE + "+[가-힣](?:" + SPACE + "|$)", following[unit.end():])
-                      or SIGN.match(following))
+                      or SIGN.match(following) or PAREN_UNIT.match(following))
     if not before.strip() or before.endswith("\n"):
         # Leading indentation is a slot only in front of a printed unit or signature mark ("      명", "     (인)").
         if not unit_after:
@@ -173,7 +208,8 @@ def _hangul_run(text: str) -> int:
 def _options(text: str, body: int, marks: list[tuple[int, int]]) -> list[tuple[str, str]] | None:
     """Printed caption for each mark: the text after it ("□ 자가"), or before it when marks close the line ("예 □").
     Each caption has two keys: the whole caption and its head before a printed blank ("□ 유 (채널명:   )" → 유)."""
-    if not text[marks[-1][1]:].strip(SEPARATORS):
+    # Marks close the line when only separators or closing brackets follow: "(동의함 □ 동의하지 않음 □)".
+    if not text[marks[-1][1]:].strip(SEPARATORS + ")）]］】"):
         bounds = [body] + [end for _, end in marks[:-1]]
         captions = [re.split(r"[:：]", text[a:start])[-1] for a, (start, _) in zip(bounds, marks)]
     else:
