@@ -118,6 +118,36 @@ def test_transport_success_does_not_hide_business_failure(payload):
         asyncio.run(session.call("pdf_get_text", {}))
 
 
+@pytest.mark.parametrize("text,code,reason", [
+    ("Error executing tool govbiz_pdf_text_regions: PDF_GEOMETRY_PAGE_LIMIT", "APPLICATION_DOCUMENT_LIMIT_EXCEEDED", "PDF_GEOMETRY_PAGE_LIMIT"),
+    ("Error executing tool govbiz_pdf_text_regions: PDF_GEOMETRY_ROTATION", "APPLICATION_DOCUMENT_MCP_FAILED", "pdf:govbiz_pdf_text_regions:REMOTE_TOOL_ERROR:PDF_GEOMETRY_ROTATION"),
+    ("Traceback ... secret/path/applicant.pdf", "APPLICATION_DOCUMENT_MCP_FAILED", "pdf:govbiz_pdf_text_regions:REMOTE_TOOL_ERROR"),
+])
+def test_own_pdf_tool_failure_codes_reach_the_caller_but_other_tool_text_does_not(text, code, reason):
+    from mcp_types import TextContent
+
+    class Session:
+        async def call_tool(self, *args):
+            return CallToolResult(is_error=True, content=[TextContent(type="text", text=text)])
+    session = DocumentMcpSession("pdf", Session(), {"govbiz_pdf_text_regions": {}})
+    with pytest.raises(DocumentError) as raised:
+        asyncio.run(session.call("govbiz_pdf_text_regions", {}))
+    assert (raised.value.code, raised.value.reason) == (code, reason)
+
+
+def test_pdf_rules_drawn_twice_count_once_and_still_bound_cells():
+    from app.application_preparation.pdf_mcp_extension import pdf_blank_regions
+    single = [(x, .1, x, .5) for x in [.1, .4, .9]] + [(.1, y, .9, y) for y in [.1, .3, .5]]
+    # Thin filled rectangles give every rule a second edge half a point away.
+    doubled = single + [(a + .0005, b, c + .0005, d) if a == c else (a, b + .0005, c, d + .0005) for a, b, c, d in single]
+    words = [{"text": "기업명", "box": {"x": .2, "y": .17, "width": .08, "height": .025}}]
+    assert [r["labels"] for r in pdf_blank_regions(doubled, words, 1000, 1000)] == \
+        [r["labels"] for r in pdf_blank_regions(single, words, 1000, 1000)]
+    many_rows = [(.1, y / 1000, .9, y / 1000) for y in range(100, 900, 4)] * 2
+    with pytest.raises(ValueError, match="PDF_TABLE_GEOMETRY_LIMIT"):
+        pdf_blank_regions(many_rows + [(x, .1, x, .9) for x in [.1, .9]], [], 1000, 1000)
+
+
 def test_generate_endpoint_requires_internal_auth(monkeypatch):
     from app.application_preparation.router import router, get_service
     app = FastAPI()

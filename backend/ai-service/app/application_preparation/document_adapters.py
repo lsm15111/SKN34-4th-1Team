@@ -241,6 +241,9 @@ class PdfDocumentAdapter:
                                                 nativeLocator={"page": page, "bbox": paragraph["bbox"], "fontName": paragraph["font_name"],
                                                                "fontSize": paragraph["font_size"], "geometryVerified": False},
                                                 context=f"PDF page {page + 1}; native paragraph; use image for visual bounds"))
+        if len(targets) > DOCUMENT_TARGET_LIMIT:
+            # Same explicit limit as HWPX instead of a schema error from the map below.
+            raise DocumentError("LIMIT_EXCEEDED", reason="PDF_TARGET_COUNT")
         return DocumentMap(sourceSha256=digest(path.read_bytes()), format="pdf", engineVersion=ENGINES["pdf"], targets=targets)
 
     async def apply(self, path: Path, document: DocumentMap, plan: WritePlan, facts: dict[str, str]) -> tuple[bytes, dict]:
