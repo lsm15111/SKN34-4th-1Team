@@ -350,6 +350,20 @@ it('shows each file with its format, size, fill meter and folded auto-fill misse
   expect(within(card).getByRole('button', { name: `받기: ${documentFile.fileName}` })).toBeTruthy()
 })
 
+it('explains answers left out because the cell, blank or printed choice could not take them', async () => {
+  repository.get.mockResolvedValue(readyPreparation())
+  repository.documents.mockResolvedValue([{ ...documentFile, filledAnswerCount: 1, unfilledAnswerCount: 3, unfilledAnswers: [
+    { fieldId: 'plan:summary', fieldLabel: '사업 계획 / 요약', value: '긴 요약', reason: 'OVERFLOW', capacity: 40 },
+    { fieldId: 'company:contact', fieldLabel: '기업 개요 / 연락처', value: '02-000-0000', reason: 'AMBIGUOUS_SLOT', capacity: null },
+    { fieldId: 'company:site', fieldLabel: '기업 개요 / 사업장', value: '전세', reason: 'SLOT_MISMATCH', capacity: null },
+  ] }])
+  mount('/app/application-preparations/12/documents')
+  const card = await screen.findByRole('article', { name: documentFile.fileName })
+  const misses = within(card).getByLabelText('자동 기입하지 못한 답변').textContent
+  expect(misses).toContain('사업 계획 / 요약: 긴 요약 — 칸보다 길어 넣지 못함 · 약 40자 이내')
+  expect(misses).toContain('기업 개요 / 연락처: 02-000-0000 — 빈칸이 여러 개라 위치 확인 불가')
+  expect(misses).toContain('기업 개요 / 사업장: 전세 — 인쇄된 선택지·날짜와 달라 원본에서 직접 작성')
+})
 
 it('offers a whole-revision archive only for several current files and folds older versions away', async () => {
   repository.get.mockResolvedValue(readyPreparation())

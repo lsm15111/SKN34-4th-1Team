@@ -177,8 +177,9 @@ class ApplicationPreparationAgent:
             raise DocumentError("MAPPING_FAILED", reason="NO_EDITABLE_TARGETS")
         native_id = Annotated[str, Field(pattern="^(?:" + "|".join(re.escape(key) for key in ids) + ")$")]
         fact_id = Annotated[str, Field(pattern="^(?:" + "|".join(re.escape(key) for key in sorted(fact_ids)) + ")$")]
+        # literal is derived by the server's slot rules only; the model always writes the answer itself.
         operation_type = create_model("BoundEditOperation", __base__=EditOperation,
-            targetId=(native_id, ...), valueRef=(fact_id | None, ...),
+            targetId=(native_id, ...), valueRef=(fact_id | None, ...), literal=(type(None), None),
             **({"box": (type(None), ...)} if all(t["kind"] != "PDF_PAGE" for t in planning_document["targets"]) else {}))
         selection_type = create_model("BoundDocumentPlan", __base__=PlanSelection,
             operations=(list[operation_type], Field(max_length=600)),

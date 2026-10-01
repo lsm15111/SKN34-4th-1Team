@@ -303,12 +303,18 @@ class ApplicationDocumentEditor {
         val expectedText = originalText.toMutableMap()
         val values = facts.associateBy { it.id }
         require(values.size == facts.size && facts.all { it.value.isNotEmpty() && it.value.length <= 2000 })
+        // 칸에 맞지 않거나 위치를 정할 수 없어 남긴 답은 쓰지 않고, 나머지 답만 저장된 위치에 씁니다.
+        val skipped = plan.skippedFacts.map { it.factId }.toSet()
+        require(skipped.size == plan.skippedFacts.size && skipped.all { it in values } &&
+            plan.skippedFacts.all { it.reason in ApplicationDocumentSkippedFact.REASONS })
         require(plan.scopeTargetIds.distinct().size == plan.scopeTargetIds.size && plan.scopeTargetIds.all { it in scopeTargetIds && it in targets })
-        val expectedBindings = bindings.filter { it.factId in values }.map { it.factId to it.targetId }
+        val expectedBindings = bindings.filter { it.factId in values && it.factId !in skipped }.map { it.factId to it.targetId }
         val actualBindings = plan.operations.filter { it.valueRef != null }.map { it.valueRef!! to it.targetId }
         require(expectedBindings.isNotEmpty() && expectedBindings.distinct().size == expectedBindings.size)
-        require(actualBindings.distinct().size == actualBindings.size && actualBindings.toSet() == expectedBindings.toSet())
-        require(actualBindings.map { it.first }.toSet() == values.keys && bindings.all { it.box == null })
+        // 나눠 쓴 날짜·선택 표시는 한 답을 한 문단의 여러 범위에 씁니다. 답을 그대로 쓰는 편집은 위치마다 하나입니다.
+        val plain = plan.operations.filter { it.valueRef != null && it.literal == null }.map { it.valueRef!! to it.targetId }
+        require(plain.distinct().size == plain.size && actualBindings.toSet() == expectedBindings.toSet())
+        require(actualBindings.map { it.first }.toSet() == values.keys - skipped && bindings.all { it.box == null })
         plan.operations.forEach { op ->
             val target = requireNotNull(targets[op.targetId])
             require(target.editable && op.targetId in plan.scopeTargetIds && op.expectedText == target.text)
@@ -316,6 +322,11 @@ class ApplicationDocumentEditor {
             require(op.start >= 0 && op.end >= op.start && op.end <= target.text.length)
             if (op.operation == "delete_range") require(op.valueRef == null && op.end > op.start)
             else require(op.valueRef in values)
+            op.literal?.let { literal ->
+                // 파생 문구는 선택 표시이거나 답의 일부(날짜 조각, 띄어쓰기를 붙인 답)여야 합니다.
+                require(op.operation == "replace_range" && target.kind != "CHECKBOX" && literal.length <= 2100)
+                require(literal in CHOICE_MARKS || literal.isNotBlank() && values.getValue(op.valueRef!!).value.contains(literal.trim()))
+            }
             if (target.kind == "CHECKBOX") {
                 require(op.operation == "set_check" && op.start == 0 && op.end == target.text.length)
                 require(values.getValue(op.valueRef!!).value.trim() == target.text.trim())
@@ -342,7 +353,7 @@ class ApplicationDocumentEditor {
             require(ordered.zipWithNext().all { (a, b) -> a.start != b.start && a.end <= b.start })
             var text = originalText.getValue(id)
             operations.sortedByDescending { it.start }.forEach { op ->
-                val value = if (op.operation == "delete_range") "" else values.getValue(op.valueRef!!).value.replace("\r\n", "\n")
+                val value = if (op.operation == "delete_range") "" else (op.literal ?: values.getValue(op.valueRef!!).value).replace("\r\n", "\n")
                 require(value.none { Character.isSurrogate(it) || (it.code < 32 && it != '\n') })
                 replaceHwpRange(file, paragraph, op.start, op.end, value)
                 text = text.substring(0, op.start) + value + text.substring(op.end)
@@ -652,8 +663,32 @@ class ApplicationDocumentEditor {
         require(doc.signatureDictionaries.isEmpty())
     }
 
-    private fun fillPdf(bytes: ByteArray, facts: List<ApplicationDocumentFact>, placements: List<ApplicationDocumentPlacement>): ByteArray = Loader.loadPDF(bytes).use { doc ->
+    /**
+     * PDF에 답을 채우되 칸에 다 들어가지 않는 답은 빼고 나머지를 씁니다. 뺀 답은 그 칸에 들어가는 대략의 글자 수와 함께
+     * 돌려줍니다. 한 답이 여러 칸에 걸리면 한 칸이라도 넘칠 때 그 답 전체를 빼고, 넣을 답이 하나도 남지 않으면 OVERFLOW입니다.
+     */
+    fun fillPdfFitting(bytes: ByteArray, facts: List<ApplicationDocumentFact>, placements: List<ApplicationDocumentPlacement>): Pair<ByteArray, Map<String, Int>> = safely {
+        require(bytes.size in 1..MAX_BYTES)
+        require(placements.map { it.factId }.toSet() == facts.map { it.id }.toSet() && placements.size >= facts.size && placements.size <= 600)
+        val overflow = linkedMapOf<String, Int>()
+        val first = fillPdf(bytes, facts, placements, overflow)
+        val output = if (overflow.isEmpty()) first else {
+            val kept = placements.filter { it.factId !in overflow }
+            if (kept.isEmpty()) throw ApplicationDocumentException("APPLICATION_DOCUMENT_OVERFLOW", "입력란에 답변 전체가 들어가지 않습니다. 답변을 확인해 주세요.")
+            fillPdf(bytes, facts.filter { it.id !in overflow }, kept)
+        }
+        require(output.size in 1..MAX_BYTES)
+        output to overflow
+    }
+
+    private fun fillPdf(bytes: ByteArray, facts: List<ApplicationDocumentFact>, placements: List<ApplicationDocumentPlacement>,
+                        overflow: MutableMap<String, Int>? = null): ByteArray = Loader.loadPDF(bytes).use { doc ->
         checkPdf(doc)
+        // overflow가 있으면 넘치는 답을 거기에 적고 건너뜁니다. 없으면 지금처럼 문서 전체를 실패시킵니다.
+        fun overflowed(placement: ApplicationDocumentPlacement, capacity: Int, message: String) {
+            if (overflow == null) throw ApplicationDocumentException("APPLICATION_DOCUMENT_OVERFLOW", message)
+            overflow.merge(placement.factId, capacity) { a, b -> minOf(a, b) }
+        }
         val form = doc.documentCatalog.acroForm ?: PDAcroForm(doc).also { doc.documentCatalog.acroForm = it }
         require(!form.hasXFA())
         val resources = form.defaultResources ?: PDResources().also { form.defaultResources = it }
@@ -683,15 +718,27 @@ class ApplicationDocumentEditor {
                 else fact.value
                 when (field) {
                     is PDTextField -> {
-                        if (field.maxLen > 0 && value.length > field.maxLen) throw ApplicationDocumentException("APPLICATION_DOCUMENT_OVERFLOW", "입력란의 글자 수 제한을 초과했습니다. 답변을 확인해 주세요.")
+                        if (field.maxLen > 0 && value.length > field.maxLen) {
+                            overflowed(placement, field.maxLen, "입력란의 글자 수 제한을 초과했습니다. 답변을 확인해 주세요.")
+                            return@forEachIndexed
+                        }
                         val appearance = field.defaultAppearance ?: form.defaultAppearance.orEmpty()
                         val fontCommand = Regex("/[^\\s]+\\s+([0-9]+(?:\\.[0-9]+)?)\\s+Tf")
                         val requestedSize = fontCommand.find(appearance)?.groupValues?.get(1)?.toFloatOrNull()?.takeIf { it > 0 } ?: 10f
                         require(field.widgets.isNotEmpty())
                         val size = minOf(requestedSize, field.widgets.minOf { (it.rectangle.height - 1f) / 1.15f } - .1f)
-                        if (size < 8f) throw ApplicationDocumentException("APPLICATION_DOCUMENT_OVERFLOW", "입력란에 답변 전체가 들어가지 않습니다. 답변을 확인해 주세요.")
+                        if (size < 8f) {
+                            overflowed(placement, 0, "입력란에 답변 전체가 들어가지 않습니다. 답변을 확인해 주세요.")
+                            return@forEachIndexed
+                        }
+                        val capacity = field.widgets.mapNotNull { widget ->
+                            pdfOverflowCapacity(font, value, widget.rectangle.width - 4, widget.rectangle.height - 1, size, 1.15f)
+                        }.minOrNull()
+                        if (capacity != null) {
+                            overflowed(placement, capacity, "입력란에 답변 전체가 들어가지 않습니다. 문안을 확인해 주세요.")
+                            return@forEachIndexed
+                        }
                         field.defaultAppearance = if (fontCommand.containsMatchIn(appearance)) fontCommand.replace(appearance, "/GovBizKorean $size Tf") else "/GovBizKorean $size Tf 0 g"
-                        field.widgets.forEach { widget -> ensurePdfFits(font, value, widget.rectangle.width - 4, widget.rectangle.height - 1, size, 1.15f) }
                         field.value = value
                     }
                     is org.apache.pdfbox.pdmodel.interactive.form.PDChoice -> { field.setValue(value) }
@@ -731,15 +778,18 @@ class ApplicationDocumentEditor {
             area.addRegion("input", java.awt.geom.Rectangle2D.Float(box.x * displayWidth, box.y * displayHeight, box.width * displayWidth, box.height * displayHeight))
             area.extractRegions(page)
             if (area.getTextForRegion("input").isNotBlank()) throw ApplicationDocumentException("APPLICATION_DOCUMENT_MAPPING_FAILED", "PDF 입력 영역에 기존 문구가 남아 있어 작성을 중단했습니다.")
+            val value = byId.getValue(placement.factId).value
+            val width = (if (rotation == 90 || rotation == 270) rect.height else rect.width) - 4
+            val height = (if (rotation == 90 || rotation == 270) rect.width else rect.height) - 4
+            // Answers that would be clipped even at the minimum readable size are not written.
+            pdfOverflowCapacity(font, value, width, height)?.let { capacity ->
+                overflowed(placement, capacity, "입력란에 답변 전체가 들어가지 않습니다. 문안을 확인해 주세요.")
+                return@forEachIndexed
+            }
             val field = PDTextField(form)
             field.partialName = "govbiz_${i}_${java.util.UUID.randomUUID()}"
             field.alternateFieldName = byId.getValue(placement.factId).label
             field.isMultiline = true
-            val value = byId.getValue(placement.factId).value
-            val width = (if (rotation == 90 || rotation == 270) rect.height else rect.width) - 4
-            val height = (if (rotation == 90 || rotation == 270) rect.width else rect.height) - 4
-            // Reject answers that would be clipped even at the minimum readable size.
-            ensurePdfFits(font, value, width, height)
             field.defaultAppearance = "/GovBizKorean 8 Tf 0 g"
             field.widgets[0].apply {
                 rectangle = rect; this.page = page; isPrinted = true
@@ -816,10 +866,13 @@ class ApplicationDocumentEditor {
         throw ApplicationDocumentException("APPLICATION_DOCUMENT_UNRESOLVED_OPTION", "선택값과 원본 PDF 입력란의 선택지를 확인할 수 없습니다.")
     }
 
-    private fun ensurePdfFits(font: PDType0Font, value: String, width: Float, height: Float,
-                              size: Float = 8f, lineHeight: Float = 1.25f) {
+    /** 답이 칸에 다 들어가면 null, 아니면 그 칸에 들어가는 대략의 글자 수입니다(한글 한 글자를 글자 크기만큼의 폭으로 봅니다). */
+    private fun pdfOverflowCapacity(font: PDType0Font, value: String, width: Float, height: Float,
+                                    size: Float = 8f, lineHeight: Float = 1.25f): Int? {
+        if (width <= size) return 0
         val lines = value.lines().sumOf { line -> maxOf(1, kotlin.math.ceil(font.getStringWidth(line) / 1000 * size / width).toInt()) }
-        if (width <= size || height < lines * size * lineHeight) throw ApplicationDocumentException("APPLICATION_DOCUMENT_OVERFLOW", "입력란에 답변 전체가 들어가지 않습니다. 문안을 확인해 주세요.")
+        if (height >= lines * size * lineHeight) return null
+        return (height / (size * lineHeight)).toInt() * (width / size).toInt()
     }
 
     private fun fail(message: String): Nothing = throw ApplicationDocumentException("APPLICATION_DOCUMENT_UNSUPPORTED", message)
@@ -830,5 +883,9 @@ class ApplicationDocumentEditor {
             error.javaClass.name, error.message?.take(300), origin)
         throw ApplicationDocumentException("APPLICATION_DOCUMENT_UNSUPPORTED", "원본의 구조 또는 편집 제한으로 문서를 생성하지 못했습니다. 원본 파일을 확인해 주세요.", error)
     }
-    private companion object { const val MAX_BYTES = 32 * 1024 * 1024 }
+    private companion object {
+        const val MAX_BYTES = 32 * 1024 * 1024
+        /** 인쇄된 선택지에 쓰는 표시: □→■, [ ]→√, ( )→○ */
+        val CHOICE_MARKS = setOf("■", "√", "○")
+    }
 }

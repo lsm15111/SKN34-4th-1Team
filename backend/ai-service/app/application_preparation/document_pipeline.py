@@ -1,6 +1,5 @@
 import base64
 import logging
-import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -9,8 +8,10 @@ from pydantic import ValidationError
 from app.application_preparation.document_adapters import HwpxDocumentAdapter, PdfDocumentAdapter, HwpDocumentAdapter, assist_with_kordoc
 from app.application_preparation.docx_adapter import DocxDocumentAdapter
 from app.application_preparation.xlsx_adapter import XlsxDocumentAdapter
+from app.application_preparation.answer_slots import answer_slots
+from app.application_preparation.document import DocumentFact
 from app.application_preparation.document_contract import (
-    CONTRACT, DocumentAnalysisStage, DocumentError, DocumentMap, EditOperation, GenerateDocumentRequest, MapDocumentRequest, NativeTarget, PIPELINE_VERSION, PlanSelection, digest, validate_plan, validate_mapping, mapping_label_key, mapping_label_matches,
+    CONTRACT, DocumentAnalysisStage, DocumentError, DocumentMap, EditOperation, GenerateDocumentRequest, MapDocumentRequest, NativeTarget, PIPELINE_VERSION, PlanSelection, SkippedFact, digest, validate_plan, validate_mapping, mapping_label_key, mapping_label_matches,
 )
 from app.application_preparation.hwpx_form_analysis import annotate_semantic_reading_order
 
@@ -20,33 +21,33 @@ logger = logging.getLogger(__name__)
 """Formats whose write plan is derived from the saved bindings instead of a second model call.
 PDF keeps its own paths: AcroForm fields are already deterministic, and flat PDF needs the model for example-text deletion."""
 DETERMINISTIC_PLAN_FORMATS = {"hwp", "hwpx", "docx", "xlsx"}
-# A printed blank inside a label paragraph: "기업명: ____", "성명 (      )", "[ ]". The first one is the input slot.
-BLANK_MARKER = re.compile(r"_{2,}|＿{2,}|\(\s*\)|（\s*）|\[\s*\]|［\s*］")
 
 
-def _text_operation(target: NativeTarget, fact_id: str) -> EditOperation:
-    """One answer into one text target: fill an empty slot, replace a printed blank, append after a label, or replace an example."""
+def _text_operations(target: NativeTarget, fact: DocumentFact) -> list[EditOperation] | SkippedFact:
+    """One answer into one text target: an empty target takes the answer; otherwise the slot rules write only into the
+    printed blank, choice or date parts and keep the rest. A target whose blank cannot be decided is skipped."""
     text = target.currentText
-    common = {"targetId": target.targetId, "expectedText": text, "valueRef": fact_id, "box": None}
+    common = {"targetId": target.targetId, "expectedText": text, "valueRef": fact.id, "box": None}
     if not text.strip():
-        return EditOperation(operation="input", start=0, end=0, reason="빈 입력칸에 저장된 답변을 입력", **common)
-    marker = BLANK_MARKER.search(text)
-    if marker:
-        return EditOperation(operation="replace_range", start=marker.start(), end=marker.end(), reason="빈칸 표시를 저장된 답변으로 교체", **common)
-    if text.rstrip().endswith((":", "：")):
-        return EditOperation(operation="replace_range", start=len(text), end=len(text), reason="라벨 뒤에 저장된 답변을 삽입", **common)
-    return EditOperation(operation="replace_range", start=0, end=len(text), reason="예시 문구를 저장된 답변으로 교체", **common)
+        return [EditOperation(operation="input", start=0, end=0, reason="빈 입력칸에 저장된 답변을 입력", **common)]
+    slots = answer_slots(text, fact.value, fact.label)
+    if isinstance(slots, str):
+        return SkippedFact(factId=fact.id, targetId=target.targetId, reason=slots)
+    return [EditOperation(operation="replace_range", start=slot.start, end=slot.end, reason=slot.reason,
+                          literal=None if slot.text == fact.value else slot.text, **common) for slot in slots]
 
 
-def deterministic_plan(request: GenerateDocumentRequest, document: DocumentMap) -> tuple[PlanSelection, list[str]]:
+def deterministic_plan(request: GenerateDocumentRequest, document: DocumentMap) -> tuple[PlanSelection, list[str], list[SkippedFact]]:
     """Derive the write plan from the saved bindings without asking the model.
 
     Every provided fact already has a verified native target from the mapping stage, so the only decision left is the
     operation and text range on that target. Those follow fixed rules per target kind. Facts whose target cannot be
     decided by rule (several answers bound to one text target) are returned as deferred so the caller can ask the model
-    for just those. validate_plan still checks the merged result against the saved bindings and scope.
+    for just those. Facts whose printed slot cannot take the answer are returned as skipped. validate_plan still checks
+    the merged result against the saved bindings and scope.
     """
     facts = {fact.id: fact.value for fact in request.facts}
+    fact_by_id = {fact.id: fact for fact in request.facts}
     targets = {target.targetId: target for target in document.targets}
     by_target: dict[str, list[str]] = {}
     for binding in request.bindings:
@@ -54,6 +55,7 @@ def deterministic_plan(request: GenerateDocumentRequest, document: DocumentMap) 
             by_target.setdefault(binding.targetId, []).append(binding.factId)
     operations: list[EditOperation] = []
     deferred: list[str] = []
+    skipped: dict[str, SkippedFact] = {}
     for target_id, fact_ids in by_target.items():
         target = targets.get(target_id)
         if target is None:
@@ -70,10 +72,16 @@ def deterministic_plan(request: GenerateDocumentRequest, document: DocumentMap) 
             operations.extend(EditOperation(targetId=target_id, operation="input", expectedText=text, start=0, end=0,
                                             valueRef=fact_id, box=None, reason="빈 셀에 저장된 답변을 입력") for fact_id in fact_ids)
         elif len(fact_ids) == 1:
-            operations.append(_text_operation(target, fact_ids[0]))
+            placed = _text_operations(target, fact_by_id[fact_ids[0]])
+            if isinstance(placed, SkippedFact):
+                skipped.setdefault(placed.factId, placed)
+            else:
+                operations.extend(placed)
         else:
             # Several answers share one paragraph ("대표자: ____ 연락처: ____"): the slot order needs the model.
             deferred.extend(fact_ids)
+    # A fact repeated in several fields is written everywhere or nowhere, so the document never disagrees with itself.
+    operations = [op for op in operations if op.valueRef not in skipped]
     scope = list(request.scopeTargetIds)
     if not scope:
         scope = list(dict.fromkeys(op.targetId for op in operations))
@@ -82,7 +90,7 @@ def deterministic_plan(request: GenerateDocumentRequest, document: DocumentMap) 
                 group = targets[op.targetId].nativeLocator.get("group") if targets[op.targetId].kind == "CHECKBOX" else None
                 if group:
                     scope.extend(t.targetId for t in document.targets if t.kind == "CHECKBOX" and t.nativeLocator.get("group") == group and t.targetId not in scope)
-    return PlanSelection(operations=operations, unresolvedTargets=[], scopeTargetIds=scope), deferred
+    return PlanSelection(operations=operations, unresolvedTargets=[], scopeTargetIds=scope), deferred, list(skipped.values())
 
 
 async def _plan_with_model(request: GenerateDocumentRequest, document: DocumentMap, agent) -> PlanSelection:
@@ -152,7 +160,10 @@ Repeated fields may have multiple official targets, but unrelated fields cannot 
 Use labels, surrounding table cells, section evidence and the selected form scope together; never guess a blank location.
 PDF_TEXT and PDF_PAGE are read-only evidence, never answer fields. Use existing PDF_FIELD or measured PDF_INPUT targets.
 All native input bindings have null box. Choose only an input region whose fieldLabels match the actual question meaning.
-Never put a whole table's answer into its first column or map a checkbox to a text paragraph.
+Never put a whole table's answer into its first column.
+A choice question goes to its native CHECKBOX, or to the text target whose printed options belong to it
+(□ 자가 □ 임차, [ ]예 [ ]아니오, 유( ) 무( )); the server marks the chosen option there. A printed date line
+(2026년    월    일) is the input of its date question. Never bind an unrelated question to a choice or date line.
 scopeTargetIds must include the native targets belonging to the selected form, including its unanswered example paragraphs,
 and must exclude other forms in the same attachment. Preserve ambiguous scope by returning an unmapped field.
 No user answer is known at this stage. A location recognition failure is not a missing business fact.
@@ -362,6 +373,7 @@ async def generate_document(request: GenerateDocumentRequest, agent) -> dict:
         path = Path(directory).resolve() / ("source." + request.format)
         path.write_bytes(source)
         document = await inspect_document(path, request)
+        skipped: list[SkippedFact] = []
         if request.format == "pdf" and request.bindings and all(
                 binding.targetId.startswith("pdf-field:") for binding in request.bindings):
             by_target = {target.targetId: target for target in document.targets}
@@ -377,7 +389,7 @@ async def generate_document(request: GenerateDocumentRequest, agent) -> dict:
         elif request.bindings and request.format in DETERMINISTIC_PLAN_FORMATS:
             # The mapping stage already fixed where each answer goes. Do not ask the model to choose again;
             # only slots it must arbitrate (several answers in one paragraph) go to the model, and only those.
-            selection, deferred = deterministic_plan(request, document)
+            selection, deferred, skipped = deterministic_plan(request, document)
             if deferred:
                 reduced = request.model_copy(update={
                     "facts": [fact for fact in request.facts if fact.id in deferred],
@@ -386,16 +398,20 @@ async def generate_document(request: GenerateDocumentRequest, agent) -> dict:
                 selection = PlanSelection(operations=[*selection.operations, *modelled.operations],
                                           unresolvedTargets=modelled.unresolvedTargets,
                                           scopeTargetIds=list(dict.fromkeys([*selection.scopeTargetIds, *modelled.scopeTargetIds])))
-            logger.info("document_plan_deterministic format=%s operations=%d deferred_facts=%d",
-                        request.format, len(selection.operations), len(deferred))
+            logger.info("document_plan_deterministic format=%s operations=%d deferred_facts=%d skipped_facts=%s",
+                        request.format, len(selection.operations), len(deferred), [item.reason for item in skipped])
         else:
             selection = await _plan_with_model(request, document, agent)
-        plan = validate_plan(request, document, selection)
+        facts = {f.id: f.value for f in request.facts}
+        if request.format == "hwpx" and selection.operations:
+            # Answers longer than their cell are left out (and listed) instead of failing the whole document.
+            selection, overflow = await HwpxDocumentAdapter().fit(path, document, selection, facts)
+            skipped = [*skipped, *overflow]
+        plan = validate_plan(request, document, selection, skipped)
         document.documentAnalysis.mapping = DocumentAnalysisStage(
             status="PASSED", targetCount=len(plan.scopeTargetIds), resultCount=len(plan.operations),
             note="WritePlan validated against native targets and saved bindings",
         )
-        facts = {f.id: f.value for f in request.facts}
         if request.format == "hwp":
             output, verification = HwpDocumentAdapter().stage(source, plan)
         elif request.format == "hwpx":
@@ -421,4 +437,5 @@ async def generate_document(request: GenerateDocumentRequest, agent) -> dict:
                 "answerRevision": request.answerRevision, "outputBase64": base64.b64encode(output).decode(), "outputSha256": digest(output),
                 "planHash": plan.planHash, "mapVersion": document.mapVersion, "engineVersion": document.engineVersion,
                 "verification": verification, "placements": verification.get("placements", []),
+                "skippedFacts": [item.model_dump() for item in plan.skippedFacts],
                 "documentMap": document.model_dump(), "writePlan": plan.model_dump()}

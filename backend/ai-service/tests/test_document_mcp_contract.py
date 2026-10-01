@@ -10,7 +10,7 @@ from mcp_types import CallToolResult
 
 from app.application_preparation.document_contract import (
     DocumentError, DocumentMap, EditOperation, GenerateDocumentRequest, NativeTarget,
-    PlanSelection, digest, edited_text, validate_plan,
+    PlanSelection, SkippedFact, digest, edited_text, validate_plan,
 )
 from app.application_preparation.document_mcp import DocumentMcpSession
 
@@ -367,7 +367,8 @@ def test_rejected_write_plan_logs_reason_without_answers(monkeypatch, caplog):
                                headers={"Authorization": "Bearer " + "t" * 32})
     assert response.status_code == 503
     assert response.json() == {"detail": {"code": "APPLICATION_DOCUMENT_MAPPING_FAILED"}}
-    assert "mode=generate" in caplog.text and "reason=UNRESOLVED_TARGETS" in caplog.text
+    # unresolvedTargets must name supplied facts; a target ID there is rejected, not silently skipped.
+    assert "mode=generate" in caplog.text and "reason=INVALID_SKIPPED_FACTS" in caplog.text
     assert req.facts[0].value not in caplog.text
 
 
@@ -1544,7 +1545,8 @@ def test_hwpx_fit_failure_stops_before_writing_a_file(monkeypatch, tmp_path):
     plan = WritePlan(sourceSha256=req.sourceSha256, mapVersion=doc.mapVersion, answerRevision=3, planHash="test",
         operations=[EditOperation(targetId=cell.targetId, operation="input", expectedText="", start=0, end=0,
                                   valueRef="company:name", box=None, reason="확인된 빈칸")], unresolvedTargets=[], scopeTargetIds=[cell.targetId])
-    session = SimpleNamespace(call=AsyncMock(return_value={"checked": 1, "warnings": [{"overflow": True}]}))
+    session = SimpleNamespace(call=AsyncMock(return_value={"checked": 1, "cells": {cell.targetId: {
+        "lines": 9, "allowedLines": 4, "overflow": True, "capacity": 40}}}))
     @asynccontextmanager
     async def open_session(*_args, **_kwargs):
         yield session
@@ -1554,9 +1556,101 @@ def test_hwpx_fit_failure_stops_before_writing_a_file(monkeypatch, tmp_path):
     with pytest.raises(DocumentError) as error:
         asyncio.run(adapter.apply(tmp_path / "source.hwpx", doc, plan, {"company:name": "매우 긴 답변"}))
     assert error.value.code == "APPLICATION_DOCUMENT_OVERFLOW"
-    assert session.call.await_args.args[0] == "analyze_formfit"
+    assert session.call.await_args.args == ("govbiz_hwpx_fit", {"path": str(tmp_path / "source.hwpx"), "values": {cell.targetId: "매우 긴 답변"}})
     assert session.call.await_count == 1
     assert not (tmp_path / "completed.hwpx").exists()
+
+
+def hwpx_fit_session(monkeypatch, verdicts):
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+    from app.application_preparation import document_adapters
+    session = SimpleNamespace(call=AsyncMock(return_value={"checked": len(verdicts), "cells": verdicts}))
+
+    @asynccontextmanager
+    async def open_session(*_args, **_kwargs):
+        yield session
+    monkeypatch.setattr(document_adapters, "document_session", open_session)
+    return session
+
+
+def test_hwpx_fit_leaves_out_only_answers_whose_cell_balloons(monkeypatch, tmp_path):
+    from app.application_preparation.document_adapters import HwpxDocumentAdapter
+    facts = {"company:name": "가상기업", "plan:summary": "긴 사업 개요 " * 30, "company:ceo": "홍길동"}
+    paragraphs = [NativeTarget(targetId=f"t1.r3.c2.p{i}", nativeLocator={"target": f"t1.r3.c2.p{i}", "parent": "t1.r3.c2"},
+                               kind="paragraph", currentText=text) for i, text in ((1, ""), (2, "※ 작성 요령"))]
+    targets = [target("t1.r1.c2"), target("t1.r2.c2"), target("t1.r3.c2", "\n※ 작성 요령"), *paragraphs, target("t1.r4.c2")]
+    doc = DocumentMap(sourceSha256=request().sourceSha256, format="hwpx", engineVersion="test", targets=targets)
+    selection = PlanSelection(operations=[
+        operation("t1.r1.c2"), operation("t1.r2.c2", valueRef="plan:summary"),
+        operation("t1.r3.c2.p1", valueRef="company:ceo"), operation("t1.r4.c2", valueRef="plan:summary")],
+        unresolvedTargets=[], scopeTargetIds=["t1.r1.c2", "t1.r2.c2", "t1.r3.c2.p1", "t1.r4.c2"])
+    session = hwpx_fit_session(monkeypatch, {
+        "t1.r1.c2": {"lines": 1, "allowedLines": 4, "overflow": False, "capacity": 40},
+        "t1.r2.c2": {"lines": 30, "allowedLines": 4, "overflow": True, "capacity": 40},
+        "t1.r3.c2": {"lines": 2, "allowedLines": None, "overflow": False, "capacity": None},
+        "t1.r4.c2": {"lines": 12, "allowedLines": None, "overflow": False, "capacity": None}})
+    kept, skipped = asyncio.run(HwpxDocumentAdapter().fit(tmp_path / "source.hwpx", doc, selection, facts))
+    values = session.call.await_args.args[1]["values"]
+    # A cell is measured with all of its paragraphs, edited and untouched.
+    assert values["t1.r3.c2"] == "홍길동\n※ 작성 요령"
+    assert [item.model_dump() for item in skipped] == [
+        {"factId": "plan:summary", "targetId": "t1.r2.c2", "reason": "OVERFLOW", "capacity": 40}]
+    # The overflowing answer is dropped from every field it was bound to; the other answers stay.
+    assert [(op.targetId, op.valueRef) for op in kept.operations] == [("t1.r1.c2", "company:name"), ("t1.r3.c2.p1", "company:ceo")]
+
+
+def test_skipped_answers_are_reported_and_the_rest_is_still_written():
+    req = request(facts=[{"id": "company:name", "label": "회사명", "value": "가상기업"},
+                         {"id": "plan:summary", "label": "사업 개요", "value": "긴 답변"}])
+    doc = DocumentMap(sourceSha256=req.sourceSha256, format="hwpx", engineVersion="test", targets=[target(), target("t2.r1.c1")])
+    plan = validate_plan(req, doc, PlanSelection(operations=[operation()], unresolvedTargets=[], scopeTargetIds=[target().targetId]),
+                         [SkippedFact(factId="plan:summary", targetId="t2.r1.c1", reason="OVERFLOW", capacity=40)])
+    assert [item.model_dump() for item in plan.skippedFacts] == [
+        {"factId": "plan:summary", "targetId": "t2.r1.c1", "reason": "OVERFLOW", "capacity": 40}]
+    assert plan.unresolvedTargets == []
+
+
+def test_model_unresolved_facts_become_skipped_instead_of_failing_the_document():
+    req = request(facts=[{"id": "company:name", "label": "회사명", "value": "가상기업"},
+                         {"id": "company:ceo", "label": "대표자", "value": "홍길동"}])
+    doc = DocumentMap(sourceSha256=req.sourceSha256, format="hwpx", engineVersion="test", targets=[target()])
+    plan = validate_plan(req, doc, PlanSelection(operations=[operation()], unresolvedTargets=["company:ceo"], scopeTargetIds=[target().targetId]))
+    assert [(item.factId, item.reason) for item in plan.skippedFacts] == [("company:ceo", "UNRESOLVED")]
+
+
+@pytest.mark.parametrize("reasons,code", [(["OVERFLOW"], "APPLICATION_DOCUMENT_OVERFLOW"),
+                                          (["OVERFLOW", "AMBIGUOUS_SLOT"], "APPLICATION_DOCUMENT_NO_WRITABLE_INPUT")])
+def test_a_document_with_no_answer_left_to_write_fails(reasons, code):
+    facts = [{"id": f"q:{i}", "label": f"문항{i}", "value": "답"} for i in range(len(reasons))]
+    req = request(facts=facts)
+    doc = DocumentMap(sourceSha256=req.sourceSha256, format="hwpx", engineVersion="test", targets=[target()])
+    with pytest.raises(DocumentError) as error:
+        validate_plan(req, doc, PlanSelection(operations=[], unresolvedTargets=[], scopeTargetIds=[]),
+                      [SkippedFact(factId=fact["id"], reason=reason) for fact, reason in zip(facts, reasons)])
+    assert error.value.code == code
+
+
+def test_a_skipped_answer_cannot_also_be_written():
+    req = request()
+    doc = DocumentMap(sourceSha256=req.sourceSha256, format="hwpx", engineVersion="test", targets=[target()])
+    with pytest.raises(DocumentError) as error:
+        validate_plan(req, doc, PlanSelection(operations=[operation()], unresolvedTargets=[], scopeTargetIds=[target().targetId]),
+                      [SkippedFact(factId="company:name", reason="OVERFLOW")])
+    assert error.value.reason == "SKIPPED_FACT_ALSO_PLANNED"
+
+
+def test_derived_text_is_accepted_only_where_the_slot_rules_produce_it():
+    req = request(facts=[{"id": "staff:count", "label": "상시종업원", "value": "12"}])
+    text = "상시종업원(   명)"
+    doc = DocumentMap(sourceSha256=req.sourceSha256, format="hwpx", engineVersion="test", targets=[target(text=text)])
+    derived = operation(operation="replace_range", expectedText=text, start=6, end=9, valueRef="staff:count", literal="12 ")
+    plan = validate_plan(req, doc, PlanSelection(operations=[derived], unresolvedTargets=[], scopeTargetIds=[target().targetId]))
+    assert edited_text(doc.targets[0], plan.operations, {"staff:count": "12"}) == "상시종업원(12 명)"
+    for tampered in (derived.model_copy(update={"literal": "1200 "}), derived.model_copy(update={"start": 0, "end": 11})):
+        with pytest.raises(DocumentError) as error:
+            validate_plan(req, doc, PlanSelection(operations=[tampered], unresolvedTargets=[], scopeTargetIds=[target().targetId]))
+        assert error.value.reason == "LITERAL_NOT_DERIVED"
 
 
 def test_hwp_mapping_answer_omits_scope_and_server_derives_it_from_bound_tables(monkeypatch):

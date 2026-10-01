@@ -121,6 +121,43 @@ def verify_edits(source_path: str, output_path: str, expected_targets: list[dict
         return {"verified": False, "reason": "CELL_TEXT_MISMATCH"}
     return {"verified": True, "counts": {"requested": len(expected_targets), "verified": len(expected_targets), "failed": 0}}
 
+CELL_MARGIN_X = 280  # left+right inner cell margin, as hangeul_core.formfit assumes
+CELL_MARGIN_Y = 282  # top+bottom inner cell margin (2 x 0.5 mm)
+
+
+def fit_cells(path: str, values: dict[str, str]) -> dict:
+    """Estimate the lines each filled cell needs once Hancom wraps it; flag only a gross row balloon.
+
+    Hancom grows a row to fit wrapped text, so a long answer is not an error by itself. Following python-hwpx
+    FormFit (calibrated on Hancom-saved forms), a cell overflows only when its text needs more than twice the
+    lines its authored height holds at the tightest pitch. Merged rows and cells without a usable height wrap
+    freely and never overflow here. capacity is the approximate number of full-width characters that fit.
+    """
+    from hangeul_core.analyze import analyze
+    from hangeul_core.formfit import font_height
+    from hangeul_core.owpml import HwpxPackage
+    from hwpx.form_fit.measure import (DEFAULT_SAFETY, GROSS_ROW_GROWTH_FACTOR, MIN_LINE_SPACING_RATIO,
+                                       MIN_LINE_WIDTH, MIN_ROW_GROWTH_LINES, TextStyle, estimate_lines)
+    cells = {cell.field_id: cell for cell in analyze(path).all_cells()}
+    header = HwpxPackage.open(path).read("Contents/header.xml").decode("utf-8")
+    result = {}
+    for target, text in values.items():
+        cell = cells.get(target)
+        if cell is None or not cell.width:
+            continue
+        em = font_height(header, cell.char_pr)
+        width = max(cell.width - CELL_MARGIN_X, MIN_LINE_WIDTH) * DEFAULT_SAFETY
+        lines = estimate_lines(text, width, em / 100, TextStyle(spacing=cell.char_spacing or 0))
+        allowed = None
+        inner = max((cell.height or 0) - CELL_MARGIN_Y, 0) * DEFAULT_SAFETY
+        if cell.row_span <= 1 and inner >= em * MIN_LINE_SPACING_RATIO:
+            budget = int(inner // (em * MIN_LINE_SPACING_RATIO))
+            allowed = max(int(budget * GROSS_ROW_GROWTH_FACTOR), budget + MIN_ROW_GROWTH_LINES - 1)
+        result[target] = {"lines": lines, "allowedLines": allowed, "overflow": allowed is not None and lines > allowed,
+                          "capacity": None if allowed is None else allowed * max(int(width // em), 1)}
+    return {"cells": result, "checked": len(result)}
+
+
 TAG = re.compile(r"<(/?)([A-Za-z][\w:.\-]*)([^>]*?)(/?)>")  # identical to the pinned engine's fill._TAG
 CELL_ADDRESS = re.compile(r'(\w+)="(-?\d+)"')
 # Source hash of the pinned engine's fill._find_cell_span; the index below replays its exact semantics.
@@ -265,6 +302,7 @@ def main():
     from hangeul_mcp.server import main as serve
     from hangeul_mcp.server import mcp
     mcp.tool(name="govbiz_verify_hwpx_edits")(verify_edits)
+    mcp.tool(name="govbiz_hwpx_fit")(fit_cells)
     serve()
 
 

@@ -80,6 +80,41 @@ class ApplicationHwpPlanTest {
         assertThrows(ApplicationDocumentException::class.java) { editor.applyHwpPlan(original, listOf(ApplicationDocumentFact("company", "분야", check.text)), plan(original, listOf(op), listOf(check.id)), binding, listOf(check.id)) }
     }
 
+    @Test fun writesDerivedChoiceMarksAndSplitDatesWhileKeepingPrintedText() {
+        val original = source("□ 자가 □ 임차 / 2026년    월    일")
+        val target = editor.inspect(original, "hwp").targets.single { it.text.startsWith("□ 자가") }
+        val facts = listOf(ApplicationDocumentFact("site", "사업장", "자가"), ApplicationDocumentFact("date", "신청일", "2026-10-01"))
+        val month = target.text.indexOf("년") + 1
+        val day = target.text.indexOf("월") + 1
+        val operations = listOf(
+            operation(target, 0, 1, fact = "site").copy(literal = "■"),
+            operation(target, month, month + 4, fact = "date").copy(literal = " 10"),
+            operation(target, day, day + 4, fact = "date").copy(literal = " 1"),
+        )
+        val bindings = listOf(ApplicationDocumentPlacement("site", target.id), ApplicationDocumentPlacement("date", target.id))
+        val result = editor.applyHwpPlan(original, facts, plan(original, operations, listOf(target.id)), bindings, listOf(target.id))
+        assertEquals("■ 자가 □ 임차 / 2026년 10월 1일", editor.inspect(result, "hwp").targets.single { it.id == target.id }.text)
+        // 답에 없는 문구는 파생 문구로 쓸 수 없습니다.
+        val invented = operations.toMutableList().also { it[1] = it[1].copy(literal = " 11") }
+        assertThrows(ApplicationDocumentException::class.java) { editor.applyHwpPlan(original, facts, plan(original, invented, listOf(target.id)), bindings, listOf(target.id)) }
+    }
+
+    @Test fun skippedAnswersAreLeftOutAndTheRestIsWritten() {
+        val original = source("기업명: ____")
+        val target = editor.inspect(original, "hwp").targets.single { it.text.startsWith("기업명:") }
+        val facts = listOf(ApplicationDocumentFact("company", "기업명", "새봄"), ApplicationDocumentFact("site", "사업장", "전세"))
+        val bindings = listOf(ApplicationDocumentPlacement("company", target.id), ApplicationDocumentPlacement("site", "s0-other"))
+        val op = operation(target, target.text.indexOf("____"), target.text.length)
+        val skipped = plan(original, listOf(op), listOf(target.id)).copy(skippedFacts = listOf(ApplicationDocumentSkippedFact("site", "s0-other", "SLOT_MISMATCH")))
+        val result = editor.applyHwpPlan(original, facts, skipped, bindings, listOf(target.id))
+        assertEquals("기업명: 새봄", editor.inspect(result, "hwp").targets.single { it.id == target.id }.text)
+        // 남긴 답이 아닌데 계획에 없으면 여전히 거절합니다.
+        assertThrows(ApplicationDocumentException::class.java) { editor.applyHwpPlan(original, facts, skipped.copy(skippedFacts = emptyList()), bindings, listOf(target.id)) }
+        assertThrows(ApplicationDocumentException::class.java) {
+            editor.applyHwpPlan(original, facts, skipped.copy(skippedFacts = listOf(ApplicationDocumentSkippedFact("site", reason = "UNKNOWN"))), bindings, listOf(target.id))
+        }
+    }
+
     @Test fun deletesOnlyTheSelectedExampleRangeWithoutRequiringBlueText() {
         val original = source("기업명: ____ / 예시: 테스트 / 필수")
         val target = editor.inspect(original, "hwp").targets.single { it.text.startsWith("기업명:") }

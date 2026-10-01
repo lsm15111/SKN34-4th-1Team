@@ -240,6 +240,20 @@ class ApplicationDocumentEditorTest {
     }
 
     @Test
+    fun leavesOutOnlyTheAnswerThatOverflowsItsPdfBoxAndReportsItsCapacity() {
+        val original = PDDocument().use { doc -> doc.addPage(PDPage()); ByteArrayOutputStream().also { doc.save(it) }.toByteArray() }
+        val answers = listOf(ApplicationDocumentFact("company:name", "기업명", "새봄"), ApplicationDocumentFact("plan:summary", "사업 개요", "긴 사업 개요 문장입니다. ".repeat(40)))
+        val placements = listOf(ApplicationDocumentPlacement("company:name", "page-0", ApplicationDocumentBox(.1f, .1f, .5f, .1f)),
+            ApplicationDocumentPlacement("plan:summary", "page-0", ApplicationDocumentBox(.1f, .5f, .3f, .03f)))
+        val (filled, overflow) = editor.fillPdfFitting(original, answers, placements)
+        assertEquals(setOf("plan:summary"), overflow.keys)
+        assertTrue(overflow.getValue("plan:summary") in 1 until answers[1].value.length)
+        Loader.loadPDF(filled).use { doc -> assertEquals(listOf("새봄"), doc.documentCatalog.acroForm.fields.map { it.valueAsString }) }
+        val error = assertThrows(ApplicationDocumentException::class.java) { editor.fillPdfFitting(original, answers.drop(1), placements.drop(1)) }
+        assertEquals("APPLICATION_DOCUMENT_OVERFLOW", error.code)
+    }
+
+    @Test
     fun fillsHwpAndReopensAsAnEditableHwpWithOriginalParagraphs() {
         val file = BlankFileMaker.make()
         val paragraph = file.bodyText.sectionList[0].addNewParagraph()
