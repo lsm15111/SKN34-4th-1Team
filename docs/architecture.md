@@ -76,6 +76,10 @@ Catalog는 별도 프로세스·DB로 네 제공처 수집, 정규화, 검색 �
 실제 질문을 읽고, 검증된 payload를 Client의 Mapper에서 내부 Source로 변환합니다. 고정 Manifest의
 결정적 review와 저장된 확정 Fact로 실제 질문 순서의 복사 안내를 만들며, MCP 외부 호출은 DB transaction 밖에서 수행합니다.
 다른 경로는 기존 Manifest 기반 안내를 유지합니다. 답변 입력과 제출은 공식 신청 화면에서 사용자가 직접 수행합니다.
+웹의 새 신청 문서 화면과 공고 상세는 공식 경로가 `GOOGLE_FORMS`인 공고를 양식 조회·입력칸 분석(유료 AI) 없이 구글 설문으로
+바로 보냅니다. 2026-10-01 접수 중 구글 설문 47건 중 공개 리더로 질문을 읽을 수 있던 설문은 10건뿐이었고(로그인 필요 27,
+여러 페이지 6, 구조 차이 3, 마감 1) 질문도 대부분 연락처·기업명 수준이라 설문에서 직접 작성하는 편이 맞기 때문입니다.
+이미 만든 신청 준비의 온라인 입력 안내와 확정 답변 TXT는 그대로 둡니다.
 K-Startup은 2026-10-01 실제 공고 응답 200건으로 신청방법 필드(`aply_mthd_onli_rcpt_istc` 온라인,
 `aply_mthd_eml_rcpt_istc` 이메일, `aply_mthd_vst_rcpt_istc` 방문, `aply_mthd_pssr_rcpt_istc` 우편,
 `aply_mthd_fax_rcpt_istc` 팩스, `aply_mthd_etc_istc` 기타)를 확인했습니다. 온라인 값이 https 주소 하나면 신청 URL로,
