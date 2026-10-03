@@ -181,6 +181,9 @@ ANSWERED는 비어 있지 않은 answer와 빈 updates, null 질문을 반환합
 `answer`는 결론을 첫 문장에 두는 최대 두 문장(UTF-16 300자 이내)이고, 근거 항목의 제한·준비 중·로그인 조건은
 둘째 문장 하나에 모읍니다. `clarificationQuestion`은 120자 이내 질문 하나이며 보기는 꼭 필요할 때만 넣습니다.
 인사·칭찬·마무리·면책 문구·과정 설명은 쓰지 않게 하고 AI 답변 안내는 화면이 따로 표시합니다.
+이 경로와 도구 에이전트 분류 단계의 모델 입력 JSON은 `schemaVersion`·`helpEntries`를 사용자 `message`·`history`·
+`session`·`context`보다 앞에 둡니다.
+OpenAI prompt cache는 앞부분이 같은 요청만 재사용하므로, 지시문 뒤의 고정 도움말까지 요청마다 같은 접두가 됩니다.
 Service는 의도별 필드 조합과 인용 id가 요청의 도움말 항목에 있는지 검증하고 위반이면 503으로 거절합니다.
 `HTTP API → AssistantService → AssistantAgent → OpenAI → Response`로 한 번의 typed structured 호출만 실행하며
 C02와 같은 모델·HTTP 25초/전체 실행 30초 제한, 최대 출력 1,200 tokens, store=false, tracing 비활성을 씁니다.

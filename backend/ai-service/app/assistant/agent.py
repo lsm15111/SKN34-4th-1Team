@@ -19,6 +19,16 @@ from app.assistant.prompt import ASSISTANT_INSTRUCTIONS
 logger = logging.getLogger(__name__)
 
 
+def model_input(request: AssistantAnswerRequest) -> str:
+    """모델에 보내는 요청 JSON. 요청마다 같은 도움말을 사용자 말·대화·화면 정보보다 앞에 둔다.
+
+    OpenAI prompt cache는 앞부분이 같은 요청만 재사용하므로, 지시문 뒤의 고정 도움말까지 같은 접두가 되게 한다.
+    """
+    payload = request.model_dump(by_alias=True)
+    static = {key: payload.pop(key) for key in ("schemaVersion", "helpEntries")}
+    return json.dumps(static | payload, ensure_ascii=False)
+
+
 class AssistantAgent:
     """한 번의 structured LLM 호출로 도우미 자유 질문의 의도를 고르고 그 의도의 필드를 채운다."""
 
@@ -52,8 +62,7 @@ class AssistantAgent:
         try:
             async with asyncio.timeout(self._run_timeout_seconds):
                 result = await Runner.run(
-                    self._agent, json.dumps(request.model_dump(by_alias=True), ensure_ascii=False),
-                    max_turns=1, run_config=self._run_config,
+                    self._agent, model_input(request), max_turns=1, run_config=self._run_config,
                 )
             model_finished_at = perf_counter()
             usage = getattr(getattr(result, "context_wrapper", None), "usage", None)

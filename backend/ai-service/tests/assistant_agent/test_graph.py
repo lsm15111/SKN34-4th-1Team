@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 
 import pytest
@@ -124,6 +125,24 @@ async def test_intents_without_tools_finish_after_one_classification_call(reques
     payload = json.loads(harness.classify_model.calls[0][1].content)
     assert payload["schemaVersion"] == SCHEMA_VERSION and payload["step"] == "classify"
     assert [entry["id"] for entry in payload["helpEntries"]] == ["search-score-meaning", "partner-write-requires-company"]
+
+
+@pytest.mark.anyio
+async def test_classification_prompt_keeps_static_help_entries_before_the_user_message(request_data, empty_classification):
+    # OpenAI prompt cache reuses only an identical prefix, so the help entries must precede the user's words.
+    calls = []
+    for message in ("점수가 무슨 뜻이야?", "모집글은 왜 못 써요?"):
+        harness = Harness(classify=[{**empty_classification, "intent": "OUT_OF_SCOPE", "answer": "그 일은 여기서 할 수 없어요."}], agent=[])
+        await harness.run({**request_data, "message": message})
+        harness.assert_complete()
+        calls.append(harness.classify_model.calls[0])
+    (first_system, first_user), (second_system, second_user) = calls
+    assert first_system.content == second_system.content
+    assert first_user.content != second_user.content
+    prefix = os.path.commonprefix([first_user.content, second_user.content])
+    help_entries = AssistantAgentRequest.model_validate(request_data).model_dump(by_alias=True)["helpEntries"]
+    assert json.dumps(help_entries, ensure_ascii=False) in prefix
+    assert first_user.content.index('"helpEntries"') < first_user.content.index('"message"')
 
 
 @pytest.mark.anyio

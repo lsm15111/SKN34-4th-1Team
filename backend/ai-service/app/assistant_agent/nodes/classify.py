@@ -13,9 +13,7 @@ async def classify(state: AgentState, *, model: BaseChatModel) -> dict:
     request = state["request"]
     messages = [
         SystemMessage(CLASSIFY_INSTRUCTIONS),
-        HumanMessage(request_payload(
-            request, "classify", helpEntries=[entry.model_dump(by_alias=True) for entry in request.help_entries],
-        )),
+        HumanMessage(request_payload(request, "classify", help_entries=True)),
     ]
     parsed, counts = await structured_call(model, AssistantClassification, messages)
     if parsed is None:

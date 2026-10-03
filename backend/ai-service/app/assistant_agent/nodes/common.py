@@ -40,15 +40,19 @@ async def structured_call(
     return parsed, counts
 
 
-def request_payload(request: AssistantAgentRequest, step: str, **extra: Any) -> str:
-    """모델에 보내는 사용자 메시지. principal(계정 번호·토큰)은 절대 넣지 않는다."""
-    payload: dict[str, Any] = {
-        "schemaVersion": SCHEMA_VERSION,
-        "step": step,
+def request_payload(request: AssistantAgentRequest, step: str, *, help_entries: bool = False, **extra: Any) -> str:
+    """모델에 보내는 사용자 메시지. principal(계정 번호·토큰)은 절대 넣지 않는다.
+
+    OpenAI prompt cache는 앞부분이 같은 요청만 재사용하므로, 요청마다 같은 도움말은 사용자 말·대화보다 앞에 둔다.
+    """
+    payload: dict[str, Any] = {"schemaVersion": SCHEMA_VERSION, "step": step}
+    if help_entries:
+        payload["helpEntries"] = [entry.model_dump(by_alias=True) for entry in request.help_entries]
+    payload.update({
         "message": request.message,
         "history": [message.model_dump(by_alias=True) for message in request.history],
         "session": request.session.model_dump(by_alias=True),
         "context": request.context.model_dump(by_alias=True),
-    }
+    })
     payload.update(extra)
     return json.dumps(payload, ensure_ascii=False)
