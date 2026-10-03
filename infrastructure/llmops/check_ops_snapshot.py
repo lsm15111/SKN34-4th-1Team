@@ -154,7 +154,25 @@ def main():
             deadline = time.monotonic() + 90
             while True:
                 try:
-                    snapshot.sql(mysql, "snapshot_test", "SELECT 1;")
+                    # The image's init server answers on the socket with networking off and then
+                    # restarts; wait for the final TCP listener that the Ops container connects to.
+                    snapshot.run(
+                        [
+                            "docker",
+                            "exec",
+                            mysql,
+                            *snapshot.AUTH,
+                            "mysql",
+                            "--protocol=TCP",
+                            "-h",
+                            "127.0.0.1",
+                            "-u",
+                            "root",
+                            "-e",
+                            "SELECT 1",
+                            "snapshot_test",
+                        ]
+                    )
                     break
                 except ValueError:
                     if time.monotonic() > deadline:
