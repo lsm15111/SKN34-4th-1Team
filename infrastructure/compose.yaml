@@ -92,6 +92,10 @@ services:
       context: ../backend/ai-service
       dockerfile: Dockerfile
     init: true
+    # 색인 API는 Qdrant가 없으면 503을 돌려주므로 운영 Compose와 같이 Qdrant가 뜬 뒤 시작한다.
+    depends_on:
+      qdrant:
+        condition: service_started
     environment:
       DOCUMENT_INTERNAL_TOKEN: ${DOCUMENT_INTERNAL_TOKEN:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
