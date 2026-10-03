@@ -102,7 +102,8 @@ def run_session(config):
             raise httpx2.ReadTimeout("synthetic response loss", request=request)
         # The answer contract quotes the cited chunk verbatim; reuse the first sent chunk text.
         user = next(item["content"] for item in body["input"] if item.get("role") == "user")
-        first_chunk = json.loads(user if isinstance(user, str) else user[0]["text"])["chunks"][0]["text"]
+        sent = json.loads(user if isinstance(user, str) else user[0]["text"])
+        first_chunk = sent["chunks"][0]["text"]
         return httpx2.Response(
             200,
             json={

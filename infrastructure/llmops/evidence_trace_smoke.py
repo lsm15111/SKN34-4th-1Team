@@ -1,5 +1,6 @@
 """합성 Core 부모 아래 근거 색인·검색·답변의 Langfuse 저장·재조회를 검증한다."""
 
+import json
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -35,7 +36,10 @@ async def evidence_trace_examples(tracing):
         embedding_timeout_seconds=10,
         tracing=tracing,
     )
-    model = ResponsesChatStub([[response_message(valid_selection().model_dump_json(by_alias=True))]] * 2)
+    # 답변 계약은 인용 청크의 원문 구절을 요구하므로 아래 합성 청크 text의 일부를 인용한다.
+    selection = valid_selection().model_dump(by_alias=True)
+    selection["citations"] = [{"chunkIndex": 0, "quote": "접수 원문"}]
+    model = ResponsesChatStub([[response_message(json.dumps(selection, ensure_ascii=False))]] * 2)
     agent = SupportProgramEvidenceAnswerAgent(
         model=model.model,
         model_timeout_seconds=10,
