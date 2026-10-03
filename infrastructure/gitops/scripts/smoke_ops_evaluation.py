@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import runpy
 import secrets
 import socket
@@ -21,7 +22,6 @@ import smoke_ops_artifacts
 import smoke_ops_backup
 import smoke_ops_replacement
 import smoke_ops_sync_recovery
-import smoke_ops_volumes
 import yaml
 from check_msa import NAMESPACE, REPOSITORY_ROOT, ROOT
 from ops_migration import run_migration
@@ -181,6 +181,54 @@ def free_evaluation(output, password, web_env, *, seed=False, rag_replay=False):
         assert result["rag_replay"]["measurement_kind"] == "synthetic-contract-check"
         assert result["rag_replay"]["baseline_eligible"] is False
         assert result["rag_replay"]["live_execution_performed"] is False
+    return result
+
+
+def browser_login(password, expected, web_env):
+    """Use only the Vite and forwards owned by this disposable smoke."""
+    result = json.loads(
+        execute(
+            ["node", Path(__file__).with_name("ops_browser_login.mjs")],
+            data=json.dumps(
+                {
+                    "origin": BASE,
+                    "email": "admin@govbiz.local",
+                    "password": password,
+                    "expected": expected,
+                }
+            ),
+            env=web_env,
+            timeout=180,
+        )
+    )
+    version = result.get("browser_version") if isinstance(result, dict) else None
+    if not isinstance(version, str) or not re.fullmatch(
+        r"[0-9]+(?:\.[0-9]+){3}", version
+    ):
+        raise ValueError("Missing Kubernetes browser version evidence")
+    count = result.get("listed_run_count")
+    if type(count) is not int or not len(expected) <= count <= 1000:
+        raise ValueError("Incomplete Kubernetes browser pagination evidence")
+    required = {
+        "status": "PASS",
+        "response_source": "core_ops_http",
+        "browser_version": version,
+        "password_login_verified": True,
+        "httponly_cookie_received": True,
+        "core_ops_identity_verified": True,
+        "listed_run_count": count,
+        "pages_verified": (count + 24) // 25,
+        "pagination_complete": True,
+        "reload_verified": True,
+        "details_verified": len(expected),
+        "reports_verified": len(expected),
+        "logout_verified": True,
+        "unauthorized_after_logout": True,
+        "revoked_session_rejected": True,
+        "browser_closed": True,
+    }
+    if json.dumps(result, sort_keys=True) != json.dumps(required, sort_keys=True):
+        raise ValueError("Incomplete Kubernetes browser login evidence")
     return result
 
 
@@ -404,6 +452,9 @@ def verify(state, settings, compose, compose_env, ops_image, kind, helm, report)
             for key, value in os.environ.items()
             if not key.startswith("VITE_")
         }
+        web_env.update(
+            K8S_CORE_PORT="18080", K8S_OPS_PORT="18001", K8S_DEV_LOGIN="false"
+        )
         with tempfile.TemporaryFile(mode="w+t") as log, fork_web.forwards(nk):
             web = subprocess.Popen(
                 [
@@ -455,6 +506,27 @@ def verify(state, settings, compose, compose_env, ops_image, kind, helm, report)
                     nk, state / "rag-evaluation.json", password, web_env
                 )
                 report["rag_replay"]["initial"] = rag_before
+                report["evaluation_phase"] = "kubernetes_browser_login"
+                report["browser_login"] = browser_login(
+                    password,
+                    {
+                        item["request_id"]: {
+                            "execution_spec_sha256": item["execution_spec_sha256"],
+                            "report_sha256": report_hash,
+                        }
+                        for item, report_hash in (
+                            (result, original_report),
+                            (rag_before["evaluation"], rag_before["report_sha256"]),
+                        )
+                    },
+                    web_env,
+                )
+                if (
+                    database_record(nk, result["request_id"]) != before
+                    or database_record(nk, rag_before["evaluation"]["request_id"])
+                    != rag_before["kubernetes_database"]
+                ):
+                    raise ValueError("Browser verification changed evaluation records")
             finally:
                 web.terminate()
                 try:
@@ -638,23 +710,28 @@ def verify(state, settings, compose, compose_env, ops_image, kind, helm, report)
         report["backup_admission_pause"] = set_admission(
             nk, "pause", report["admission_resume"]["version"]
         )
-        smoke_ops_backup.verify(state, settings, report)
-        report["evaluation_phase"] = "volume_restore_rehearsal"
-        expected_restores = {
-            result["request_id"]: {
-                "flow_id": result["prefect_flow_run_id"],
-                "report_sha256": original_report,
-            },
-            **{
-                item["evaluation"]["request_id"]: {
-                    "flow_id": item["evaluation"]["prefect_flow_run_id"],
-                    "report_sha256": item["report_sha256"],
+        runner_image_id = smoke_ops_backup.verify(
+            state,
+            settings,
+            report,
+            ops_image=ops_image,
+            core_image=core_image,
+            core_password=password,
+            compose=compose,
+            compose_env=compose_env,
+            expected={
+                item["request_id"]: {
+                    "flow_id": item["prefect_flow_run_id"],
+                    "execution_spec_sha256": item["execution_spec_sha256"],
+                    "report_sha256": report_hash,
                 }
-                for item in (rag_before, rag_after)
+                for item, report_hash in (
+                    (result, original_report),
+                    (rag_before["evaluation"], rag_before["report_sha256"]),
+                    (rag_after["evaluation"], rag_after["report_sha256"]),
+                )
             },
-        }
-        runner_image_id = smoke_ops_volumes.verify(
-            state, settings, compose, compose_env, expected_restores, report
+            release_sha256=before["execution_release_sha256"],
         )
         report.update(
             evaluation_status="PASS",

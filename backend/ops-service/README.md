@@ -321,6 +321,91 @@ Ops 응답의 `model_api_calls`는 새 응답 생성 단계의 `capture.modelApi
 완료 판정에는 기존 보고서 검증 외에 새 캡처 해시·모델·자료·사례·예산 확인이 필요합니다.
 `trace_links`는 사례별 Langfuse 추적/점수 링크이며 과거 캡처는 기존 점수 목록 링크를 사용합니다.
 
+### 실행 전 설정·예산 점검
+
+React에서 **새 응답 생성 → 실행 설정·예산 점검**을 누르면
+`GET /api/v1/ops/evaluations/live-readiness?dataset_id=...&execution_profile=...`로
+선택한 자료의 실행 계획과 현재 장부를 읽습니다. `execution_profile`은 session 응답의
+`execution_profiles.live`이며 서버 설정이 바뀌었으면 `409`로 새로고침을 요청합니다.
+
+- 고정 근거는 답변 작업, 고정 원문 RAG는 문서·질문 임베딩과 답변 작업을 합산합니다.
+  접수 때 사용하는 `profile`·`operation_plan`을 재사용하며 임베딩 출력은 0으로 계산합니다.
+- `required`는 최대 예약량, `remaining`은 조회 시점의 잔여 호출·입력·출력 토큰입니다.
+  금액 견적이나 실제 사용량이 아닙니다. 한도 미설정·장부 불일치 시 잔여량은 `null`이며
+  입력 미확인도 0으로 채우지 않습니다.
+- live/RAG 활성화, 새 접수 중지, 실행기 예산 인증 설정, 한도와 장부 일치·잔여량을 확인합니다.
+  누적 입력 한도 미설정은 기존 정책대로 고정 근거에서 주의, RAG에서 차단입니다.
+- `state=checked`는 이 점검 범위에서 차단 사유가 없다는 뜻입니다. `blockers`와 `warnings`를
+  구분하며 API 키 유효성·실행기 가동·선택한 비교 기준·자료 승인·품질 합격은 확인하지 않습니다.
+- 흐름은 `React → Core 관리자 세션 확인 → Django 실행 계획·MySQL 장부 조회 → React`입니다.
+  GET은 접수 제어 행도 새로 만들지 않으며 모델·Prefect 호출, 예약·한도·감사 기록 저장이 없습니다.
+  실제 접수 시 기존 승인·명세·기준·예산 검증을 다시 수행합니다.
+
+관련 MySQL 테스트는 `apps.evaluations.test_live_readiness`입니다. API와 Web을 함께 반영해야 하며
+이번 기능에 추가 의존성이나 migration은 없습니다.
+
+## 일별 호출·입력·출력 토큰 한도
+
+`0026_daily_evaluation_budget`부터 선택적인 **서울 시간(Asia/Seoul) 00:00~다음 날 00:00**
+한도를 지원합니다. 정책이 없거나 해제돼 있으면 누적 한도만 적용합니다. migration은 정책이나
+기본 한도를 만들지 않으며, 누적 사용량을 초기화하지 않습니다.
+
+호출 흐름은 `관리자 접수 → 누적 예산 행 잠금 → 누적·일별 한도 검사 → 예약 → Prefect →
+claim/호출별 authorize의 예약 날짜 검사 → 정산·종료`입니다. 고정 근거와 Ops RAG의 임베딩·답변
+작업에 같은 검사를 적용합니다. 동일 접수 재전송은 기존 예약을 반환하지만 일별 정책이 적용 중이면
+전날 예약의 새 claim/authorize는 거절합니다. 기존 호출의 정산·예약 종료·취소·증거 보정은 허용합니다.
+
+일별 할당량은 **오늘 접수한 예약의 할당량 + 이전 날짜에서 남은 미확정 호출·미승인 예약·반환 대기량**입니다.
+입력·출력 상한을 알 수 없거나 누락·불일치 장부가 있으면 잔여량은 `null`이고 신규 예약을 차단합니다.
+확정된 이전 날짜 사용량은 누적 장부에 유지하며 오늘 한도에 다시 합산하지 않습니다.
+과거 저장 응답 반영분은 반영 날짜가 아닌 원래 실행의 접수 날짜로 집계합니다.
+늦은 정산·서명된 사용량 보정·취소 후 실제로 해제된 몫만 이월량에서 빠집니다.
+
+일별 정책과 신규 예약은 같은 MySQL 누적 예산 행을 잠그므로 여러 API/실행기의 동시 접수도 같은
+한도를 검사합니다. 일별 카운터 초기화 작업이나 별도 스케줄러는 없습니다.
+이 정책의 날짜는 **예약 접수일**이며, 자정 직전 승인 후 자정을 지나 외부 API에 전송될 수 있으므로
+제공자의 실제 청구일 기준 지출 상한으로 해석하지 않습니다. 월별·금액 한도는 지원하지 않습니다.
+
+실제 적용 값은 운영자가 별도로 승인한 뒤 다음 명령으로 설정합니다. 누적 한도도 충분해야 합니다.
+
+```bash
+uv run --locked python manage.py set_daily_evaluation_budget \
+  --calls "$APPROVED_DAILY_CALL_LIMIT" --input-tokens "$APPROVED_DAILY_INPUT_LIMIT" \
+  --output-tokens "$APPROVED_DAILY_OUTPUT_LIMIT" \
+  --actor "$BUDGET_OPERATOR" --reason "$BUDGET_CHANGE_REASON" --request-id "$BUDGET_CHANGE_REQUEST_ID"
+
+# 일별 제한만 해제. 누적 한도·기존 예약·감사 이력은 유지합니다.
+uv run --locked python manage.py set_daily_evaluation_budget --disable \
+  --actor "$BUDGET_OPERATOR" --reason "$BUDGET_CHANGE_REASON" --request-id "$BUDGET_CHANGE_REQUEST_ID"
+```
+
+적용에는 호출·입력·출력 세 한도가 모두 필요하며, 현재 일별 할당량보다 낮은 값은 거절합니다.
+동일 UUID·내용의 재전송은 기존 기록을 반환하고 나중 정책을 되돌리지 않습니다. 새 변경은 새 UUID를
+사용합니다. 변경 전후 정책·변경자·사유를 저장하며 CLI 변경자는 운영자가 입력한 식별자입니다.
+이 명령은 새 모델 실행·정기 실행을 활성화하지 않습니다.
+
+`GET /api/v1/ops/budget`, `/budget/reservations`, `/evaluations/live-readiness`는 `daily`에
+기간·상태(`disabled/enforced/unknown/exceeded`)·한도·오늘 몫·이월·잔여·최근 정책 이력을 반환합니다.
+React 예산 화면과 실행 전 점검에서 이를 조회하며 일별 부족도 접수 차단 사유로 표시합니다.
+`0027_admin_daily_budget_writes`부터 관리자 웹에서도 **일별 한도 설정 → 일별 변경 내용 확인 →
+확인한 일별 정책 저장**으로 설정·변경·해제할 수 있습니다. 호출 흐름은
+`React 확인 화면 → Core 관리자 세션·CSRF 검증 → 일별 정책 Service → 누적 예산 행 잠금 → 정책·감사 저장`입니다.
+누적 예산이 먼저 설정되어 있어야 하며 일별 한도·기본 정책을 자동 생성하지 않습니다.
+
+`POST /api/v1/ops/budget/daily-limits`는 `request_id`, `daily.limits_revision`을 담은
+`expected_revision`, `disable`, `calls`, `input_tokens`, `output_tokens`, `reason`을 받습니다.
+적용은 `disable=false`와 세 정수 한도를, 해제는 `disable=true`와 세 한도 모두 `null`을 전달합니다.
+서버가 인증된 변경자를 기록하므로 클라이언트의 변경자·출처 지정은 거절합니다.
+CLI 이력은 `source=CLI`, 인증된 관리자 이력은 `source=CORE_ADMIN`으로 구분합니다.
+
+조회 이후 CLI나 다른 관리자가 정책을 바꾸면 409로 거절합니다. 이전 값으로 되돌린 변경도 감지하며,
+잠금 안에서 오늘 할당량·이월량·장부 일치를 다시 검사합니다. 같은 관리자·UUID·버전·내용의 재전송은
+이전 기록만 반환하고 이후 정책을 덮어쓰지 않습니다. 화면은 통신 응답 유실 시 동일 요청을 재확인하고,
+409에서는 입력을 보존한 채 재전송을 막아 예산 재조회·재작성을 요구합니다.
+저장 성공 시 이전 실행 전 점검 결과를 지웁니다. 페이지 이탈 이후 요청 복원 기능은 없습니다.
+일별 제한 해제 후에도 누적 한도·사용량·예약·감사 이력을 유지하며 live/정기 실행을 활성화하지 않습니다.
+`daily.limits_revision`이 없는 이전 API에서는 웹 설정 버튼을 숨기므로 Ops API와 Web을 함께 갱신해야 합니다.
+
 ## 누적 호출·출력 토큰 한도
 
 Ops로 접수한 새 응답 생성은 `EvaluationBudget`의 **DB 전체 누적 호출 수·입력·출력 토큰 한도**를
@@ -435,13 +520,14 @@ uv run --locked python manage.py set_evaluation_budget \
 실제 Core 준비 명세로 테스트 DB의 실행·예약을 만들고 같은 명세의 HTTP 승인·정산을 대조합니다.
 예산 부족 시 실행·예약 롤백, 입력 변경 차단과 미확정 사용량 유지도 검사하며 필수 LLMOps CI에 연결했습니다.
 고정 원문·청크 RAG의 공개 접수·manifest·Prefect 연결은 위 신규 실행 경로에 구현했습니다.
-Core 원문 재수집·재청킹, runner→Kubernetes Ops 왕복 검증, 금액·기간 한도는 별도 범위입니다.
+Core 원문 재수집·재청킹, runner→Kubernetes Ops 왕복 검증, 금액·월별 한도는 별도 범위입니다.
 
 ## 예산 조회와 한도 변경 감사
 
 호출 흐름은 `React → Core 관리자 세션을 확인하는 Django Ops API → MySQL 장부`입니다.
-추가 production 의존성과 모델 호출은 없습니다. 아래 세 API는 GET만 허용하고 기존 관리자
-로그인을 재사용합니다. 내부 실행기 Bearer 토큰이나 이전 Django 세션으로는 조회할 수 없습니다.
+추가 production 의존성과 모델 호출은 없습니다. 아래 API는 기존 관리자 로그인을 재사용합니다.
+내부 실행기 Bearer 토큰이나 이전 Django 세션으로는 접근할 수 없습니다.
+쓰기는 Core 관리자 재검증과 CSRF·Origin 검사를 거칩니다.
 관리자는 다른 요청자의 장부도 볼 수 있지만, 평가 취소는 계속 요청자만 가능합니다.
 
 | API | 응답 |
@@ -449,10 +535,48 @@ Core 원문 재수집·재청킹, runner→Kubernetes Ops 왕복 검증, 금액�
 | `GET /api/v1/ops/budget` | 전체 한도·저장된 할당량·잔여 한도·구성별 총계·최근 변경 10건과 전체 변경 건수 |
 | `GET /api/v1/ops/budget/reservations?page=1` | 25건씩 예약 목록과 같은 조회 시점의 **전체** 예산 요약 |
 | `GET /api/v1/ops/evaluations/{run_id}/budget` | 해당 실행의 예약·호출별 작업 ID(과거 null)·승인 시각·확정 사용량·정산 시각 |
+| `GET /api/v1/ops/budget/unaccounted-runs?page=1` | 예약·과거 사용량 반영 기록이 없는 live 실행을 25건씩 조회. 미완료·새 명세 실행도 누락 없이 표시 |
+| `GET /api/v1/ops/evaluations/{run_id}/legacy-usage-preview` | 기존 과거 사용량 검증기로 저장 자료 무결성·전체 사용량·현재 한도 대비 반영 조건을 읽기 전용 확인 |
+| `POST /api/v1/ops/budget/limits` | 조회한 한도 버전·요청 UUID·사유와 호출/입력/출력 누적 한도를 검증하고 변경 감사 저장 |
+| `POST /api/v1/ops/budget/daily-limits` | 일별 정책 버전·요청 UUID·사유를 확인하고 일별 세 한도 설정·변경·해제와 감사 저장 |
+| `POST /api/v1/ops/evaluations/{run_id}/legacy-usage` | 검토한 증거 해시·요청 UUID·사유로 과거 저장 응답 사용량을 재검증·반영 |
 
 React 평가 목록에는 전체 요약·실행별 예약·최근 한도 변경을, 실행 상세에는 예약과 호출별
 승인·정산을 표시합니다. 15초 간격으로 조회하며 실패 시 마지막 조회 시각과 오류를 함께 유지합니다.
-자동 환급·한도 수정 버튼은 없습니다. 전체 변경 이력은 DB에 보존하며 첫 화면은 최근 10건만 표시합니다.
+**누적 한도 설정 → 변경 내용 확인 → 확인한 한도 저장**으로 누적 한도를 변경합니다.
+자동 환급은 하지 않습니다. 전체 변경 이력은 DB에 보존하며 첫 화면은 최근 10건만 표시합니다.
+
+한도 POST에는 `request_id`, GET 요약의 `limits_revision`을 담은 `expected_revision`,
+`calls`, `input_tokens`, `output_tokens`, `reason`을 전달합니다. 입력 한도 최초 미설정은
+명시적인 `null`이며 활성화한 입력 한도를 다시 해제할 수 없습니다. 조회 후 한도가 변경되면
+409로 재검토를 요구합니다. 이전 값으로 되돌아온 변경도 감지하며, 저장 시 잠금 안에서 최신
+할당량과 장부 일치를 재검증합니다. 기존 할당량 아래로 낮추거나 미확인 과거 입력을 남긴 채
+입력 한도를 활성화할 수 없습니다. 금액·기간별 예산이나 모델 실행 활성화 설정은 아닙니다.
+
+**미반영 실행 목록 확인 → 대상의 사용량 확인**으로 검토 대상을 찾을 수 있습니다.
+목록은 사용량 반영 가능성을 보장하지 않으며 파일을 읽지 않습니다. 개별 확인에서만
+`reconcile_legacy_usage(..., apply=False)`로 CLI와 같은 저장 request·manifest·comparison·capture
+연결과 전체 호출 사용량을 검증합니다. 이 API는 모델·Prefect 호출, 예약 생성, 한도 변경,
+사용량 감사 저장을 하지 않습니다. POST·PUT·PATCH·DELETE는 405입니다.
+
+미리보기의 `state=verified`는 저장된 사용량을 확인했다는 뜻입니다. 한도 미설정·부족 또는
+장부 불일치는 `can_apply=false`와 `blockers`로 표시하되 확인한 사용량은 유지합니다.
+대상 조건·자료 무결성·전체 사용량을 확인하지 못하면 `state=unavailable`과 사유만 반환하고
+토큰 수나 해시를 추정하지 않습니다. 응답에는 원문·답변·실행 명세·가짜 검토자 기록을 담지 않습니다.
+`as_of`는 검증 완료 시각이며 예상 반영 후 합계는 실제 반영 결과가 아닙니다.
+화면은 다른 실행 선택·페이지 이동·새로고침 때 이전 결과를 제거하고 지연 응답을 무시합니다.
+
+과거 사용량은 `0024_legacy_usage`의 별도 감사 테이블에 기록합니다. 화면에서는 반영 조건을
+충족한 미리보기에 검토 사유·사용량/출처 확인을 입력하고 **검토한 사용량 반영**을 누릅니다.
+POST는 `request_id`, `evidence_sha256`, `reason`만 받으며 검토한 자료·전체 사용량·한도를
+잠금 안에서 다시 확인합니다. CLI의 `reconcile_legacy_evaluation_usage --apply`도 유지합니다.
+조회나 장부 반영은 답변 품질 승인이 아니며 저장 응답 사용량은 제공자의 청구 확인과 구분합니다.
+
+위 쓰기 API는 변경자·출처를 클라이언트에서 받지 않습니다. 인증된 Core 사용자와
+`CORE_ADMIN` 출처를 기록하며, 기존 CLI 이력의 자기 기입 변경자와 `CLI` 출처를 보존합니다.
+동일 요청 UUID·동일 관리자·동일 입력의 재전송은 이전 이력만 반환합니다. 다른 요청 내용이나
+관리자로 UUID를 재사용하면 409입니다. 화면은 응답 유실 후 같은 UUID로 재확인하며
+한도·사용량 저장으로 새 모델 호출, 예약 생성 또는 사람 검토 승인을 수행하지 않습니다.
 
 예산 구성은 다음과 같습니다. 호출 한도는 호출 횟수, 출력 한도는 토큰 수이며 금액이 아닙니다.
 
@@ -468,7 +592,7 @@ React 평가 목록에는 전체 요약·실행별 예약·최근 한도 변경�
 미확인 호출은 예약이 닫힌 뒤에도 최대 출력 몫을 유지합니다. 입력 토큰도 같은 예약·정산 구조로 집계하되, 과거 상한 누락을 미확인으로 구분합니다.
 승인 기록을 실제 전송 완료·비용 확정으로 해석하지 않습니다.
 
-응답마다 전역 예산 행을 쓰기 경로와 같은 방식으로 잠그고 총계·페이지 내역을 구체화한 후 해제합니다.
+전체 장부·예약·실행 장부 응답은 전역 예산 행을 쓰기 경로와 같은 방식으로 잠그고 총계·페이지 내역을 구체화한 후 해제합니다.
 외부 관리자 인증은 이 transaction 전에 끝납니다. `as_of`는 잠금을 획득한 조회 시각입니다.
 합계가 저장된 할당량과 다르면 `state=inconsistent`, `remaining=null`이며 자동 보정하지 않습니다.
 미설정은 `unconfigured`와 null 값으로 표시합니다. 과거 live 실행의 예약 부재는 `missing`으로
@@ -478,7 +602,9 @@ React 평가 목록에는 전체 요약·실행별 예약·최근 한도 변경�
 `unbounded_input_calls`/`unbounded_input_reservations`가 있으면 전체 입력 사용량이 아닙니다. 이 실행의 사용량을 0으로 만들지 않습니다.
 replay/recovery 자체에는 새 모델 예약이 없어 `not_applicable`이며 원본 비용은 원본 장부를 확인합니다.
 
-최신 예산 상세 API 배포 전 migration **`0019_embedding_usage_receipt`까지** 적용해야 합니다.
+최신 예산 API 배포 전 migration **`0027_admin_daily_budget_writes`까지** 적용해야 합니다.
+`0027`은 일별 정책 변경의 인증된 변경자 FK·조회 버전·출처 제약을 추가하며 기존 CLI 기록을 보존합니다.
+`0025`는 인증된 변경자 FK·한도 조회 버전·출처 제약을 추가하며 기존 CLI 기록을 그대로 보존합니다.
 `0013_budget_change_audit`는 한도 변경 감사를, `0014`는 종료 예약 정리 감사를,
 `0015_usage_correction`은 사용량 보정과 원본 증거를, `0016`은 새 호출의 작업 ID를 저장합니다.
 `0017`은 입력 한도·할당량·예약 상한·생성 전 계산값을 추가하고 확인된 과거 입력만 합산합니다.
@@ -491,8 +617,9 @@ replay/recovery 자체에는 새 모델 예약이 없어 `not_applicable`이며 
 현재 한도 변경과 감사 행 저장은 같은 transaction입니다. 감사 저장 실패 시 한도 변경도 롤백합니다.
 이전/새 한도·CLI 출처·변경자·사유·시각을 저장하며 기존 한도에 가짜 과거 이력을 소급 생성하지 않습니다.
 
-관련 검증은 `apps.evaluations.test_budget_reporting`, `test_budget`, `test_cancellation`과 Web의
-`BudgetPanel.test.tsx`, `App.ops.test.tsx`입니다. MySQL 동시 조회/정산·최초 한도 설정 경합·
+관련 검증은 `apps.evaluations.test_admin_budget_writes`, `test_budget_reporting`, `test_budget`,
+`test_legacy_usage`, `test_legacy_usage_views`, `test_cancellation`과 Web의 `BudgetLimitsForm.test.tsx`,
+`UnaccountedRunsPanel.test.tsx`, `BudgetPanel.test.tsx`, `App.ops.test.tsx`입니다. MySQL 동시 조회/정산·최초 한도 설정 경합·
 감사 실패 롤백, API 권한·페이지 경계, 화면의 미확인/0토큰 구분을 포함합니다.
 전체 Ops/MySQL·Web 빌드·실제 취소 서버 검증은 기존 필수 CI에서 계속 실행합니다.
 
@@ -980,6 +1107,7 @@ Kubernetes liveness/readiness와 분리되어 있으며, 결과에는 검사 범
 | `GET /api/v1/health` | `200`, `status: UP` | DB를 호출하지 않음 |
 | `GET /api/v1/health/ready` | `200`, `database: UP, schema: UP` | DB 실패는 `database: DOWN`, 미적용 migration·이력 불일치·실제 테이블/컬럼 누락은 `schema: DOWN`으로 `503`; 내부 정보 비노출 |
 | `GET /api/v1/ops/runtime` | `200`, 설정 검사 PASS와 검증 범위 | 구성·자료·Prefect·선택한 결과 검증 실패 `503`; 잘못된 run_id `400`; 관리자 인증 필수 |
+| `GET /api/v1/ops/evaluations/live-readiness` | `200`, 선택 자료의 최대 예약량·잔여 한도·차단/주의 사유 | `dataset_id`, `execution_profile` 필수; 입력 오류 `400`, 미인증 `401`, 비관리자 `403`, 설정 변경 `409`, 계획 확인 실패 `503`; 조회만 수행 |
 | `GET /api/v1/ops/session` | `200`, `user`(쿠키가 없으면 null), `csrf_token`, 허용 자료 목록, `search_traces_url` | 만료 `401`, 비관리자 `403`, Core 장애 `503` |
 | `GET /api/v1/ops/evaluations/{UUID}/report` | `200`, CSP sandbox가 적용된 HTML | 미인증 `401`, 비관리자 `403`, Core 장애 `503`, 없거나 훼손된 보고서 `404` |
 | `POST /api/v1/ops/evaluations` | 최초 `202`, 재전송 `200`; 실행 메타데이터 | 자료/UUID 오류 `400`, 미인증 `401`, 권한·CSRF `403`, 요청 충돌 `409`, 인증 서버 장애·접수 미확인 `503` |

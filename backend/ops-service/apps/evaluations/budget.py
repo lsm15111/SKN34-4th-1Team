@@ -6,7 +6,12 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .models import EvaluationBudget, EvaluationBudgetCall, EvaluationBudgetReservation
+from .models import (
+    EvaluationBudget,
+    EvaluationBudgetCall,
+    EvaluationBudgetReservation,
+    EvaluationLegacyUsage,
+)
 
 
 class BudgetUnavailable(Exception):
@@ -171,6 +176,8 @@ def reserve(run):
     budget = EvaluationBudget.objects.select_for_update().filter(pk=1).first()
     if budget is None or len(settings.LLMOPS_BUDGET_TOKEN) < 32:
         raise BudgetUnavailable
+    if EvaluationLegacyUsage.objects.filter(run=run).exists():
+        raise BudgetUnavailable
     if EvaluationBudgetReservation.objects.filter(run=run).exists():
         return
     calls, output = run.live_config["max_model_calls"], run.live_config["max_output_tokens"]
@@ -190,6 +197,15 @@ def reserve(run):
         )
     ):
         raise BudgetUnavailable
+    from .daily_budget import require_daily_budget
+
+    admitted_at = timezone.now()
+    require_daily_budget(
+        budget,
+        run,
+        {"calls": calls, "input_tokens": input_total, "output_tokens": output_total},
+        admitted_at,
+    )
     EvaluationBudgetReservation.objects.create(
         run=run,
         budget=budget,
@@ -198,6 +214,7 @@ def reserve(run):
         max_input_tokens=max_input,
         reserved_input_tokens=input_total,
         reserved_output_tokens=output_total,
+        created_at=admitted_at,
     )
     budget.allocated_calls += calls
     budget.allocated_output_tokens += output_total
@@ -259,6 +276,9 @@ def worker_action(
     ):
         raise BudgetUnavailable
     if action in {"claim", "authorize"}:
+        from .daily_budget import require_reservation_day
+
+        require_reservation_day(reservation)
         if (
             run.execution_spec.get("evaluation_scope") == "source-chunks-retrieval-answer"
             and "dataset_id" in run.execution_spec

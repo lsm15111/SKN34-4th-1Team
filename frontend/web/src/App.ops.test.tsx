@@ -73,6 +73,107 @@ function open(path = '/ops/evaluations') {
 }
 
 describe('React LLMOps 운영 화면', () => {
+  it.each([['limits', false], ['legacy', false], ['limits', true], ['daily', false], ['daily', true]] as const)('%s 저장 후 이전 사전 점검을 지우며 늦은 조회=%s도 무시한다', async (kind, delayed) => {
+    const at = '2026-10-03T01:00:00Z'
+    const readiness = {
+      as_of: at, dataset_id: dataset.id, execution_profile: executionProfiles.live,
+      evaluation_scope: dataset.evaluation_scope, model: liveConfig.model, state: 'checked',
+      required: { calls: 6, input_tokens: 196608, output_tokens: 12000 },
+      remaining: { calls: 12, input_tokens: 400000, output_tokens: 24000 }, blockers: [], warnings: [],
+    }
+    const usage = { calls: 1, input_tokens: 100, output_tokens: 50 }
+    const zero = { calls: 0, input_tokens: 0, output_tokens: 0 }
+    let resolve!: (response: Response) => void
+    const pending = new Promise<Response>((done) => { resolve = done })
+    const original = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (path, options) => {
+      if (path.includes('/live-readiness?')) return delayed ? pending : json(readiness)
+      if (path.startsWith('/api/v1/ops/budget/reservations')) return json({
+        as_of: at, count: 0, next: null, previous: null, results: [], summary: {
+          state: 'consistent', limits_revision: 'a'.repeat(64), limits: readiness.remaining,
+          allocated: zero, remaining: readiness.remaining, breakdown: null,
+          reservation_count: 0, legacy_live_run_count: 1, change_count: 0, recent_changes: [],
+          daily: { limits_revision: 'b'.repeat(64), state: 'disabled', timezone: 'Asia/Seoul', period_start: '2026-10-03T00:00:00+09:00', period_end: '2026-10-04T00:00:00+09:00', limits: null, current_day: null, carried: null, allocated: null, remaining: null, recent_changes: [] },
+        },
+      })
+      if (path.includes('/unaccounted-runs')) return json({ as_of: at, count: 1, next: null, previous: null,
+        results: [{ run_id: id, dataset_id: dataset.id, dataset_label: '과거 평가', status: 'COMPLETED', status_label: '완료', created_at: at }] })
+      if (path.endsWith('/legacy-usage-preview')) return json({ as_of: at, run_id: id, applied: false, state: 'verified', can_apply: true, blockers: [],
+        source: 'SAVED_CAPTURE', provider_receipt_verified: false, capture_sha256: 'b'.repeat(64), evidence_sha256: 'c'.repeat(64), usage, before: zero, after: usage })
+      if (path.endsWith('/legacy-usage')) return json({ applied: true, replayed: false, record: {
+        ...JSON.parse(options!.body as string), run_id: id, actor: 'core:99', actor_source: 'CORE_ADMIN', created_at: at,
+        source: 'SAVED_CAPTURE', provider_receipt_verified: false, capture_sha256: 'b'.repeat(64), usage, before: zero, after: usage,
+      } })
+      if (path.endsWith('/budget/limits')) {
+        const value = JSON.parse(options!.body as string)
+        return json({ change: { request_id: value.request_id, actor: 'core:99', source: 'CORE_ADMIN', reason: value.reason,
+          previous_limits: readiness.remaining, limits: { calls: value.calls, input_tokens: value.input_tokens, output_tokens: value.output_tokens }, created_at: at } })
+      }
+      if (path.endsWith('/budget/daily-limits')) {
+        const value = JSON.parse(options!.body as string)
+        return json({ change: { request_id: value.request_id, expected_revision: value.expected_revision, actor: 'core:99', source: 'CORE_ADMIN', reason: value.reason,
+          previous: null, policy: { enabled: true, limits: { calls: value.calls, input_tokens: value.input_tokens, output_tokens: value.output_tokens } }, created_at: at } })
+      }
+      return original(path, options)
+    })
+    open()
+    fireEvent.change(await screen.findByLabelText('실행 방식'), { target: { value: 'live' } })
+    fireEvent.click(screen.getByRole('button', { name: '실행 설정·예산 점검' }))
+    if (!delayed) await screen.findByText('조회 시점의 설정·예산에서 차단 사유가 없습니다.')
+    if (kind === 'limits') {
+      fireEvent.click(await screen.findByRole('button', { name: '누적 한도 설정' }))
+      fireEvent.change(screen.getByLabelText('한도 변경 사유'), { target: { value: '실행 준비 한도 검토' } })
+      fireEvent.click(screen.getByRole('button', { name: '변경 내용 확인' }))
+      fireEvent.click(screen.getByRole('button', { name: '확인한 한도 저장' }))
+      await screen.findByText('누적 한도 변경 이력을 저장했습니다.')
+    } else if (kind === 'daily') {
+      fireEvent.click(await screen.findByRole('button', { name: '일별 한도 설정' }))
+      fireEvent.change(screen.getByLabelText('일별 호출 한도'), { target: { value: '12' } })
+      fireEvent.change(screen.getByLabelText('일별 입력 토큰 한도'), { target: { value: '400000' } })
+      fireEvent.change(screen.getByLabelText('일별 출력 토큰 한도'), { target: { value: '24000' } })
+      fireEvent.change(screen.getByLabelText('일별 한도 변경 사유'), { target: { value: '일별 한도 확인' } })
+      fireEvent.click(screen.getByRole('button', { name: '일별 변경 내용 확인' }))
+      fireEvent.click(screen.getByRole('button', { name: '확인한 일별 정책 저장' }))
+      await screen.findByText('일별 정책 변경 이력을 저장했습니다.')
+    } else {
+      fireEvent.click(await screen.findByRole('button', { name: '미반영 실행 목록 확인' }))
+      fireEvent.click(await screen.findByRole('button', { name: `사용량 확인 ${id}` }))
+      fireEvent.change(await screen.findByLabelText('사용량 검토 사유'), { target: { value: '전체 응답 검토' } })
+      fireEvent.click(screen.getByRole('checkbox', { name: /위 사용량과 출처를 확인/ }))
+      fireEvent.click(screen.getByRole('button', { name: '검토한 사용량 반영' }))
+      await screen.findByText('검토한 과거 사용량을 장부에 반영했습니다.')
+    }
+    if (delayed) await act(async () => { resolve(json(readiness)); await pending })
+    expect(screen.queryByText('조회 시점의 설정·예산에서 차단 사유가 없습니다.')).toBeNull()
+    expect(screen.getByRole('button', { name: '실행 설정·예산 점검' })).toHaveProperty('disabled', false)
+    expect(fetchMock.mock.calls.filter(([path]) => path.includes('/live-readiness?'))).toHaveLength(1)
+    expect(fetchMock.mock.calls.some(([path, options]) => path === '/api/v1/ops/evaluations' && options?.method === 'POST')).toBe(false)
+    expect(screen.getByRole('region', { name: '누적 평가 예산' }).id).toBe('evaluation-budget')
+  })
+
+  it('선택한 새 모델 평가의 설정·예산만 점검하고 전송 승인을 대신하지 않는다', async () => {
+    const original = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation((path, options) => path.includes('/live-readiness?') ? Promise.resolve(json({
+      as_of: '2026-10-03T01:00:00Z', dataset_id: dataset.id, execution_profile: executionProfiles.live,
+      evaluation_scope: dataset.evaluation_scope, model: liveConfig.model, state: 'checked',
+      required: { calls: 6, input_tokens: 196608, output_tokens: 12000 },
+      remaining: { calls: 12, input_tokens: 400000, output_tokens: 24000 }, blockers: [], warnings: [],
+    })) : original(path, options))
+    open()
+    const mode = await screen.findByLabelText('실행 방식')
+    expect(screen.queryByRole('button', { name: '실행 설정·예산 점검' })).toBeNull()
+    fireEvent.change(mode, { target: { value: 'live' } })
+    expect(fetchMock.mock.calls.some(([path]) => path.includes('/live-readiness?'))).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '실행 설정·예산 점검' }))
+    await screen.findByText('조회 시점의 설정·예산에서 차단 사유가 없습니다.')
+    expect((screen.getByRole('button', { name: '새 응답 생성 및 평가' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+    expect(readPendingEvaluation('core:99')).toBeNull()
+    fireEvent.change(screen.getByLabelText('평가 자료'), { target: { value: comparisonDataset.id } })
+    expect(screen.queryByText('조회 시점의 설정·예산에서 차단 사유가 없습니다.')).toBeNull()
+    expect(fetchMock.mock.calls.filter(([path]) => path.includes('/live-readiness?'))).toHaveLength(1)
+  })
+
   it('고정 근거 답변의 인용 지표를 검색 품질과 구분한다', async () => {
     open(`/ops/evaluations/${id}`)
     expect(await screen.findByText('고정 근거 답변')).toBeTruthy()
@@ -556,6 +657,144 @@ const qualityState: NonNullable<EvaluationReview['quality']> = {
   blocked_reason: '', history: [],
 }
 
+it.each(['case', 'fixture', 'overall'] as const)('검토 새로고침은 %s 초안을 확인 없이 버리지 않고 취소 또는 명시적 재조회를 선택한다', async (kind) => {
+  const original = fetchMock.getMockImplementation()!
+  const state: EvaluationReview = { ...reviewDefaults, quality: qualityState, material: reviewMaterial, material_error: '', is_baseline: false, baseline_version: 0, baseline_history: [], reviews: [] }
+  let reads = 0
+  fetchMock.mockImplementation(async (path, options) => {
+    if (path.endsWith('/review')) { reads += 1; return json(state) }
+    return original(path, options)
+  })
+  open(`/ops/evaluations/${id}`)
+  await screen.findByLabelText('E01 판단 사유')
+  const label = { case: 'E01 판단 사유', fixture: '평가 기준 자료 검토 사유', overall: '검토 의견' }[kind]
+  fireEvent.change(screen.getByLabelText(label), { target: { value: '검토 중인 근거' } })
+  if (kind === 'fixture') {
+    expect(screen.getByLabelText('E01 판단')).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: '현재 근거로 품질 판정 저장' })).toHaveProperty('disabled', true)
+    expect(screen.getByText(/저장하지 않은 기준 자료 검토가 있습니다/)).toBeTruthy()
+  }
+  fireEvent.click(screen.getByRole('button', { name: '검토 새로고침' }))
+  expect(screen.getByRole('button', { name: '입력 버리고 새로고침' })).toBeTruthy()
+  expect(reads).toBe(1)
+  expect(screen.getByLabelText(label)).toHaveProperty('value', '검토 중인 근거')
+  fireEvent.click(screen.getByRole('button', { name: '계속 작성' }))
+  expect(screen.queryByRole('button', { name: '입력 버리고 새로고침' })).toBeNull()
+  expect(screen.getByLabelText(label)).toHaveProperty('value', '검토 중인 근거')
+  fireEvent.click(screen.getByRole('button', { name: '검토 새로고침' }))
+  fireEvent.click(screen.getByRole('button', { name: '입력 버리고 새로고침' }))
+  await waitFor(() => expect(reads).toBe(2))
+  await waitFor(() => expect(screen.getByRole('button', { name: '검토 새로고침' })).toHaveProperty('disabled', false))
+  expect(screen.getByLabelText(label)).toHaveProperty('value', '')
+  expect(screen.getByLabelText('E01 판단')).toHaveProperty('disabled', false)
+  expect(screen.getByLabelText('모든 대상 사례의 평가 기준 자료를 확인하고 위 판단을 기록합니다.')).toHaveProperty('checked', false)
+  expect(screen.getByLabelText('위 모든 사례의 질문·근거·후보 답변을 검토했습니다.')).toHaveProperty('checked', false)
+  expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST' || options?.method === 'DELETE')).toBe(false)
+})
+
+it('검토 재조회 중과 실패 후에는 이전 자료의 판정·기준 지정·입력을 잠그고 성공 후에만 다시 연다', async () => {
+  const original = fetchMock.getMockImplementation()!
+  const state: EvaluationReview = { ...reviewDefaults, approval_current: true, quality: qualityState, material: reviewMaterial, material_error: '', is_baseline: false, baseline_version: 0, baseline_history: [], reviews: [] }
+  let resolve!: (value: Response) => void
+  const pending = new Promise<Response>((done) => { resolve = done })
+  let reads = 0
+  fetchMock.mockImplementation(async (path, options) => {
+    if (path.endsWith('/review')) return ++reads === 2 ? pending : json(state)
+    return original(path, options)
+  })
+  open(`/ops/evaluations/${id}`)
+  const promote = await screen.findByRole('button', { name: '비교 기준으로 지정' })
+  expect(promote).toHaveProperty('disabled', false)
+  fireEvent.click(screen.getByRole('button', { name: '검토 새로고침' }))
+  expect(promote).toHaveProperty('disabled', true)
+  expect(screen.getByLabelText('E01 판단')).toHaveProperty('disabled', true)
+  expect(screen.getByRole('button', { name: '현재 근거로 품질 판정 저장' })).toHaveProperty('disabled', true)
+  await act(async () => { resolve(json({}, 503)); await pending })
+  await waitFor(() => expect(screen.getByRole('button', { name: '검토 새로고침' })).toHaveProperty('disabled', false))
+  expect(promote).toHaveProperty('disabled', true)
+  expect(screen.getByLabelText('평가 기준 자료 판단')).toHaveProperty('disabled', true)
+  fireEvent.click(promote)
+  fireEvent.click(screen.getByRole('button', { name: '현재 근거로 품질 판정 저장' }))
+  expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: '검토 새로고침' }))
+  await waitFor(() => expect(promote).toHaveProperty('disabled', false))
+  expect(screen.getByLabelText('E01 판단')).toHaveProperty('disabled', false)
+})
+
+it.each(['case', 'fixture', 'quality'] as const)('검토 %s 저장 충돌은 입력을 보존하고 재조회 전 재전송을 차단한다', async (kind) => {
+  const original = fetchMock.getMockImplementation()!
+  const state: EvaluationReview = { ...reviewDefaults, quality: qualityState, material: reviewMaterial, material_error: '', is_baseline: false, baseline_version: 0, baseline_history: [], reviews: [] }
+  const endpoint = { case: '/case-review', fixture: '/fixture-review', quality: '/quality' }[kind]
+  const buttonName = { case: 'E01 검토 저장', fixture: '평가 기준 자료 검토 저장', quality: '현재 근거로 품질 판정 저장' }[kind]
+  fetchMock.mockImplementation(async (path, options) => {
+    if (path.endsWith('/review')) return json(state)
+    if (path.endsWith(endpoint)) return json({}, 409)
+    return original(path, options)
+  })
+  open(`/ops/evaluations/${id}`)
+  await screen.findByLabelText('E01 판단')
+  if (kind === 'case') {
+    fireEvent.change(screen.getByLabelText('E01 판단'), { target: { value: 'DEFERRED' } })
+    fireEvent.change(screen.getByLabelText('E01 판단 사유'), { target: { value: '원문 재확인 중' } })
+  } else if (kind === 'fixture') {
+    fireEvent.change(screen.getByLabelText('평가 기준 자료 판단'), { target: { value: 'DEFERRED' } })
+    fireEvent.change(screen.getByLabelText('평가 기준 자료 검토 사유'), { target: { value: '원문 재확인 중' } })
+    fireEvent.click(screen.getByLabelText('모든 대상 사례의 평가 기준 자료를 확인하고 위 판단을 기록합니다.'))
+  }
+  const save = screen.getByRole('button', { name: buttonName, hidden: true })
+  fireEvent.click(save)
+  await screen.findByText(/검토 기록이 변경되었습니다/)
+  await waitFor(() => expect(screen.getByRole('button', { name: '검토 새로고침' })).toHaveProperty('disabled', false))
+  expect(save).toHaveProperty('disabled', true)
+  if (kind !== 'quality') expect(screen.getByLabelText(kind === 'case' ? 'E01 판단 사유' : '평가 기준 자료 검토 사유')).toHaveProperty('value', '원문 재확인 중')
+  fireEvent.click(save)
+  expect(fetchMock.mock.calls.filter(([path]) => path.endsWith(endpoint))).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: '검토 새로고침' }))
+  if (kind !== 'quality') fireEvent.click(screen.getByRole('button', { name: '입력 버리고 새로고침' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '현재 근거로 품질 판정 저장' })).toHaveProperty('disabled', false))
+  expect(screen.getByLabelText('E01 판단 사유')).toHaveProperty('value', '')
+  expect(screen.getByLabelText('평가 기준 자료 검토 사유')).toHaveProperty('value', '')
+})
+
+it.each([false, true])('전체 검토와 기준 해제(%s) 충돌은 사유를 보존하고 재저장을 막는다', async (clear) => {
+  const original = fetchMock.getMockImplementation()!
+  const state: EvaluationReview = { ...reviewDefaults, quality: qualityState, material: reviewMaterial, material_error: '', is_baseline: clear, baseline_version: 1, baseline_history: [], reviews: [] }
+  fetchMock.mockImplementation(async (path, options) => {
+    if (path.endsWith('/review') && options?.method !== 'POST') return json(state)
+    if (path.endsWith('/review') || path.endsWith('/baseline')) return json({}, 409)
+    return original(path, options)
+  })
+  open(`/ops/evaluations/${id}`)
+  fireEvent.change(await screen.findByLabelText('검토 의견'), { target: { value: '수정할 조건을 재확인해야 함' } })
+  if (!clear) fireEvent.click(screen.getByLabelText('위 모든 사례의 질문·근거·후보 답변을 검토했습니다.'))
+  const save = screen.getByRole('button', { name: clear ? '의견을 사유로 기준 해제' : '수정 필요 저장' })
+  fireEvent.click(save)
+  await screen.findByText(/검토 기록이 변경되었습니다/)
+  await waitFor(() => expect(screen.getByRole('button', { name: '검토 새로고침' })).toHaveProperty('disabled', false))
+  expect(screen.getByLabelText('검토 의견')).toHaveProperty('value', '수정할 조건을 재확인해야 함')
+  expect(save).toHaveProperty('disabled', true)
+  fireEvent.click(save)
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === (clear ? 'DELETE' : 'POST'))).toHaveLength(1)
+})
+
+it('검토 진행 안내에서 닫힌 자료 검토를 열고 초점을 이동하되 승인 요청을 보내지 않는다', async () => {
+  const original = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation((path, options) => path.endsWith('/review')
+    ? Promise.resolve(json({ ...reviewDefaults, quality: qualityState, material: reviewMaterial, material_error: '', is_baseline: false, baseline_version: 0, baseline_history: [], reviews: [] }))
+    : original(path, options))
+  const scroll = vi.fn()
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll })
+  open(`/ops/evaluations/${id}`)
+  fireEvent.click(await screen.findByRole('button', { name: '기준 자료 검토로 이동' }))
+  const target = document.getElementById('fixture-review')
+  expect(target).toHaveProperty('open', true)
+  expect(document.activeElement).toBe(target)
+  expect(scroll).toHaveBeenCalledOnce()
+  expect(screen.getByRole('button', { name: '평가 기준 자료 검토 저장' })).toHaveProperty('disabled', true)
+  expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
+  delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView
+})
+
 it('완료 실행도 미판정으로 표시하고 현재 근거 해시로만 품질 판정을 저장한다', async () => {
   const original = fetchMock.getMockImplementation()!
   let state: EvaluationReview = { ...reviewDefaults, can_promote: false, quality: qualityState, material: reviewMaterial, material_error: '', is_baseline: false, baseline_version: 0, baseline_history: [], reviews: [] }
@@ -572,10 +811,10 @@ it('완료 실행도 미판정으로 표시하고 현재 근거 해시로만 품
     return original(path, options)
   })
   open(`/ops/evaluations/${id}`)
-  expect(await screen.findByText('미판정')).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: '품질 판정 · 미판정' })).toBeTruthy()
   expect(screen.getByText('완료')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: '현재 근거로 품질 판정 저장' }))
-  expect(await screen.findByText('검토 필요')).toBeTruthy()
+  expect(await screen.findByRole('heading', { name: '품질 판정 · 검토 필요' })).toBeTruthy()
   expect(screen.getByRole('button', { name: '비교 기준으로 지정' })).toHaveProperty('disabled', true)
   expect(fetchMock.mock.calls.some(([path, options]) => path === '/api/v1/ops/evaluations' && options?.method === 'POST')).toBe(false)
 })
@@ -902,7 +1141,7 @@ it('사례 저장 응답이 유실되면 같은 검토 버전으로 재전송하
   expect(writes).toHaveLength(2)
 })
 
-it('다른 관리자가 먼저 검토하면 충돌을 표시하고 입력을 보존하며 자동 재전송하지 않는다', async () => {
+it('다른 관리자 검토 충돌 후 최신 버전은 새로 조회하고 다시 입력한 판단에만 사용한다', async () => {
   const original = fetchMock.getMockImplementation()!
   let version = 0
   fetchMock.mockImplementation(async (path, options) => {
@@ -917,6 +1156,20 @@ it('다른 관리자가 먼저 검토하면 충돌을 표시하고 입력을 보
   await screen.findByText(/검토 기록이 변경되었습니다/)
   expect(screen.getByLabelText('E01 판단 사유')).toHaveProperty('value', '조건 확인 대기')
   expect(fetchMock.mock.calls.filter(([path]) => path.endsWith('/case-review'))).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: '검토 새로고침' }))
+  fireEvent.click(screen.getByRole('button', { name: '입력 버리고 새로고침' }))
+  await waitFor(() => expect(screen.getByLabelText('E01 판단')).toHaveProperty('disabled', false))
+  expect(screen.getByRole('button', { name: 'E01 검토 저장' })).toHaveProperty('disabled', true)
+  expect(screen.getByLabelText('E01 판단 사유')).toHaveProperty('value', '')
+  expect(fetchMock.mock.calls.filter(([path]) => path.endsWith('/case-review'))).toHaveLength(1)
+  fireEvent.change(screen.getByLabelText('E01 판단'), { target: { value: 'UNSUITABLE' } })
+  fireEvent.change(screen.getByLabelText('E01 판단 사유'), { target: { value: '최신 자료와 답변을 다시 대조함' } })
+  fireEvent.click(screen.getByRole('button', { name: 'E01 검토 저장' }))
+  await screen.findByText(/검토 기록이 변경되었습니다/)
+  const writes = fetchMock.mock.calls.filter(([path]) => path.endsWith('/case-review'))
+  expect(writes).toHaveLength(2)
+  expect(JSON.parse(String(writes[0][1]?.body))).toMatchObject({ review_version: 0, comment: '조건 확인 대기' })
+  expect(JSON.parse(String(writes[1][1]?.body))).toMatchObject({ review_version: 1, decision: 'UNSUITABLE', comment: '최신 자료와 답변을 다시 대조함' })
 })
 
 it('과거 전체 승인을 사례별 승인으로 표시하지 않고 기존 기준의 재검토 필요를 알린다', async () => {

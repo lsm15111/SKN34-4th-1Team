@@ -1,5 +1,6 @@
-"""관리자용 예산 장부 조회와 CLI 한도 변경 감사. 모델 호출·예약 환급은 하지 않는다."""
+"""관리자용 예산 장부 조회와 한도 변경 감사. 모델 호출·예약 환급은 하지 않는다."""
 
+import re
 from uuid import UUID
 
 from django.db import transaction
@@ -7,11 +8,14 @@ from django.db.models import BigIntegerField, Count, F, Q, Sum
 from django.db.models.functions import Coalesce
 
 from .budget import call_limits, reservation_limits
+from .daily_budget import daily_summary
+from .execution_spec import digest
 from .models import (
     EvaluationBudget,
     EvaluationBudgetCall,
     EvaluationBudgetChange,
     EvaluationBudgetReservation,
+    EvaluationLegacyUsage,
     EvaluationRun,
 )
 
@@ -101,6 +105,43 @@ def ledger_totals(reservations):
     return counts
 
 
+def legacy_usage_data(record):
+    return {
+        "request_id": str(record.request_id),
+        "run_id": str(record.run_id),
+        "source": "SAVED_CAPTURE",
+        "provider_receipt_verified": False,
+        "actor": record.actor,
+        "actor_source": record.actor_source,
+        "reason": record.reason,
+        "capture_sha256": record.capture_sha256,
+        "evidence_sha256": record.evidence_sha256,
+        "usage": {
+            "calls": record.calls,
+            "input_tokens": record.input_tokens,
+            "output_tokens": record.output_tokens,
+        },
+        "before": record.before,
+        "after": record.after,
+        "created_at": record.created_at.isoformat(),
+    }
+
+
+def budget_totals(budget):
+    """예약 장부와 별도로 검토해 반영한 과거 사용량을 합산한다."""
+    totals = ledger_totals(EvaluationBudgetReservation.objects.filter(budget=budget))
+    legacy = EvaluationLegacyUsage.objects.filter(budget=budget).aggregate(
+        calls=Sum("calls", default=0),
+        input_tokens=Sum("input_tokens", default=0),
+        output_tokens=Sum("output_tokens", default=0),
+    )
+    if legacy["calls"]:
+        for key, value in legacy.items():
+            totals["legacy_" + key] = value
+            totals["allocated_" + key] += value
+    return totals
+
+
 def change_data(change):
     return {
         "request_id": str(change.request_id),
@@ -123,27 +164,50 @@ def change_data(change):
     }
 
 
+def limits_revision(budget):
+    """예약량은 별도로 재검증하고, 한도 편집은 CLI 변경을 포함해 ABA까지 감지한다."""
+    return digest(
+        {
+            "limits": None
+            if budget is None
+            else {
+                "calls": budget.call_limit,
+                "input_tokens": budget.input_token_limit,
+                "output_tokens": budget.output_token_limit,
+            },
+            "last_change": None
+            if budget is None
+            else EvaluationBudgetChange.objects.filter(budget=budget)
+            .values_list("id", flat=True)
+            .first(),
+        }
+    )
+
+
 def budget_summary(budget):
     """호출자가 budget 행을 잠근다. 같은 응답의 상세도 잠금 안에서 계산한다."""
     # All reserve/authorize/settle/close/limit writes take this same budget lock first.
     missing = EvaluationRun.objects.filter(
-        execution_mode="live", budget_reservation__isnull=True
+        execution_mode="live", budget_reservation__isnull=True, legacy_usage__isnull=True
     ).count()
     if budget is None:
         return {
+            "daily": daily_summary(budget),
             "state": "unconfigured",
-            "input_state": "unconfigured",
+            "limits_revision": limits_revision(budget),
+            "input_state": "legacy_unknown" if missing else "unconfigured",
             "limits": None,
             "allocated": None,
             "remaining": None,
             "breakdown": None,
             "reservation_count": 0,
             "legacy_live_run_count": missing,
+            "legacy_accounted_run_count": EvaluationLegacyUsage.objects.count(),
             "change_count": 0,
             "recent_changes": [],
         }
     reservations = EvaluationBudgetReservation.objects.filter(budget=budget)
-    totals = ledger_totals(reservations)
+    totals = budget_totals(budget)
     consistent = (
         all(value >= 0 for value in totals.values())
         and totals["allocated_input_tokens"] == budget.allocated_input_tokens
@@ -162,7 +226,9 @@ def budget_summary(budget):
     consistent = consistent and (budget.input_token_limit is None or not input_unknown)
     changes = EvaluationBudgetChange.objects.filter(budget=budget)
     return {
+        "daily": daily_summary(budget),
         "state": "consistent" if consistent else "inconsistent",
+        "limits_revision": limits_revision(budget),
         "input_state": "legacy_unknown"
         if input_unknown
         else "enforced"
@@ -190,6 +256,7 @@ def budget_summary(budget):
         "breakdown": totals,
         "reservation_count": reservations.count(),
         "legacy_live_run_count": missing,
+        "legacy_accounted_run_count": EvaluationLegacyUsage.objects.count(),
         "change_count": changes.count(),
         "recent_changes": [change_data(change) for change in changes[:10]],
     }
@@ -260,8 +327,28 @@ def reservation_data(reservation):
 
 
 @transaction.atomic
-def change_limits(*, calls, output_tokens, actor, reason, request_id, input_tokens=None):
-    """OS 운영자가 CLI에 명시한 신원이며 Core 로그인으로 인증한 신원은 아니다."""
+def change_limits(
+    *,
+    calls,
+    output_tokens,
+    actor,
+    reason,
+    request_id,
+    input_tokens=None,
+    authenticated_actor=None,
+    expected_revision=None,
+):
+    """관리자 API는 인증 신원·조회 당시 revision을 전달한다. CLI의 기존 계약은 유지한다."""
+    if authenticated_actor is not None:
+        actor = authenticated_actor.get_username()
+        if not isinstance(expected_revision, str) or not re.fullmatch(
+            r"[a-f0-9]{64}", expected_revision
+        ):
+            raise ValueError("조회한 한도 버전을 확인하세요.")
+    elif expected_revision is not None:
+        raise ValueError("CLI 요청에는 관리자 한도 버전을 지정할 수 없습니다.")
+    source = "CORE_ADMIN" if authenticated_actor is not None else "CLI"
+    actor_id = authenticated_actor.pk if authenticated_actor is not None else None
     if any(
         type(value) is not int or not 0 <= value <= 2**53 - 1
         for value in (calls, output_tokens, *([] if input_tokens is None else [input_tokens]))
@@ -282,24 +369,41 @@ def change_limits(*, calls, output_tokens, actor, reason, request_id, input_toke
             previous.actor,
             previous.reason,
             previous.input_token_limit,
+            previous.source,
+            previous.authenticated_actor_id,
+            previous.expected_revision,
         ) != (
             calls,
             output_tokens,
             actor,
             reason,
             input_tokens,
+            source,
+            actor_id,
+            expected_revision,
         ):
             raise ValueError("같은 요청 ID의 한도·변경자·사유를 바꿀 수 없습니다.")
         return previous
+    if authenticated_actor is not None and expected_revision != limits_revision(
+        None if created else budget
+    ):
+        raise ValueError("조회 이후 한도가 변경됐습니다. 최신 한도를 조회하고 다시 검토하세요.")
+    if authenticated_actor is not None:
+        totals = budget_totals(budget)
+        if any(value < 0 for value in totals.values()) or any(
+            totals["allocated_" + key] != getattr(budget, "allocated_" + key)
+            for key in ("calls", "input_tokens", "output_tokens")
+        ):
+            raise ValueError("전체 예산과 상세 장부가 일치하지 않습니다. 먼저 장부를 확인하세요.")
     if budget.input_token_limit is not None and input_tokens is None:
         raise ValueError("활성화한 입력 한도를 생략하거나 해제할 수 없습니다.")
     if input_tokens is not None:
-        totals = ledger_totals(EvaluationBudgetReservation.objects.filter(budget=budget))
+        totals = budget_totals(budget)
         if (
             totals["unbounded_input_calls"]
             or totals["unbounded_input_reservations"]
             or EvaluationRun.objects.filter(
-                execution_mode="live", budget_reservation__isnull=True
+                execution_mode="live", budget_reservation__isnull=True, legacy_usage__isnull=True
             ).exists()
         ):
             raise ValueError(
@@ -317,6 +421,9 @@ def change_limits(*, calls, output_tokens, actor, reason, request_id, input_toke
         budget=budget,
         actor=actor,
         reason=reason,
+        source=source,
+        authenticated_actor=authenticated_actor,
+        expected_revision=expected_revision,
         previous_call_limit=None if created else budget.call_limit,
         previous_output_token_limit=None if created else budget.output_token_limit,
         previous_input_token_limit=budget.input_token_limit,

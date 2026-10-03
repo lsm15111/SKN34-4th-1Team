@@ -13,6 +13,17 @@ SETTINGS = {
     "namespace": "govbiz-msa",
 }
 IDENTITY = "b" * 64
+IMAGE = "govbiz-ops-service:bridge-fixture"
+IMAGE_ID = "sha256:" + "d" * 64
+RELEASE = "e" * 64
+EXPECTED = {
+    f"00000000-0000-4000-8000-{n:012d}": {
+        "flow_id": f"00000000-0000-4000-8001-{n:012d}",
+        "execution_spec_sha256": "c" * 64,
+        "report_sha256": "f" * 64,
+    }
+    for n in range(3)
+}
 DUMP = "CREATE TABLE `django_migrations` (id int);\n-- synthetic UTF-8 복원 🧪\n"
 
 
@@ -44,6 +55,9 @@ class RestoreTests(unittest.TestCase):
                 {"side_effect": lambda *a: self.preflight},
             ),
             (smoke, "execute", {"side_effect": self.execute}),
+            (smoke, "application_read", {"side_effect": self.application_read}),
+            (smoke.ops_core_restore_fixture, "restored_core", {}),
+            (smoke.smoke_ops_volumes, "verify", {"side_effect": self.volume_read}),
             (smoke.time, "sleep", {}),
         ):
             mocker = patch.object(owner, name, **options)
@@ -56,6 +70,20 @@ class RestoreTests(unittest.TestCase):
         if self.fail_command and self.fail_command(command, data):
             raise subprocess.CalledProcessError(1, command, stderr="private-error")
         if command[:3] == ["kubectl", "fixture", "get"]:
+            if command[3] == "deployment":
+                return json.dumps(
+                    {
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "containers": [
+                                        {"name": "ops-service", "image": IMAGE}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                )
             return json.dumps(
                 {"spec": {"containers": [{"name": "mysql", "image": "mysql:8.4"}]}}
                 if command[3] == "pod"
@@ -66,6 +94,8 @@ class RestoreTests(unittest.TestCase):
             return "backup-fixtures-ready\n"
         if command[:2] == ["docker", "create"]:
             return IDENTITY
+        if command[:3] == ["docker", "image", "inspect"]:
+            return IMAGE_ID
         target = command[:2] == ["docker", "exec"]
         if "mysqldump" in command:
             return self.target_dump if target else self.source_dump
@@ -95,8 +125,46 @@ class RestoreTests(unittest.TestCase):
                 self.target_dump += "tampered"
         return ""
 
+    def application_read(
+        self, target, database_id, image_id, expected, release, evidence
+    ):
+        self.assertEqual(database_id, IDENTITY)
+        self.assertEqual(image_id, IMAGE_ID)
+        self.assertEqual(expected, EXPECTED)
+        self.assertEqual(release, RELEASE)
+        evidence["application"] = {"status": "PASS"}
+        return "temporary-reader-password"
+
+    def volume_read(self, state, settings, compose, env, expected, report, *, database):
+        self.assertEqual(
+            database,
+            {
+                "id": IDENTITY,
+                "image": IMAGE_ID,
+                "password": "temporary-reader-password",
+                "core_password": "fixture-admin-password",
+            },
+        )
+        self.assertEqual(report["database_restore"]["status"], "FAIL")
+        self.assertFalse(report["database_restore"]["cleanup_complete"])
+        self.assertTrue(report["database_restore"]["restored_database_ready"])
+        self.assertEqual(self.removed(), [])
+        report["volume_restore"] = {"results": {"ops_http": {"status": "PASS"}}}
+        return IMAGE_ID
+
     def verify(self):
-        smoke.verify("/temporary-fixture", SETTINGS, self.report)
+        smoke.verify(
+            "/temporary-fixture",
+            SETTINGS,
+            self.report,
+            ops_image=IMAGE,
+            core_image="fixture-core-image",
+            core_password="fixture-admin-password",
+            expected=EXPECTED,
+            release_sha256=RELEASE,
+            compose=["compose"],
+            compose_env={},
+        )
         return self.report["database_restore"]
 
     def removed(self):
@@ -132,7 +200,11 @@ class RestoreTests(unittest.TestCase):
             self.removed(), [["docker", "rm", "--force", "--volumes", IDENTITY]]
         )
         dumps = [event for event in self.events if "mysqldump" in event[0]]
-        self.assertEqual(len(dumps), 4)
+        self.assertEqual(len(dumps), 6)
+        self.assertTrue(result["application"]["database_unchanged"])
+        self.assertTrue(
+            self.report["volume_restore"]["results"]["ops_http"]["database_unchanged"]
+        )
         self.assertTrue(all(event[0][-1] == smoke.DATABASE for event in dumps))
         self.assertTrue(
             all("--routines" in event[0] and "--events" in event[0] for event in dumps)
@@ -156,7 +228,18 @@ class RestoreTests(unittest.TestCase):
                 self.subTest(change=change),
                 self.assertRaisesRegex(ValueError, "disposable"),
             ):
-                smoke.verify("/unused", SETTINGS | change, self.report)
+                smoke.verify(
+                    "/unused",
+                    SETTINGS | change,
+                    self.report,
+                    ops_image=IMAGE,
+                    core_image="fixture-core-image",
+                    core_password="fixture-admin-password",
+                    expected=EXPECTED,
+                    release_sha256=RELEASE,
+                    compose=["compose"],
+                    compose_env={},
+                )
             self.assertEqual(self.events, [])
 
     def test_ownership_failure_prevents_data_writes(self):
@@ -293,6 +376,80 @@ class RestoreTests(unittest.TestCase):
             self.verify()
         self.assertEqual(self.report["database_restore"]["status"], "FAIL")
         self.assertFalse(self.report["database_restore"]["cleanup_complete"])
+
+    def test_application_failure_still_removes_mysql_and_cannot_pass(self):
+        with patch.object(
+            smoke, "application_read", side_effect=ValueError("readiness")
+        ):
+            with self.assertRaisesRegex(ValueError, "readiness"):
+                self.verify()
+        self.assertEqual(self.report["database_restore"]["status"], "FAIL")
+        self.assertEqual(len(self.removed()), 1)
+
+    def test_database_changed_during_application_read_cannot_pass(self):
+        def changed(*args):
+            self.application_read(*args)
+            self.target_dump += "unexpected application write"
+
+        with patch.object(smoke, "application_read", side_effect=changed):
+            with self.assertRaisesRegex(ValueError, "comparison"):
+                self.verify()
+        self.assertEqual(self.report["database_restore"]["status"], "FAIL")
+
+    def test_other_deployed_image_rejected_before_fixtures_or_stop(self):
+        with self.assertRaisesRegex(ValueError, "image differs"):
+            smoke.verify(
+                "/temporary-fixture",
+                SETTINGS,
+                self.report,
+                ops_image="another-image",
+                core_image="fixture-core-image",
+                core_password="fixture-admin-password",
+                expected=EXPECTED,
+                release_sha256=RELEASE,
+                compose=["compose"],
+                compose_env={},
+            )
+        self.assertFalse(
+            any(
+                "scale" in command or data == smoke.FIXTURES
+                for command, data, _ in self.events
+            )
+        )
+
+    def test_core_cleanup_failure_cannot_pass_and_still_removes_mysql(self):
+        with patch.object(smoke.ops_core_restore_fixture, "restored_core") as core:
+            core.return_value.__exit__.side_effect = ValueError("Core cleanup failed")
+            with self.assertRaisesRegex(ValueError, "Core cleanup"):
+                self.verify()
+        self.assertEqual(self.report["database_restore"]["status"], "FAIL")
+        self.assertTrue(self.report["database_restore"]["cleanup_complete"])
+        self.assertEqual(
+            self.removed(), [["docker", "rm", "--force", "--volumes", IDENTITY]]
+        )
+
+    def test_http_or_volume_failure_still_cleans_mysql(self):
+        with patch.object(
+            smoke.smoke_ops_volumes, "verify", side_effect=ValueError("HTTP")
+        ):
+            with self.assertRaisesRegex(ValueError, "HTTP"):
+                self.verify()
+        self.assertEqual(len(self.removed()), 1)
+        self.assertEqual(self.report["database_restore"]["status"], "FAIL")
+
+    def test_http_database_write_blocks_success(self):
+        def changed(*args, **kwargs):
+            image = self.volume_read(*args, **kwargs)
+            self.target_dump += "changed during HTTP"
+            return image
+
+        with patch.object(smoke.smoke_ops_volumes, "verify", side_effect=changed):
+            with self.assertRaisesRegex(ValueError, "comparison"):
+                self.verify()
+        self.assertEqual(self.report["database_restore"]["status"], "FAIL")
+        self.assertNotIn(
+            "database_unchanged", self.report["volume_restore"]["results"]["ops_http"]
+        )
 
 
 if __name__ == "__main__":

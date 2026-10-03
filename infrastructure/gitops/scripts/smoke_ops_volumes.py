@@ -2,10 +2,12 @@
 
 import json
 import re
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 
 import fork_cluster
+import ops_http_restore_probe
 import ops_volume_restore_probe as probe
 from smoke_ops_artifacts import require_disposable
 from smoke_ops_bridge import execute
@@ -61,10 +63,10 @@ def unused_volumes(sources, containers):
             raise ValueError("Unexpected container uses the source volume")
 
 
-def restore_volume(image, source, kind, expected):
+def restore_volume(image, source, kind, expected, *, database=None):
     name = "govbiz-volume-restore-" + uuid4().hex
     label = "govbiz.restore=" + name
-    identity = None
+    helpers = []
     created = False
     result = None
     if execute(
@@ -118,8 +120,8 @@ def restore_volume(image, source, kind, expected):
             ]
         ).strip()
         if not re.fullmatch(r"[a-f0-9]{64}", identity):
-            identity = None
             raise ValueError("Invalid restore helper identity")
+        helpers.append(identity)
         raw = execute(
             ["docker", "start", "--attach", "--interactive", identity],
             data=Path(probe.__file__).read_text(encoding="utf-8"),
@@ -163,11 +165,86 @@ def restore_volume(image, source, kind, expected):
                 or api.get("automatic_migrations") is not False
             ):
                 raise ValueError("Incomplete restored Prefect API evidence")
+        else:
+            # The copy helper needs ownership privileges; the HTTP reader does not.
+            # It sees only the restored copy, mounted read-only, as the runtime user.
+            reader = execute(
+                [
+                    "docker",
+                    "create",
+                    "--interactive",
+                    "--network",
+                    "none",
+                    "--read-only",
+                    "--user",
+                    "10001:10001",
+                    "--cap-drop",
+                    "ALL",
+                    "--security-opt",
+                    "no-new-privileges:true",
+                    "--memory",
+                    "256m",
+                    "--pids-limit",
+                    "64",
+                    "--tmpfs",
+                    "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
+                    "--mount",
+                    "type=volume,source=" + name + ",target=/restore,readonly",
+                    "--entrypoint",
+                    "python",
+                    image,
+                    "-B",
+                    "-",
+                    json.dumps(
+                        {"kind": kind, "expected": expected, "phase": "results-api"}
+                    ),
+                ]
+            ).strip()
+            if not re.fullmatch(r"[a-f0-9]{64}", reader):
+                raise ValueError("Invalid restored results reader identity")
+            helpers.append(reader)
+            raw = execute(
+                ["docker", "start", "--attach", "--interactive", reader],
+                data=Path(probe.__file__).read_text(encoding="utf-8"),
+                timeout=90,
+            )
+            state = json.loads(
+                execute(["docker", "inspect", "--format", "{{json .State}}", reader])
+            )
+            if state["Running"] or state["ExitCode"] != 0 or state["OOMKilled"]:
+                raise ValueError("Restored results reader did not exit successfully")
+            api = json.loads(raw)
+            required_api = {
+                "status": "PASS",
+                "matched_reports": len(expected),
+                "unauthenticated_rejected": True,
+                "invalid_token_rejected": True,
+                "writes_rejected": True,
+                "files_unchanged": True,
+                "server_stopped": True,
+                "runtime_uid": 10001,
+            }
+            if not isinstance(api, dict) or any(
+                type(api.get(key)) is not type(value) or api[key] != value
+                for key, value in required_api.items()
+            ):
+                raise ValueError("Incomplete restored results API evidence")
+            result["api"] = api
+            if database is not None:
+                result["ops_http"] = ops_http_restore_probe.verify(
+                    image, name, expected, database
+                )
     finally:
         # Attempt both removals even if one fails; never target a source volume.
         try:
-            if identity is not None:
-                execute(["docker", "rm", "--force", identity], timeout=30)
+            errors = []
+            for identity in reversed(helpers):
+                try:
+                    execute(["docker", "rm", "--force", identity], timeout=30)
+                except (OSError, subprocess.SubprocessError) as error:
+                    errors.append(error)
+            if errors:
+                raise errors[0]
         finally:
             if created:
                 info = json.loads(execute(["docker", "volume", "inspect", name]))[0]
@@ -180,13 +257,14 @@ def restore_volume(image, source, kind, expected):
     return {**result, "cleanup_complete": True}
 
 
-def verify(state, settings, compose, env, expected, report):
+def verify(state, settings, compose, env, expected, report, *, database):
     evidence = report["volume_restore"] = {
         "status": "FAIL",
-        "scope": "disposable_results_and_prefect_api",
+        "scope": "disposable_ops_report_http_and_prefect_api",
         "backup_verified": False,
         "personal_environment_verified": False,
         "prefect_server_started": None,
+        "results_server_started": None,
         "model_api_calls": 0,
     }
     expected = probe.expected_runs(expected)
@@ -198,12 +276,16 @@ def verify(state, settings, compose, env, expected, report):
     _, nk, _ = fork_cluster.commands(state, settings)
     project = report["compose_project"]
     require_disposable(nk, compose, env, project)
-    database = report.get("database_restore", {})
+    db_evidence = report.get("database_restore", {})
     if (
-        database.get("status") != "PASS"
-        or database.get("source_writers_stopped") is not True
+        db_evidence.get("restored_database_ready") is not True
+        or db_evidence.get("source_writers_stopped") is not True
+        or db_evidence.get("application", {}).get("database_unchanged") is not True
+        or db_evidence.get("cleanup_complete") is not False
     ):
-        raise ValueError("Complete the isolated DB rehearsal before volume restore")
+        raise ValueError(
+            "Keep the verified isolated DB rehearsal alive for volume restore"
+        )
     if json.loads(
         execute(
             nk
@@ -232,30 +314,30 @@ def verify(state, settings, compose, env, expected, report):
         ):
             raise ValueError("Source volume does not belong to this smoke")
     unused_volumes(sources, containers)
-    execute(
-        [
-            "docker",
-            "stop",
-            "--time",
-            "30",
-            *[item["Id"] for item in containers.values()],
-        ],
-        timeout=120,
-    )
+    # Runner shutdown pauses deployments through the Prefect API. Keep that API
+    # alive until the runner exits; a concurrent stop races its cleanup request.
+    evidence["source_shutdown"] = {}
     for service, before in containers.items():
+        execute(["docker", "stop", "--time", "30", before["Id"]], timeout=60)
         after = container(before["Id"], project, service)
+        evidence["source_shutdown"][service] = {
+            "running": after["State"]["Running"],
+            "oom_killed": after["State"]["OOMKilled"],
+            "exit_code": after["State"]["ExitCode"],
+            "image_unchanged": after["Image"] == before["Image"],
+        }
         if (
             after["Image"] != before["Image"]
             or after["State"]["Running"]
             or after["State"]["OOMKilled"]
             or after["State"]["ExitCode"] not in (0, 143)
         ):
-            raise ValueError("Source writer did not stop cleanly")
+            raise ValueError(f"Source writer did not stop cleanly: {service}")
     unused_volumes(sources, containers)
     evidence["writers_stopped"] = True
     image = containers["ops-artifacts"]["Image"]
     evidence["results"] = restore_volume(
-        image, project + "_ops-results", "results", expected
+        image, project + "_ops-results", "results", expected, database=database
     )
     evidence["prefect"] = restore_volume(
         containers["prefect"]["Image"], project + "_prefect-data", "prefect", expected
@@ -265,6 +347,7 @@ def verify(state, settings, compose, env, expected, report):
         network_isolated=True,
         cleanup_complete=True,
         prefect_server_started=True,
+        results_server_started=True,
     )
     # Preserve the already verified runner identity before the caller's cleanup.
     return containers["evaluation-runner"]["Image"]

@@ -189,6 +189,9 @@ const runSchema = z.object({
 const pageSchema = z.object({ count: z.number(), next: z.string().nullable(), previous: z.string().nullable(), results: z.array(runSchema) })
 const budgetAmountsSchema = z.object({ input_tokens: z.number().int().nonnegative().nullable().optional(), calls: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative() })
 const budgetBreakdownSchema = z.object({
+  legacy_calls: z.number().int().nonnegative().optional(),
+  legacy_input_tokens: z.number().int().nonnegative().optional(),
+  legacy_output_tokens: z.number().int().nonnegative().optional(),
   unknown_input_tokens: z.number().int().optional(), unapproved_input_tokens: z.number().int().optional(),
   pending_release_input_tokens: z.number().int().optional(), allocated_input_tokens: z.number().int().optional(),
   unbounded_input_calls: z.number().int().nonnegative().optional(), unbounded_input_reservations: z.number().int().nonnegative().optional(),
@@ -196,17 +199,49 @@ const budgetBreakdownSchema = z.object({
   unknown_calls: z.number().int(), unknown_output_tokens: z.number().int(),
   unapproved_calls: z.number().int(), unapproved_output_tokens: z.number().int(),
   pending_release_output_tokens: z.number().int(), allocated_calls: z.number().int(), allocated_output_tokens: z.number().int(),
+}).refine((data) => [data.legacy_calls, data.legacy_input_tokens, data.legacy_output_tokens].every((value) => value === undefined)
+  || [data.legacy_calls, data.legacy_input_tokens, data.legacy_output_tokens].every((value) => value !== undefined))
+const budgetChangeSchema = z.object({
+  request_id: z.uuid(), actor: z.string(), source: z.enum(['CLI', 'CORE_ADMIN']), reason: z.string(),
+  previous_limits: budgetAmountsSchema.nullable(), limits: budgetAmountsSchema, created_at: z.string(),
 })
+const dailyAmountsSchema = z.object({ calls: z.number().int().nonnegative(), input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative() })
+const dailyPolicySchema = z.object({ enabled: z.boolean(), limits: dailyAmountsSchema })
+const dailyBudgetChangeSchema = z.object({
+  request_id: z.uuid(), source: z.enum(['CLI', 'CORE_ADMIN']), actor: z.string(), reason: z.string(),
+  expected_revision: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
+  previous: dailyPolicySchema.nullable(), policy: dailyPolicySchema, created_at: z.iso.datetime({ offset: true }),
+}).refine((value) => value.source === 'CLI' ? value.expected_revision == null : value.expected_revision != null)
+const dailyBudgetSchema = z.object({
+  limits_revision: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  state: z.enum(['disabled', 'enforced', 'unknown', 'exceeded']), timezone: z.literal('Asia/Seoul'),
+  period_start: z.iso.datetime({ offset: true }), period_end: z.iso.datetime({ offset: true }),
+  limits: dailyAmountsSchema.nullable(), current_day: dailyAmountsSchema.nullable(), carried: dailyAmountsSchema.nullable(),
+  allocated: dailyAmountsSchema.nullable(), remaining: dailyAmountsSchema.nullable(),
+  recent_changes: z.array(dailyBudgetChangeSchema),
+}).refine((value) => {
+  if (Date.parse(value.period_end) - Date.parse(value.period_start) !== 86_400_000) return false
+  if (value.state === 'disabled' || value.state === 'unknown') return value.remaining === null
+    && value.allocated === null && value.current_day === null && value.carried === null
+    && (value.state === 'disabled' || value.limits !== null)
+  const { limits, current_day: today, carried, allocated, remaining } = value
+  if (!limits || !today || !carried || !allocated) return false
+  const keys = ['calls', 'input_tokens', 'output_tokens'] as const
+  if (!keys.every((key) => allocated[key] === today[key] + carried[key])) return false
+  return value.state === 'exceeded'
+    ? remaining === null && keys.some((key) => allocated[key] > limits[key])
+    : remaining !== null && keys.every((key) => limits[key] - allocated[key] === remaining[key])
+}, '일별 예산 장부가 일치하지 않습니다.')
 const budgetSummarySchema = z.object({
+  daily: dailyBudgetSchema.optional(),
+  limits_revision: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   input_state: z.enum(['enforced', 'unconfigured', 'legacy_unknown']).optional(),
   state: z.enum(['consistent', 'inconsistent', 'unconfigured']),
   limits: budgetAmountsSchema.nullable(), allocated: budgetAmountsSchema.nullable(), remaining: budgetAmountsSchema.nullable(),
   breakdown: budgetBreakdownSchema.nullable(), reservation_count: z.number().int().nonnegative(),
   legacy_live_run_count: z.number().int().nonnegative(), change_count: z.number().int().nonnegative(),
-  recent_changes: z.array(z.object({
-    request_id: z.uuid(), actor: z.string(), source: z.literal('CLI'), reason: z.string(),
-    previous_limits: budgetAmountsSchema.nullable(), limits: budgetAmountsSchema, created_at: z.string(),
-  })),
+  legacy_accounted_run_count: z.number().int().nonnegative().optional(),
+  recent_changes: z.array(budgetChangeSchema),
 })
 const budgetReservationSchema = z.object({
   max_input_tokens: z.number().int().positive().nullable().optional(),
@@ -262,8 +297,48 @@ const usageCorrectionSchema = z.object({
   && before.reservation_calls === after.reservation_calls && before.unknown_calls - after.unknown_calls === 1
   && before.global_output_tokens >= after.global_output_tokens
   && before.global_output_tokens - after.global_output_tokens === before.reservation_output_tokens - after.reservation_output_tokens)
+const legacyAmountsSchema = z.object({
+  calls: z.number().int().nonnegative(), input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative(),
+})
+const unaccountedRunsSchema = z.object({
+  as_of: z.string().datetime({ offset: true }), count: z.number().int().nonnegative(),
+  next: z.string().nullable(), previous: z.string().nullable(),
+  results: z.array(z.object({
+    run_id: z.uuid(), dataset_id: z.string(), dataset_label: z.string(),
+    status: z.enum(['REQUESTED', 'QUEUED', 'RUNNING', 'CANCELLING', 'COMPLETED', 'FAILED', 'CANCELLED', 'CRASHED', 'RESULT_ERROR']),
+    status_label: z.string(), created_at: z.string().datetime({ offset: true }),
+  })),
+})
+const legacyPreviewBase = z.object({
+  as_of: z.string().datetime({ offset: true }), run_id: z.uuid(), applied: z.literal(false),
+})
+const legacyPreviewSchema = z.discriminatedUnion('state', [
+  legacyPreviewBase.extend({
+    state: z.literal('unavailable'), blockers: z.array(z.string().min(1)).min(1),
+  }),
+  legacyPreviewBase.extend({
+    state: z.literal('verified'), can_apply: z.boolean(), blockers: z.array(z.string().min(1)),
+    source: z.literal('SAVED_CAPTURE'), provider_receipt_verified: z.literal(false),
+    evidence_sha256: z.string().regex(/^[a-f0-9]{64}$/), capture_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    usage: legacyAmountsSchema.extend({ calls: z.number().int().positive() }),
+    before: legacyAmountsSchema.nullable(), after: legacyAmountsSchema.nullable(),
+  }),
+]).refine((data) => data.state === 'unavailable' || data.can_apply === (data.blockers.length === 0)
+  && (data.before === null ? data.after === null && !data.can_apply
+    : data.after !== null && (['calls', 'input_tokens', 'output_tokens'] as const)
+      .every((key) => data.after![key] - data.before![key] === data.usage[key])))
+const legacyUsageSchema = z.object({
+  actor_source: z.enum(['CLI', 'CORE_ADMIN']).optional(),
+  request_id: z.uuid(), run_id: z.uuid(), source: z.literal('SAVED_CAPTURE'), provider_receipt_verified: z.literal(false),
+  actor: z.string().trim().min(1), reason: z.string().trim().min(1),
+  capture_sha256: z.string().regex(/^[a-f0-9]{64}$/), evidence_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  usage: legacyAmountsSchema.extend({ calls: z.number().int().positive() }),
+  before: legacyAmountsSchema, after: legacyAmountsSchema, created_at: z.string().datetime({ offset: true }),
+}).refine(({ before, after, usage }) => (['calls', 'input_tokens', 'output_tokens'] as const)
+  .every((key) => after[key] - before[key] === usage[key]))
 const runBudgetSchema = z.object({
-  as_of: z.string(), state: z.enum(['recorded', 'missing', 'not_applicable']), reservation: budgetReservationSchema.nullable(),
+  as_of: z.string(), state: z.enum(['recorded', 'legacy_recorded', 'missing', 'not_applicable']), reservation: budgetReservationSchema.nullable(),
+  legacy_usage: legacyUsageSchema.nullable().optional(),
   cleanup: budgetCleanupSchema.nullable().optional(),
   corrections: z.array(usageCorrectionSchema).optional(),
   calls: z.array(z.object({
@@ -277,6 +352,9 @@ const runBudgetSchema = z.object({
     ? call.input_tokens === null && call.output_tokens === null
     : call.input_tokens !== null && call.output_tokens !== null)),
 }).refine((data) => data.state === 'recorded' ? data.reservation !== null : data.reservation === null && data.calls.length === 0)
+  .refine((data) => data.state === 'legacy_recorded'
+    ? Boolean(data.legacy_usage) && !data.cleanup && !data.corrections?.length
+    : !data.legacy_usage)
   .refine((data) => !data.cleanup || Boolean(data.reservation?.closed_at && data.cleanup.evidence.run_id === data.reservation.run_id))
   .refine((data) => {
     const corrections = data.corrections ?? []
@@ -350,12 +428,49 @@ const reviewSchema = z.object({
   }).nullable(),
 })
 
+const readinessAmountsSchema = z.object({
+  calls: z.number().int().nonnegative(), input_tokens: z.number().int().nonnegative(), output_tokens: z.number().int().nonnegative(),
+})
+const readinessIssueSchema = z.object({ code: z.string().min(1), message: z.string().min(1) })
+const liveReadinessSchema = z.object({
+  daily: dailyBudgetSchema.optional(),
+  as_of: z.iso.datetime({ offset: true }), dataset_id: z.string(), execution_profile: z.string().regex(/^[a-f0-9]{64}$/),
+  evaluation_scope: z.enum(['fixed-answer-context-only', 'source-chunks-retrieval-answer']), model: z.string().min(1),
+  state: z.enum(['blocked', 'checked']),
+  required: readinessAmountsSchema.extend({ calls: z.number().int().positive(), input_tokens: z.number().int().positive(), output_tokens: z.number().int().positive() }),
+  remaining: readinessAmountsSchema.extend({ input_tokens: z.number().int().nonnegative().nullable() }).nullable(),
+  blockers: z.array(readinessIssueSchema), warnings: z.array(readinessIssueSchema),
+}).refine((value) => {
+  if ((value.state === 'blocked') !== (value.blockers.length > 0)) return false
+  if (value.state === 'blocked') return true
+  if (value.daily && value.daily.state !== 'disabled') {
+    if (value.daily.state !== 'enforced' || !value.daily.remaining) return false
+    if ((['calls', 'input_tokens', 'output_tokens'] as const).some((key) => value.daily!.remaining![key] < value.required[key])) return false
+  }
+  const left = value.remaining
+  return left !== null && left.calls >= value.required.calls && left.output_tokens >= value.required.output_tokens
+    && (left.input_tokens === null
+      ? value.evaluation_scope === 'fixed-answer-context-only' && value.warnings.length > 0
+      : left.input_tokens >= value.required.input_tokens)
+}, '실행 설정·예산 점검 결과가 일치하지 않습니다.')
+
+export type LiveReadiness = z.infer<typeof liveReadinessSchema>
 export type OpsSession = z.infer<typeof sessionSchema>
 export type EvaluationRun = z.infer<typeof runSchema>
 export type EvaluationPage = z.infer<typeof pageSchema>
 export type BudgetBreakdown = z.infer<typeof budgetBreakdownSchema>
+export type BudgetSummary = z.infer<typeof budgetSummarySchema>
+export type DailyBudget = z.infer<typeof dailyBudgetSchema>
+export type DailyBudgetLimitsInput = { request_id: string; expected_revision: string; reason: string } & (
+  { disable: false; calls: number; input_tokens: number; output_tokens: number }
+  | { disable: true; calls: null; input_tokens: null; output_tokens: null }
+)
+export type BudgetLimitsInput = { request_id: string; expected_revision: string; calls: number; input_tokens: number | null; output_tokens: number; reason: string }
+export type LegacyUsageInput = { request_id: string; evidence_sha256: string; reason: string }
 export type BudgetPage = z.infer<typeof budgetPageSchema>
 export type RunBudget = z.infer<typeof runBudgetSchema>
+export type UnaccountedRuns = z.infer<typeof unaccountedRunsSchema>
+export type LegacyUsagePreview = z.infer<typeof legacyPreviewSchema>
 export type EvaluationReview = z.infer<typeof reviewSchema>
 export type CaseReviewDecision = EvaluationReview['case_reviews'][number]['decision']
 export type ReviewStamp = { capture_sha256: string; fixture_sha256: string; rubric_version: string; review_version: number }
@@ -388,6 +503,8 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: RequestIn
     const error = body
     const message = response.status === 400 && error?.code === 'LIVE_BUDGET_UNAVAILABLE'
       ? '누적 평가 한도가 부족하거나 설정되지 않아 접수하지 않았습니다. 운영자에게 예약·미확인 사용량과 한도를 확인해 주세요.'
+      : ['BUDGET_CHANGE_CONFLICT', 'DAILY_BUDGET_CHANGE_CONFLICT', 'LEGACY_USAGE_CONFLICT'].includes(error?.code) && typeof error?.detail === 'string'
+        ? error.detail
       : error?.code === 'INVALID_RAG_REVIEW' ? '검토 항목과 의견을 확인하세요. 미측정 항목은 판단 보류만 저장할 수 있습니다.'
       : error?.code === 'INVALID_RAG_REFERENCE_REVIEW' ? '전체 대상 자료의 확인과 참조 검토 근거를 입력하세요.'
       : error?.code === 'CANCEL_FORBIDDEN' ? '평가를 요청한 계정만 취소할 수 있습니다.'
@@ -409,8 +526,35 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: RequestIn
 
 export const getOpsSession = (signal?: AbortSignal) => request('/session', sessionSchema, { signal })
 export const getBudgetSummary = (signal?: AbortSignal) => request('/budget', budgetSummarySchema.extend({ as_of: z.string() }), { signal })
+export const getLiveReadiness = (datasetId: string, executionProfile: string, signal?: AbortSignal) => request(
+  `/evaluations/live-readiness?${new URLSearchParams({ dataset_id: datasetId, execution_profile: executionProfile })}`,
+  liveReadinessSchema.refine((value) => value.dataset_id === datasetId && value.execution_profile === executionProfile, '선택한 실행 설정과 점검 결과가 다릅니다.'), { signal },
+)
 export const getBudgetReservations = (page: number, signal?: AbortSignal) => request(`/budget/reservations?page=${page}`, budgetPageSchema, { signal })
-export const getRunBudget = (id: string, signal?: AbortSignal) => request(`/evaluations/${encodeURIComponent(id)}/budget`, runBudgetSchema, { signal })
+export const getUnaccountedRuns = (page: number, signal?: AbortSignal) => request(`/budget/unaccounted-runs?page=${page}`, unaccountedRunsSchema, { signal })
+export const getLegacyUsagePreview = (id: string, signal?: AbortSignal) => request(`/evaluations/${encodeURIComponent(id)}/legacy-usage-preview`,
+  legacyPreviewSchema.refine((data) => data.run_id === id), { signal })
+export const getRunBudget = (id: string, signal?: AbortSignal) => request(`/evaluations/${encodeURIComponent(id)}/budget`,
+  runBudgetSchema.refine((data) => !data.legacy_usage || data.legacy_usage.run_id === id), { signal })
+
+export const setBudgetLimits = (data: BudgetLimitsInput, owner: string) => post('/budget/limits', data,
+  z.object({ change: budgetChangeSchema }).refine(({ change }) => change.source === 'CORE_ADMIN'
+    && change.actor === owner && change.request_id === data.request_id && change.reason === data.reason
+    && change.limits.calls === data.calls && change.limits.output_tokens === data.output_tokens
+    && change.limits.input_tokens === data.input_tokens), false, owner)
+export const setDailyBudgetLimits = (data: DailyBudgetLimitsInput, owner: string) => post('/budget/daily-limits', data,
+  z.object({ change: dailyBudgetChangeSchema }).refine(({ change }) => change.source === 'CORE_ADMIN'
+    && change.actor === owner && change.request_id === data.request_id && change.reason === data.reason
+    && change.expected_revision === data.expected_revision && change.policy.enabled === !data.disable
+    && (data.disable
+      ? change.previous !== null && (['calls', 'input_tokens', 'output_tokens'] as const).every((key) => change.policy.limits[key] === change.previous!.limits[key])
+      : change.policy.limits.calls === data.calls && change.policy.limits.input_tokens === data.input_tokens && change.policy.limits.output_tokens === data.output_tokens)), false, owner)
+export const applyLegacyUsage = (runId: string, data: LegacyUsageInput, owner: string) => post(
+  `/evaluations/${encodeURIComponent(runId)}/legacy-usage`, data,
+  z.object({ applied: z.literal(true), replayed: z.boolean(), record: legacyUsageSchema }).refine(({ record }) =>
+    record.actor_source === 'CORE_ADMIN' && record.actor === owner && record.run_id === runId
+    && record.request_id === data.request_id && record.reason === data.reason
+    && record.evidence_sha256 === data.evidence_sha256), false, owner)
 
 async function post<T>(path: string, data: unknown, schema: z.ZodType<T>, dispatch = false, owner?: string, method = 'POST') {
   // 쓰기 전 Core 관리자 세션과 최신 CSRF 토큰을 확인한다. 토큰·비밀번호는 저장하지 않는다.

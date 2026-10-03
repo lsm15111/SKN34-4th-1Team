@@ -107,6 +107,18 @@ DB와 파일을 서로 다른 시점에 복사한 뒤 일관된 백업이라고 
 
 - 실제 무료 평가 이력에 한글·이모지·따옴표·JSON·NULL·검토/예산 감사 fixture를 추가한다.
 - 전체 테이블별 행 수, migration 건수, 스키마·행을 포함한 정렬된 덤프를 원본과 대조한다.
+- 배포한 Ops 이미지의 로컬 ID를 고정하고 별도 UID/GID 10001 조회 컨테이너를 실행한다.
+  이 컨테이너는 외부 연결이 없는 복원 MySQL의 네트워크 공간만 공유하며 원본 DB·볼륨에 연결하지 않는다.
+  파일시스템은 읽기 전용이며 capability를 제거하고 새 DB 조회 계정과 임시 Django 키만 사용한다.
+- 복원 DB에만 `SELECT, LOCK TABLES` 권한을 가진 계정을 생성한다. 실제 권한과 UPDATE 거절을 확인한 뒤,
+  Django test client로 실제 readiness URL의 migration·컬럼 검사를 실행한다. migration은 적용하지 않는다.
+- 원본 실행 release 해시와 완료 평가 3건의 요청/flow ID·실행 명세 해시를 비교하고,
+  실제 `run_data`와 DRF JSON renderer로 응답 생성·날짜 직렬화를 확인한다.
+  한글·JSON·NULL fixture와 사용자·검토·예산 관계도 ORM으로 확인한다.
+  검사 후 전체 덤프를 다시 대조해 애플리케이션이 schema·행을 바꾸지 않았음을 확인한다.
+- 검증된 복원 DB는 결과 볼륨의 Ops HTTP 검사까지 유지한다. 이 시점에는
+  `restored_database_ready=true`이며 DB 전체 검증의 `status`는 정리가 끝날 때까지 `FAIL`이다.
+  HTTP 검사가 끝난 뒤 덤프를 다시 대조하며, 중간 실패에도 복원 DB를 정리한다.
 - 복원 DB의 잘못된 외래 키 참조가 거절되는지와 데이터 변조가 감지되는지 확인한다.
 - 마지막에 원본 덤프가 그대로인지 확인하고 생성한 복원 컨테이너만 삭제한다.
   가져오기·비교·컨테이너 정리 중 하나라도 실패하면 성공으로 기록하지 않는다.
@@ -116,15 +128,64 @@ DB와 파일을 서로 다른 시점에 복사한 뒤 일관된 백업이라고 
 원본·복원 서버의 MySQL 버전이 다르면 중단하며 복원 서버의 event scheduler는 비활성화한다.
 SQL 원문은 메모리에서만 전달하고 CI artifact에는 건수·SHA-256·검증 결과만 보존한다.
 
-보고서의 `database_restore.scope=disposable_ops_mysql_only`와 `status=PASS`는 이 CI DB 훈련만 뜻한다.
+보고서의 `database_restore.scope=disposable_ops_mysql_application_read`와 `status=PASS`는
+이 CI DB 복원·애플리케이션 조회 훈련만 뜻한다. `application`에 이미지 ID·readiness·응답 생성·
+권한 거절·DB 무변경·컨테이너 정리 결과를 남긴다. readiness는 프로세스 내부의 test client로 호출하며
+HTTP 서버·Core 관리자 인증·관리자 화면을 검증한 것으로 기록하지 않는다.
 `backup_verified`, `personal_environment_verified`, `artifacts_restored`, `prefect_restored`는 모두 `false`다.
 개인 환경 전체 백업·파일/Prefect 복원·키 복구·구버전 전환 검증은 별도로 수행해야 한다.
 
+### CI에서 수행하는 Kubernetes 브라우저 로그인 검증
+
+`smoke_ops_bridge.py --evaluate`는 최초 무료 고정 답변 평가와 RAG 재평가가 완료된 뒤,
+자신이 시작한 Vite portfolio 서버와 Core/Ops port-forward를 유지한 상태에서
+`ops_browser_login.mjs`를 실행한다. 로그인은 응답 재생이나 쿠키 주입 없이 실제 폼으로 수행한다.
+
+- 새 브라우저에서 Ops 진입 → 로그인 화면 이동 → 이메일/비밀번호 입력 → Core 로그인 POST를 수행한다.
+- 서버가 발급한 HttpOnly·SameSite=Lax 쿠키, Core 관리자 ID와 Ops 사용자 ID의 일치,
+  페이지 새로고침 후 세션 유지 및 기존 완료 평가 2건의 상세·실행 예산 표시를 확인한다.
+- 평가 목록은 25건 단위로 최대 1,000건까지 전체 페이지를 확인한다. API 건수·다음 페이지 경로·중복·누락과
+  화면의 행·다음 버튼을 대조하고, 예상 평가가 있는 페이지까지 화면으로 이동한 뒤 상세 링크를 연다.
+  중간에 전체 건수가 바뀌거나 목록이 불완전하면 실패한다. API가 제공한 외부 URL을 따라가지 않는다.
+- 브라우저가 실제 Ops 보고서를 GET한 본문 해시를 사전에 검증한 보고서 해시와 대조한다.
+  이 검사 자체는 보고서 차트 렌더링 검증이 아니다.
+- 화면의 로그아웃 버튼으로 Core 204·쿠키 제거를 확인하고, 같은 브라우저의 Core 관리자 세션·Ops 전체
+  목록 페이지·대상 상세·실행 예산·보고서 재요청이 401인지 확인한다. 이어서 이 검사에서 서버가 발급한
+  쿠키만 메모리에서 다시 적용하고 같은 요청이 모두 401인지 확인해 서버의 세션 폐기도 검증한다.
+  재사용 검사 후에는 쿠키를 지우며, 값은 파일·로그·증거에 남기지 않는다.
+- 로그인·로그아웃 외 쓰기와 외부 origin 요청은 차단한다. 평가 재접수·검토 저장·유료 호출은 하지 않는다.
+  기존 두 평가의 DB 식별자·상태·실행 명세·모델 호출 수가 검사 전후 같아야 한다.
+- 중간 실패에도 발급된 검사 세션을 로그아웃하고 브라우저를 종료한다. 실패/정리 오류를 성공으로 바꾸지 않는다.
+
+CI가 생성한 일회용 비밀번호는 Python에서 Node의 표준입력으로 직접 전달하며 명령행 인자·파일·로그·
+증거에 남기지 않는다. CLI 오류도 입력값이 포함될 수 있는 브라우저 진단 대신 고정 오류 코드만 출력한다.
+개인 Kubernetes Secret을 추출하는 절차가 아니며 개인 계정의 세션이나 기존 브라우저를 재사용하지 않는다.
+
+`ops-bridge.json`의 최상위 `browser_login`에 `response_source=core_ops_http`, 브라우저 버전,
+로그인·ID 연결·새로고침·전체 목록/페이지 수·상세/보고서 건수·로그아웃 이후 접근 거절·종료 결과를 기록한다.
+`pagination_complete=true`와 `revoked_session_rejected=true`가 모두 있어야 성공으로 인정하며,
+Python 호출부에서도 목록 건수와 페이지 수의 정합성 및 결과 타입을 검사한다.
+이는 복원 전 일회용 Kubernetes의 실제 연결 증거다. 아래의 복원 응답 재생 검사와 구분하며,
+실제 복원 서버까지 이어지는 브라우저 로그인이나 개인 환경의 백업·복구를 증명하지 않는다.
+
+로컬 무료 회귀는 실제 React/Vite/Chrome과 임시 HTTP 인증 대역을 사용한다.
+쿠키 누락·다른 Core 사용자 연결·로그아웃 이후 보고서 노출·폐기된 쿠키의 재사용 허용을 실패로 처리한다.
+26건/2페이지 자료로 페이지 이동과 상세 조회를 검증하고, 중복·누락·건수 변경·외부 페이지 링크를 거절한다.
+Python에서 누락되거나 재생 방식으로 잘못 기록된 증거를 거절한다.
+이 회귀 통과만으로 실제 Kubernetes 연결 성공을 보고하지 않는다.
+
+```bash
+RESTORE_BROWSER_CHANNEL=chrome node --test infrastructure/gitops/scripts/test_ops_browser_login.mjs
+```
+
 ### CI에서 수행하는 결과·Prefect 볼륨 복원 검증
 
-DB 복원 검증을 통과하고 Ops API·sync Pod가 종료된 상태에서 같은 시험 프로젝트의 실행기·결과 서버·
+복원 DB의 조회 검증을 통과하고 Ops API·sync Pod가 종료된 상태에서 같은 시험 프로젝트의 실행기·결과 서버·
 Prefect를 중지한다. 컨테이너 ID·이미지·Compose 소유권·볼륨 사용자와 정상 종료를 확인하며,
 다른 컨테이너가 볼륨을 사용하면 중단한다. 개인 환경의 컨테이너는 중지 대상으로 허용하지 않는다.
+실행기는 종료 중 Prefect API로 deployment를 정리하므로 실행기 → 결과 서버 → Prefect 순서로 종료한다.
+각 서비스의 정상 종료를 확인한 뒤 다음 서비스를 중지하고, 종료 코드·OOM 여부를
+`volume_restore.source_shutdown`에 남긴다. 비정상 종료는 계속 복원 중단 조건이다.
 
 - `ops-results`와 `prefect-data`를 각각 읽기 전용 원본으로 연결하고 새 임시 볼륨에 복원한다.
   파일 복사는 Python 표준 라이브러리를 사용하며 도우미에는 네트워크·공개 포트가 없다.
@@ -133,6 +194,74 @@ Prefect를 중지한다. 컨테이너 ID·이미지·Compose 소유권·볼륨 �
   대조한다. 기존 대상 덮어쓰기, 심볼릭/하드 링크, 특수 파일·권한을 거절한다.
   볼륨당 64 MiB·10,000개 항목을 넘으면 실패하며 개인 데이터용 범용 백업 도구로 사용하지 않는다.
 - 최초 고정 근거 평가 1건과 교체 전후 RAG 평가 2건의 인증 보고서 SHA-256을 복원 파일과 대조한다.
+- 파일 복원 후 같은 결과 서버 이미지의 별도 컨테이너를 UID/GID 10001로 시작한다. 복원 사본만
+  읽기 전용으로 연결하고 원본 볼륨·기존 환경변수·DB/모델 자격 증명은 전달하지 않는다.
+  모든 capability를 제거하고 네트워크·호스트 포트를 차단한다.
+- 이 컨테이너의 Gunicorn 결과 서버는 내부 `127.0.0.1:8010`에서만 실행하며 매번 새 검사 토큰을 쓴다.
+  인증된 상태 조회와 3건의 보고서 GET·SHA-256, 무인증/잘못된 토큰의 401, POST/PUT/DELETE의
+  405를 검증한다. 응답 크기·캐시 금지 헤더를 검사하며 프록시·redirect는 허용하지 않는다.
+  파일 읽기 권한 오류·기동 시간 초과·비정상 종료·검사 중 파일 변경·도우미 정리 실패는 전체 실패다.
+- 이어서 복원 DB의 격리된 네트워크 공간에 별도 Ops HTTP 검사 컨테이너를 연결한다.
+  같은 Ops 이미지·UID/GID 10001·조회/잠금 계정을 사용하고, 복원 결과 볼륨만 읽기 전용으로 연결한다.
+  외부 통신·호스트 포트·원본 볼륨 연결은 없으며 기존 모델/API 자격 증명을 전달하지 않는다.
+- 실제 Gunicorn Ops API와 결과 서버를 내부 loopback에서 실행한다. `Ops HTTP → 복원 MySQL 조회 →
+  결과 서버 HTTP → 복원 보고서` 경로로 완료 평가 3건의 SHA-256·캐시 금지·CSP를 확인한다.
+  Ops의 로컬 결과 경로는 빈 디렉터리로 두므로 HTTP 저장소를 실제로 거쳐야 성공한다.
+- 같은 시험 클러스터의 Core Pod도 종료하고 Core DB 전체를 격리 MySQL의 별도 `govbiz_core` DB로
+  복사한다. 가져오기 직후 덤프를 대조한 다음 배포에 사용한 실제 Core 이미지로 실행한다.
+  Core에는 이 DB에만 쓰기 가능한 별도 계정을 주며, Ops는 계속 `govbiz_ops`의 조회/잠금 계정만 쓴다.
+  Core의 자동 migration·외부 동기화·문서 생성 작업은 끄고 새 JWT 서명 키를 사용한다.
+- `Core 비밀번호 로그인 → 실제 세션 쿠키 → Ops CoreSessionAuthentication → Core 관리자 확인 →
+  복원 보고서 조회`를 수행한다. Core가 확인한 관리자 ID·이메일·역할이 복원 Ops 요청자와 같아야 한다.
+  무인증·잘못된 쿠키는 401, 개발 로그인으로 만든 일반 회원의 실제 세션은 403이어야 한다.
+  `auth_contract=restored_core_password_login`, `core_admin_auth_verified=true`로 기록한다.
+- 관리자 화면이 사용하는 세션·전체 실행 목록·완료 3건의 상세·예산 조회를 실제 HTTP로 호출한다.
+  목록의 전체 건수를 복원 DB와 대조하고, 페이지 누락·중복·외부 페이지 링크를 거절한다.
+  완료 실행의 ID·flow·실행 명세·상태·보고서 경로와 목록/상세 응답의 일치를 검사한다.
+  모든 조회 경로에서 잘못된 쿠키·일반 회원을 차단하고 공개 세션 응답에는 계정·자료가 없어야 한다.
+- 예산 GET은 장부의 일관된 조회를 위해 `SELECT ... FOR UPDATE`를 사용한다.
+  [MySQL 잠금 조회 권한](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html)에 따라
+  복원 DB에만 `LOCK TABLES`를 허용하고 INSERT·UPDATE·DELETE 권한은 부여하지 않는다.
+  실제 예산 행 잠금 성공과 접수/예산 테이블의 UPDATE 거절을 확인하며,
+  `database_restore.application.read_only_grants`와 `budget_lock_verified`로 기록한다.
+- DB 관계 검증용 추가 실행은 등록된 자료·캡처 ID를 가진 취소 이력으로 만든다. 검증용 사용자 이름으로
+  이 행을 식별하며 한글·JSON·NULL·리뷰·예산 관계 검사는 유지한다. 등록되지 않은 자료 ID를 넣어
+  실제 목록 조회를 실패시키거나, 검사를 위해 복원 DB에서 해당 행을 삭제하지 않는다.
+  연결된 예산 예약도 양수 호출 한도를 가진 미사용·종료 예약으로 구성해 웹의 예산 계약을 지키며,
+  실제 호출 수와 사용량은 0으로 유지한다.
+- 수집한 응답에서 CSRF 토큰을 제거한 사본을 임시 파일로 전달하고, 저장소의 Node 24로
+  `check_ops_restore_ui.mjs`를 실행한다. 웹의 실제 `getOpsSession`, `listEvaluations`, `getEvaluation`,
+  예산 조회 함수와 Zod 파서가 응답을 처리해야 통과한다. 의존성은 기존 루트 잠금 파일로 관리한다.
+  `ops_restore_proxy.mjs`가 기존 `vite.config.ts`의 portfolio 모드로 실제 Vite를 시작하고,
+  두 loopback HTTP 서버로 Core 경로와 수집한 Ops 응답을 재생한다. 개인 5173 포트나 기존 전달을
+  재사용하지 않고 OS가 할당한 임시 포트만 사용한다. Core 응답은 경로 분리 확인용 검증 데이터다.
+  `/api`·`/api/v1/ops`의 분리, Ops Host·Origin·검사용 쿠키 전달, 401/403·no-store 보존을 확인한다.
+  모든 수집 JSON 응답이 실제 프록시를 거쳐 기존 웹 API 함수에서 파싱되어야 한다.
+  고정 답변 평가의 상세 화면이 자동 조회하는 검토 자료도 수집해 권한·no-store·웹 파서를 확인한다.
+  Ops 재생 서버를 종료하면 웹 API 함수가 502 오류를 반환하고 Core 경로는 유지되어야 한다.
+  이어서 테스트 전용 `playwright-core`로 별도 headless 브라우저·새 컨텍스트를 만든다.
+  실제 `/ops/evaluations`의 JS·React·CSS를 로드하고 관리자 표시, 전체 이력의 페이지 이동·행 수·요청 ID,
+  예산 영역의 조회 완료를 확인한다. 복원 대상 3건은 목록 링크를 클릭해 상세 화면의 요청 ID·명세 ID와
+  실행 예산 장부도 확인한다. 고정 답변 평가의 검토 자료가 로드되고 화면 오류가 없어야 한다.
+  상세 화면의 Evidently 보고서 링크는 `noopener noreferrer`가 있는 새 탭으로 열려야 한다.
+  복원 HTTP에서 수집한 HTML 원문·Content-Type·Cache-Control·CSP를 그대로 재생하고,
+  브라우저가 받은 본문의 SHA-256을 복원 기대값과 대조한다. 본문 표시와 새 탭의 opener 차단,
+  sandbox에 의한 쿠키·localStorage 접근 거절을 확인한다. 개별 차트·지표의 의미나 시각 품질 판정은 아니다.
+  일반 회원 검사용 쿠키로 다시 열면 403 안내가 나오고 이력·보고서 링크가 없어야 한다.
+  같은 브라우저에서 보고서 경로를 GET해 3건 모두 403·no-store이며 HTML이 노출되지 않는지도 확인한다.
+  브라우저는 이 Vite origin의 GET만 허용하며 다른 주소·쓰기 요청·예상하지 않은 JS 오류는 실패다.
+  브라우저의 동일 출처 GET은 Origin이 없을 수 있으므로 Sec-Fetch-Site도 확인한다. 기존 HTTP 검사의
+  명시적 Origin이 유실된 경우를 브라우저 GET으로 잘못 통과시키지는 않는다.
+  검사용 HttpOnly 쿠키를 주입하므로 실제 Core 로그인·세션 발급·브라우저 로그인 흐름 검증은 아니다.
+  이 프록시의 백엔드는 복원 서버 자체가 아닌 수집 응답 재생 서버이며 기존 클러스터에는 연결하지 않는다.
+  접수·검토 저장·기준 지정 버튼은 조작하지 않는다. 실제 API 인증·보고서 검사는 앞 단계와 구분한다.
+  JSON·보고서 HTML 원문·쿠키·브라우저 프로필은 최종 증거에 저장하지 않는다. 임시 브라우저·응답 파일·Vite 캐시·
+  서버를 정리하고 fetch와 K8S 환경변수를 복원한다. 렌더링·파서·라우팅·장애 검사·정리 실패는 전체 실패다.
+- 실제 Core 로그아웃 후 같은 세션으로 보고서를 요청하면 401이어야 한다. 다시 비밀번호로 로그인한 뒤
+  결과 서버를 종료하면 보고서 요청은 404여야 한다. 종료 실패·결과 파일 변경·Ops DB 덤프 변경은
+  전체 실패다. Core 사본에는 로그인·로그아웃에 따른 세션 쓰기를 허용하고 원본 Core 덤프는 보존한다.
+  검사 토큰·로그인 비밀번호·DB 비밀번호·서명 키는 보고서에 넣지 않는다.
+- 결과 파일 보존 확인과 별도로 Prefect 저장소를 검사한다.
   Prefect SQLite의 무결성·외래 키·migration과 해당 3건의 deployment·완료 상태 이력·request/flow ID를 확인한다.
   진행 중 실행이나 활성 스케줄이 있으면 성공 처리하지 않는다.
 - SQLite의 `prefect.db`뿐 아니라 남아 있는 WAL·SHM도 함께 복사한다.
@@ -146,14 +275,52 @@ Prefect를 중지한다. 컨테이너 ID·이미지·Compose 소유권·볼륨 �
 - 검사 전후 원본 보존을 확인하고 이번에 만든 도우미와 복원 볼륨만 삭제한다.
   실패·정리 오류는 전체 실패로 남기며 정지한 시험 프로젝트는 최상위 정리 단계에서 제거한다.
 
-`ops-bridge.json`의 `volume_restore.scope=disposable_results_and_prefect_api`와 `status=PASS`는
-이 파일·SQLite·Prefect API 검증의 성공만 뜻한다. `results`와 `prefect`에 대조 건수·해시·정리 결과를,
-`prefect.api`에 API 대조·DB 무변경·정상 종료 결과를 남긴다. 성공 시 `prefect_server_started=true`이며,
+`ops-bridge.json`의 `volume_restore.scope=disposable_ops_report_http_and_prefect_api`와 `status=PASS`는
+이 파일·Ops/결과 HTTP·SQLite·Prefect API 검증의 성공만 뜻한다. `results`와 `prefect`에 대조 건수·해시·정리 결과를,
+`results.api`에 인증·쓰기 거절·파일 무변경·일반 사용자 실행·정상 종료 결과를,
+`results.ops_http`에 실제 Core 인증·세션 폐기·Ops 보고서·결과 서버 장애 거절·파일/Ops DB 무변경 결과를,
+`prefect.api`에 API 대조·DB 무변경·정상 종료 결과를 남긴다.
+별도 `core_auth_restore`에는 Core 이미지 ID·복사 직후 덤프 일치·원본 보존·정리 결과를 남긴다.
+`results.ops_http.management_http`에는 관리 API의 세션·목록·상세·예산·권한 검사 결과를,
+`management_web_contract`에는 웹 소비자 파서 통과 결과를 기록한다.
+그 아래 `proxy_http`는 `mode=portfolio`, `response_source=captured_restore_http`와 실제 프록시·HTML
+전달·장애·정리 결과를 기록하며 자체 `browser_rendered=false`를 유지한다.
+별도 `browser_ui`는 실제 브라우저 버전·목록 건수·페이지 수·예산·권한 화면·정리 결과,
+`details_verified`, `report_documents_verified`, `report_sandbox_verified`, `report_denials_verified`와
+`browser_rendered=true`를 기록한다. 이 증거가 있어야 `management_web_contract.browser_rendered=true`가 된다.
+로컬 브라우저 회귀 테스트는 합성 목록 26건과 상세·보고서 3건을 사용한다. 보고서는 스크립트로 본문을
+표시하는 검증용 HTML이며 실제 Evidently 차트의 검증으로 보고하지 않는다. 변조된 HTML·누락 보고서·
+약화된 CSP·캐시 허용·추가 쿠키 헤더는 성공 처리하지 않는다.
+무료 프록시·브라우저 회귀 테스트는 LLMOps CI에서 잠금 의존성 및 대응 Chromium headless shell 설치 후
+필수 실행한다. Kubernetes 복원 단계에서는 실제 복원 HTTP에서 수집한 응답으로 다시 수행한다.
+로컬은 설치된 Chrome/Edge를 명시해 다운로드 없이 확인할 수 있다. 다음은 Bash/WSL 명령이며,
+Windows PowerShell에서는 `$env:RESTORE_BROWSER_CHANNEL = 'chrome'`을 설정한 뒤 Node 명령을 실행하고 해제한다.
+
+```bash
+node --experimental-transform-types --test infrastructure/gitops/scripts/test_ops_restore_proxy.mjs
+RESTORE_BROWSER_CHANNEL=chrome node --experimental-transform-types --test infrastructure/gitops/scripts/test_ops_restore_browser.mjs
+```
+
+브라우저가 없는 CI/Linux 환경은 먼저 다음 명령으로 잠금 버전에 대응하는 Chromium만 설치한다.
+`RESTORE_BROWSER_CHANNEL`을 생략하면 이 브라우저를 사용하며, 명시한 채널이 없을 때 자동 대체하지 않는다.
+
+```bash
+pnpm --dir frontend/web exec playwright-core install --with-deps --only-shell chromium
+```
+
+성공 시 `results_server_started=true`, `prefect_server_started=true`이며,
 증거가 완성되지 않은 실패에서는 `null`로 미확인을 표시한다.
-실행기 재개·새 평가 실행·Secret/서명 키 복구·Langfuse 저장소 복원은 검증하지 않는다.
+검사 토큰을 새로 생성하므로 기존 Secret/서명 키 복구는 검증하지 않는다.
+실행기 재개·새 평가 실행·실제 Core 로그인부터 복원 서버까지의 브라우저 연결·Langfuse 저장소 복원은 별도다.
+Core 인증 검증은 새 키로 발급한 세션만 대상으로 하며 기존 세션의 연속성이나 기존 서명 키 복구를 뜻하지 않는다.
 `backup_verified`, `personal_environment_verified`는 계속 `false`다.
 개인 환경 갱신 승인이나 전체 저장소의 동일 시점 백업 증거로 사용하지 않는다.
 CI에 연결된 코드가 있어도 최신 SHA의 실제 통합 작업이 이 단계까지 통과해야 실행 완료로 기록한다.
+
+선행 `skn-140 / f718ea0`의 필수 CI 5개와
+[LLMOps 실제 서버 검사](https://github.com/ilil1/SKN34-4th-1Team/actions/runs/37031288852)는 통과했다.
+그 실행의 증거는 DB 27개 테이블·166개 행, 결과 보고서 3건과 Prefect API 복원을 포함하며,
+이번에 추가한 복원 결과 서버 HTTP 검사는 포함하지 않는다. 새 변경 SHA에서 별도로 검증한다.
 
 ## 3. 같은 소스에서 빌드하고 갱신
 

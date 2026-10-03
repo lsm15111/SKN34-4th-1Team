@@ -6,8 +6,9 @@ import { workspacePageStyles as styles, workspaceTagClassName } from '../../shar
 const labels = { NOT_EVALUATED: '미판정', NEEDS_REVIEW: '검토 필요', FAIL: '불합격', PASS: '합격' }
 const fixtureLabels = { APPROVED: '기준 자료 검토 승인', CHANGES_REQUESTED: '기준 자료 수정 필요', DEFERRED: '기준 자료 판단 보류' }
 
-export function QualityReviewPanel({ runId, data, busy, onBusy, onSaved, onExpired }: {
+export function QualityReviewPanel({ runId, data, busy, onBusy, onDirty, onConflict, onSaved, onExpired }: {
   runId: string; data: EvaluationReview; busy: boolean; onBusy: (value: boolean) => void;
+  onDirty: (value: boolean) => void; onConflict: () => void;
   onSaved: (value: EvaluationReview) => void; onExpired: () => void;
 }) {
   const [decision, setDecision] = useState<'APPROVED' | 'CHANGES_REQUESTED' | 'DEFERRED' | ''>('')
@@ -17,12 +18,15 @@ export function QualityReviewPanel({ runId, data, busy, onBusy, onSaved, onExpir
   const active = useRef(false)
   const quality = data.quality
   const cases = data.material?.cases.map((item) => item.case_id).join(', ')
+  const dirty = decision !== '' || comment !== '' || confirmed
+  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
   useEffect(() => { setConfirmed(false) }, [runId, data.material?.fixture_sha256, quality?.fixture_version, cases])
   if (!quality) return <p className="text-sm text-sample-muted">품질 판정 정보를 확인할 수 없습니다.</p>
   const current = quality.history.find((item) => item.id === quality.current_id)
   const save = async (fixture: boolean) => {
     if (active.current || busy || !data.material || !quality.input_sha256) return
     if (fixture && (!decision || !comment.trim() || !confirmed)) return
+    if (!fixture && dirty) return
     active.current = true; onBusy(true); setError('')
     try {
       const value = fixture && decision ? await saveFixtureReview(runId, {
@@ -33,11 +37,12 @@ export function QualityReviewPanel({ runId, data, busy, onBusy, onSaved, onExpir
       onSaved(value)
       if (fixture) { setDecision(''); setComment(''); setConfirmed(false) }
     } catch (reason) {
+      if (reason instanceof OpsApiError && reason.status === 409) onConflict()
       if (reason instanceof OpsApiError && [401, 403].includes(reason.status)) onExpired()
       else setError(reason instanceof Error ? reason.message : '품질 판정을 저장하지 못했습니다.')
     } finally { active.current = false; onBusy(false) }
   }
-  return <section aria-label="품질 판정" className="grid gap-4 rounded-xl border border-sample-border p-4">
+  return <section id="quality-review" tabIndex={-1} aria-label="품질 판정" style={{ scrollMarginTop: 'calc(var(--workspace-header-h, 0px) + 1rem)' }} className="grid gap-4 rounded-xl border border-sample-border p-4">
     <h3 className="font-bold">품질 판정 · <span className={workspaceTagClassName(quality.status === 'PASS' ? 'ok' : quality.status === 'FAIL' ? 'danger' : 'info')}>{labels[quality.status]}</span></h3>
     <p className="text-sm leading-6">실행 완료와 품질 판정은 별개입니다. 합격은 표시된 사례와 정책의 범위에만 적용되며, 전체 모델의 정확도를 보장하지 않습니다.</p>
     <p className="text-xs text-sample-muted">정책: {quality.policy?.definition.version ?? '확인 불가'} · 자동 의미 충실도: 미측정 · 의미 판단: 사례별 사람 검토</p>
@@ -45,8 +50,9 @@ export function QualityReviewPanel({ runId, data, busy, onBusy, onSaved, onExpir
     {current && <ul className="list-disc pl-5 text-sm">{current.reasons.map((reason, index) => <li key={`${reason.code}-${reason.case_id}-${index}`}>{reason.case_id ? `${reason.case_id}: ` : ''}{reason.message}</li>)}</ul>}
     {quality.blocked_reason && <p role="alert" className="text-sm text-amber-800">{quality.blocked_reason}</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-    <button className={`${styles.secondaryButton} justify-self-start`} disabled={busy || !data.material || !quality.input_sha256} onClick={() => void save(false)}>현재 근거로 품질 판정 저장</button>
-    <details className="grid gap-3"><summary className="cursor-pointer text-sm font-semibold">평가 기준 자료 검토 · {quality.fixture_reviews[0] ? fixtureLabels[quality.fixture_reviews[0].decision] : '미검토'}</summary>
+    <button className={`${styles.secondaryButton} justify-self-start`} disabled={busy || dirty || !data.material || !quality.input_sha256} onClick={() => void save(false)}>현재 근거로 품질 판정 저장</button>
+    {dirty && <p className="text-sm text-amber-800">저장하지 않은 기준 자료 검토가 있습니다. 먼저 자료 검토를 저장하거나 입력을 비운 뒤 다른 검토·품질 판정·기준 지정을 진행하세요.</p>}
+    <details id="fixture-review" tabIndex={-1} style={{ scrollMarginTop: 'calc(var(--workspace-header-h, 0px) + 1rem)' }} className="grid gap-3"><summary className="cursor-pointer text-sm font-semibold">평가 기준 자료 검토 · {quality.fixture_reviews[0] ? fixtureLabels[quality.fixture_reviews[0].decision] : '미검토'}</summary>
       <div className="mt-3 grid gap-3 text-sm">
         <p>아래 각 사례의 AI 작성 참조 조건을 원문 근거와 대조합니다. 기대 상태·기대 인용·포함할 사실·금지 주장을 모두 확인하세요. 이 기록은 후보 답변 검토와 별개이며 AI 작성 출처는 유지됩니다.</p>
         <p>대상 사례: {data.material?.cases.map((item) => item.case_id).join(', ') ?? '자료 확인 불가'}</p>

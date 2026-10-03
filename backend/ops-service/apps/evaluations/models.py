@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class EvaluationAdmission(models.Model):
@@ -372,16 +373,69 @@ class EvaluationBudgetReservation(models.Model):
     reserved_output_tokens = models.PositiveBigIntegerField(null=True)
     worker_id = models.UUIDField(null=True)
     closed_at = models.DateTimeField(null=True)
+    # 일별 접수 검사와 같은 시각을 저장한다. 자정 경계에서 날짜가 달라지지 않는다.
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+
+
+class EvaluationDailyBudget(models.Model):
+    """서울 날짜별 접수 한도. 사용량은 기존 예약 원장에서 계산한다."""
+
+    budget = models.OneToOneField(EvaluationBudget, primary_key=True, on_delete=models.PROTECT)
+    enabled = models.BooleanField(default=False)
+    call_limit = models.PositiveBigIntegerField()
+    input_token_limit = models.PositiveBigIntegerField()
+    output_token_limit = models.PositiveBigIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class EvaluationDailyBudgetChange(models.Model):
+    """CLI 또는 인증된 관리자의 일별 정책 변경 이력."""
+
+    request_id = models.UUIDField(unique=True)
+    policy = models.ForeignKey(EvaluationDailyBudget, on_delete=models.PROTECT)
+    actor = models.CharField(max_length=150)
+    source = models.CharField(max_length=10, default="CLI", editable=False)
+    authenticated_actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+"
+    )
+    expected_revision = models.CharField(max_length=64, null=True)
+    reason = models.CharField(max_length=1000)
+    previous = models.JSONField(null=True)
+    policy_snapshot = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(actor="") & ~models.Q(reason=""),
+                name="daily_budget_change_attribution",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    source="CLI", authenticated_actor__isnull=True, expected_revision__isnull=True
+                )
+                | models.Q(
+                    source="CORE_ADMIN",
+                    authenticated_actor__isnull=False,
+                    expected_revision__isnull=False,
+                ),
+                name="daily_budget_change_actor_source",
+            ),
+        ]
 
 
 class EvaluationBudgetChange(models.Model):
-    """CLI가 기록하는 한도 변경 원장. 기존 한도의 출처를 소급해서 만들지 않는다."""
+    """CLI 또는 인증된 관리자의 한도 변경 원장. 기존 출처는 보존한다."""
 
     request_id = models.UUIDField(unique=True)
     budget = models.ForeignKey(EvaluationBudget, on_delete=models.PROTECT)
     actor = models.CharField(max_length=150)
     source = models.CharField(max_length=10, default="CLI", editable=False)
+    authenticated_actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+"
+    )
+    expected_revision = models.CharField(max_length=64, null=True)
     reason = models.CharField(max_length=1000)
     previous_call_limit = models.PositiveBigIntegerField(null=True)
     previous_output_token_limit = models.PositiveBigIntegerField(null=True)
@@ -395,11 +449,57 @@ class EvaluationBudgetChange(models.Model):
         ordering = ["-id"]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(source="CLI"), name="budget_change_cli_source"
+                condition=models.Q(
+                    source="CLI", authenticated_actor__isnull=True, expected_revision__isnull=True
+                )
+                | models.Q(
+                    source="CORE_ADMIN",
+                    authenticated_actor__isnull=False,
+                    expected_revision__isnull=False,
+                ),
+                name="budget_change_actor_source",
             ),
             models.CheckConstraint(
                 condition=~models.Q(actor="") & ~models.Q(reason=""),
                 name="budget_change_attribution",
+            ),
+        ]
+
+
+class EvaluationLegacyUsage(models.Model):
+    """예약 도입 전 저장 응답을 운영자가 검토해 반영한 사용량. 과거 승인을 만들지 않는다."""
+
+    run = models.OneToOneField(EvaluationRun, on_delete=models.PROTECT, related_name="legacy_usage")
+    budget = models.ForeignKey(EvaluationBudget, on_delete=models.PROTECT)
+    request_id = models.UUIDField(unique=True)
+    actor = models.CharField(max_length=150)
+    actor_source = models.CharField(max_length=10, default="CLI", editable=False)
+    authenticated_actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="+"
+    )
+    reason = models.CharField(max_length=1000)
+    capture_sha256 = models.CharField(max_length=64, unique=True)
+    evidence_sha256 = models.CharField(max_length=64)
+    evidence = models.JSONField()
+    calls = models.PositiveIntegerField()
+    input_tokens = models.PositiveBigIntegerField()
+    output_tokens = models.PositiveBigIntegerField()
+    before = models.JSONField()
+    after = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(actor_source="CLI", authenticated_actor__isnull=True)
+                | models.Q(actor_source="CORE_ADMIN", authenticated_actor__isnull=False),
+                name="legacy_usage_actor_source",
+            ),
+            models.CheckConstraint(condition=models.Q(calls__gt=0), name="legacy_usage_calls"),
+            models.CheckConstraint(
+                condition=~models.Q(actor="") & ~models.Q(reason=""),
+                name="legacy_usage_attribution",
             ),
         ]
 
