@@ -8,7 +8,7 @@ from tests.langchain_stub import ResponsesChatStub, response_message, chat_model
 from openai import AsyncOpenAI
 from pydantic import ValidationError
 
-from app.support_program_evidence.agent import SupportProgramEvidenceAnswerAgent
+from app.support_program_evidence.agent import SupportProgramEvidenceAnswerAgent, locate_quote
 from app.support_program_evidence.errors import SupportProgramEvidenceError
 from app.support_program_evidence.models import (
     SupportProgramEvidenceAnswerOutput,
@@ -326,6 +326,45 @@ async def test_keeps_only_quotes_found_verbatim_in_their_cited_chunk(caplog):
     assert result.citation_quotes == [QUOTE]
     assert "unverified_quotes=1" in caplog.text
     assert QUOTE not in caplog.text
+
+
+@pytest.mark.parametrize(("quote", "expected"), [
+    # Core 청크는 줄을 빈 줄로 잇는다. 모델이 줄바꿈을 띄어쓰기로 옮겨도 원문 구간을 그대로 돌려준다.
+    ("신청기간 2026.10.14 ~ 2026.10.16", "신청기간\n\n2026.10.14 ~\n\n2026.10.16"),
+    ("①「중소기업기본법」 제2조", "①「중소기업기본법」 제2조"),
+    ("① 「중소기업기본법」 제2조", "①「중소기업기본법」 제2조"),
+    ("모집·추천", "모집ㆍ추천"),
+    ("“동반성장” 지원", "\"동반성장\" 지원"),
+])
+def test_locates_quotes_across_whitespace_and_look_alike_punctuation(quote, expected):
+    text = "신청기간\n\n2026.10.14 ~\n\n2026.10.16\n\n①「중소기업기본법」 제2조\n\n모집ㆍ추천\n\n\"동반성장\" 지원"
+    assert locate_quote(quote, text) == expected
+    assert expected in text
+
+
+@pytest.mark.parametrize("quote", ["신청기간 2026.10.15", "중소기업 기본법 제3조", "   "])
+def test_does_not_locate_changed_wording(quote):
+    assert locate_quote(quote, "신청기간\n\n2026.10.14 ~\n\n2026.10.16\n\n중소기업기본법 제2조") is None
+
+
+def test_drops_a_located_quote_whose_original_span_exceeds_the_quote_limit():
+    words = ["가나다라"] * 40
+    text = "\n\n".join(words)
+    assert len(" ".join(words)) <= 200 < len(text)
+    assert locate_quote(" ".join(words), text) is None
+
+
+@pytest.mark.anyio
+async def test_returns_the_original_span_when_the_model_changes_only_line_breaks():
+    chunk = answer_request().chunks[0].model_copy(update={"text": "신청기간\n\n2026.10.14 ~\n\n2026.10.16"})
+    request = answer_request().model_copy(update={"chunks": [chunk]})
+    model = ResponsesChatStub([[response_message(json.dumps({
+        "answer": "신청 기간은 2026.10.14부터 2026.10.16까지입니다.", "answerStatus": "ANSWERED",
+        "citations": [{"chunkIndex": 0, "quote": "신청기간 2026.10.14 ~ 2026.10.16"}],
+    }))]])
+    agent = SupportProgramEvidenceAnswerAgent(model=model.model, model_timeout_seconds=1, run_timeout_seconds=2)
+    result = await agent.answer(request)
+    assert result.citation_quotes == ["신청기간\n\n2026.10.14 ~\n\n2026.10.16"]
 
 
 @pytest.mark.anyio

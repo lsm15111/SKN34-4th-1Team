@@ -15,6 +15,7 @@ from app.support_program_llm import (
 
 from app.support_program_evidence.errors import SupportProgramEvidenceError
 from app.support_program_evidence.models import (
+    MAX_CITATION_QUOTE_LENGTH,
     SupportProgramEvidenceAnswerOutput,
     SupportProgramEvidenceAnswerRequest,
     SupportProgramEvidenceAnswerSelection,
@@ -26,6 +27,29 @@ from app.support_program_evidence.prompt import (
 
 
 logger = logging.getLogger(__name__)
+
+# 원문 청크는 줄을 빈 줄로 잇고 가운뎃점·따옴표를 여러 글자로 쓴다. 모델이 옮기며 바꾸기 쉬운 이 차이만 같다고 본다.
+_QUOTE_EQUIVALENTS = str.maketrans({
+    "ㆍ": "·", "ᆞ": "·", "・": "·", "˙": "·", "“": '"', "”": '"', "‘": "'", "’": "'", "∼": "~", "〜": "~",
+})
+
+
+def locate_quote(quote: str, text: str) -> str | None:
+    """인용을 청크 text에서 찾아 원문 그대로의 구간을 돌려준다.
+
+    공백과 같은 모양의 문장부호 차이만 허용하고 그 밖의 글자는 순서까지 모두 같아야 한다. 화면에는 모델이 쓴 문자열이
+    아니라 찾은 원문 구간을 보이므로 인용은 항상 원문의 부분 문자열이다. 찾지 못하거나 원문 구간이 상한을 넘으면 None이다.
+    """
+    if quote in text:
+        return quote
+    positions = [index for index, char in enumerate(text) if not char.isspace()]
+    compact_text = "".join(text[index] for index in positions).translate(_QUOTE_EQUIVALENTS)
+    compact_quote = "".join(char for char in quote if not char.isspace()).translate(_QUOTE_EQUIVALENTS)
+    start = compact_text.find(compact_quote) if compact_quote else -1
+    if start < 0:
+        return None
+    original = text[positions[start]:positions[start + len(compact_quote) - 1] + 1]
+    return original if len(original) <= MAX_CITATION_QUOTE_LENGTH else None
 
 
 class SupportProgramEvidenceAnswerAgent:
@@ -88,12 +112,13 @@ class SupportProgramEvidenceAnswerAgent:
                 selection = validate_support_program_output(result, SupportProgramEvidenceAnswerSelection)
                 if any(citation.chunk_index >= len(request.chunks) for citation in selection.citations):
                     raise SupportProgramEvidenceError()
-                # 고른 청크 text에 글자 그대로 없는 인용은 그 인용만 버린다. 근거 답변에 남는 인용이 없으면 실패다.
-                verified = [
-                    (request.chunks[citation.chunk_index].id, citation.quote)
-                    for citation in selection.citations
-                    if citation.quote in request.chunks[citation.chunk_index].text
-                ]
+                # 고른 청크 text에서 찾지 못한 인용은 그 인용만 버린다. 근거 답변에 남는 인용이 없으면 실패다.
+                verified = []
+                for citation in selection.citations:
+                    chunk = request.chunks[citation.chunk_index]
+                    located = locate_quote(citation.quote, chunk.text)
+                    if located is not None:
+                        verified.append((chunk.id, located))
                 unverified_quotes = len(selection.citations) - len(verified)
                 if selection.answer_status is SupportProgramEvidenceAnswerStatus.ANSWERED and not verified:
                     raise SupportProgramEvidenceError("EVIDENCE_QUOTE_MISMATCH")

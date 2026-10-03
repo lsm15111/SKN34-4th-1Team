@@ -419,8 +419,10 @@ Core가 제공하는 기업마당 상세 공고를 대상으로 하지만, AI Se
 LLM이 긴 해시를 잘못 복사하는 오류를 막기 위해, Agent는 이번 요청 배열의 짧은 `index`만 선택하게 합니다.
 모델 전용 결과는 `SupportProgramEvidenceAnswerSelection`의 `citations: [{chunkIndex, quote}]`이며, 범위·중복·상태를
 검증한 뒤 요청의 원래 64자리 ID로 복원합니다. 원문 `order`와 요청 배열 `index`는 다릅니다.
-`quote`는 고른 청크 text에서 글자 그대로 옮긴 200 code point 이하의 연속 구절입니다. 앞뒤 공백만 떼고,
-청크 text의 부분 문자열이 아닌 인용은 그 인용만 버립니다. `ANSWERED`인데 남는 인용이 없으면 다른 근거로
+`quote`는 고른 청크 text에서 글자 그대로 옮긴 200 code point 이하의 연속 구절입니다. Agent는 공백 차이와
+같은 모양의 문장부호(가운뎃점 `·`/`ㆍ`, 둥근·곧은 따옴표, 물결표) 차이만 허용해 청크 text에서 그 구간을 찾고,
+모델이 쓴 문자열 대신 찾은 원문 구간을 인용으로 돌려줍니다. 찾지 못했거나 원문 구간이 200 code point를 넘는
+인용은 그 인용만 버립니다. `ANSWERED`인데 남는 인용이 없으면 다른 근거로
 바꾸거나 근거 부족으로 숨기지 않고 503 `EVIDENCE_QUOTE_MISMATCH`로 실패합니다. 내부 HTTP 응답은
 `citationChunkIds`와 같은 순서·길이의 `citationQuotes`를 함께 보내며 Service가 부분 문자열 여부를 다시 확인합니다.
 이 필드가 없는 응답은 이전에 저장된 평가 캡처뿐이고, Core는 `citationQuotes`가 없으면 계약 오류로 거부합니다.
@@ -441,7 +443,7 @@ Core의 상세 공고 준비
 → Core가 match의 공식 text만 포함해 POST /support-program-evidence/answers 호출
 → SupportProgramEvidenceAnswerAgent → LangChain (LLM 1회)
 → OpenAI가 이번 요청의 citations(chunkIndex·원문 그대로의 quote) 선택 → 번호 검증 후 원래 ID 복원
-→ 청크 text에 그대로 없는 quote 제거(남는 인용이 없으면 EVIDENCE_QUOTE_MISMATCH)
+→ quote를 청크 text의 원문 구간으로 바꾸고 찾지 못한 quote 제거(남는 인용이 없으면 EVIDENCE_QUOTE_MISMATCH)
 → 출력 상태·중복 인용·입력 밖 citationChunkIds·quote 부분 문자열 재검증 → 한국어 답변 반환
 ```
 
