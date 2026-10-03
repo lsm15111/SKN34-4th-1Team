@@ -736,6 +736,9 @@ ViewModel은 서버의 `detail` 대신 고정된 한국어 문구를 표시합�
 `frontend/packages/shared/src/design/tokens.ts`가 원본이고, `src/design-tokens.css`는 `pnpm --filter govbiz-web tokens`로 만드는
 생성 파일입니다(테스트가 최신인지 확인). 화면 코드에는 16진수 색 대신 이 의미 이름을 씁니다. 그 밖의 `@theme` 값(그림자·폭·애니메이션)은
 `src/index.css`에 있습니다. 화면·문구 기준은 [화면·문구 통일 기준](../../docs/ui-guidelines.md)을 따릅니다.
+공고 상태·D-day·진행 단계·날짜 문구는 `@govbiz/shared/domain/labels`를, 빈 화면·오류·공고 상태 태그는
+`presentation/shared/workspace`의 `EmptyState`·`ErrorState`·`StatusTag`를 씁니다. 화면 이름과 브라우저 제목("화면 이름 · GovBiz")은
+`presentation/shared/routes/screenTitles.ts` 한 곳에서 정하며 사이드바 메뉴·검색 탭도 같은 이름을 씁니다.
 계층·DI의 상세 규칙은 [아키텍처 문서](../../docs/architecture.md#frontend와-내부-계약), 예제 API는
 [SampleItem 계약](../../docs/sample-item-contract.md)을 참고하세요.
 

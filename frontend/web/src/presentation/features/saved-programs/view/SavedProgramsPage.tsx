@@ -7,6 +7,8 @@ import type { SupportProgramStatus } from '../../../../domain/entities/SupportPr
 import { regionNames } from '../../../../domain/entities/Region'
 import { supportProgramCategories } from '../../../../domain/entities/SupportProgramCategory'
 import { appPaths, readSavedProgramsViewMode, savedProgramsPath, supportProgramDetailPath, type SavedProgramsViewMode } from '../../../shared/routes/appPaths'
+import { EmptyState } from '../../../shared/workspace/EmptyState'
+import { ErrorState } from '../../../shared/workspace/ErrorState'
 import { workspacePageStyles, workspaceTagClassName } from '../../../shared/workspace/WorkspacePage.styles'
 import { WorkspacePageHeader } from '../../../shared/workspace/WorkspacePageHeader'
 import {
@@ -155,15 +157,10 @@ export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase, 
             <p className="sr-only" role="status">{savedSupportProgramMessages.loading}</p>
           </section>
         ) : vm.phase === 'failed' ? (
-          <section className={s.emptyCard} aria-label="관심 공고 불러오기 실패">
-            <p className={workspacePageStyles.emptyNote}>{savedSupportProgramMessages.failed}</p>
-            <button className={workspacePageStyles.primaryButton} type="button" onClick={vm.retry}>다시 시도</button>
-          </section>
+          <ErrorState message={savedSupportProgramMessages.failed} onRetry={vm.retry} />
         ) : isEmpty ? (
-          <section className={s.emptyCard} aria-label="관심 공고 없음">
-            <p className={workspacePageStyles.emptyNote}>{savedSupportProgramMessages.empty}</p>
-            <Link className={workspacePageStyles.secondaryButton} to={appPaths.chat}>지원사업 찾기</Link>
-          </section>
+          <EmptyState icon={<BookmarkIcon />} title={savedSupportProgramMessages.emptyTitle} description={savedSupportProgramMessages.emptyDescription}
+            action={{ label: '지원사업 찾기', to: appPaths.chat }} />
         ) : null) : null}
 
         {vm.viewMode === 'calendar' && !isEmpty && vm.phase !== 'failed' ? <>
@@ -301,10 +298,7 @@ function ApplicationPipeline({ filteredSavedPrograms, savedPrograms, today, filt
   }
 
   return <div role="tabpanel" aria-label="지원사업 진행 관리" className={s.pipelineSection}>
-    {phase === 'failed' ? <section className={s.emptyCard} aria-label="진행 관리 불러오기 실패">
-      <p className={workspacePageStyles.emptyNote}>진행 중인 지원사업을 불러오지 못했어요.</p>
-      <button type="button" className={workspacePageStyles.primaryButton} onClick={onRetry}>다시 시도</button>
-    </section> : null}
+    {phase === 'failed' ? <ErrorState message="진행 중인 지원사업을 불러오지 못했어요. 잠시 후 다시 시도해 주세요." onRetry={onRetry} /> : null}
     {updateError ? <div className={s.pipelineError} role="alert">
       <span>{updateError}</span>
       <button type="button" className={workspacePageStyles.quietLink} onClick={onRetry}>최신 상태 불러오기</button>
@@ -520,10 +514,8 @@ function SavedProgramList({ programs, page, totalPages, onPageChange, daysUntilD
   const isNarrow = useMediaQuery(narrowViewportQuery)
   if (!programs.length) {
     return <div role="tabpanel" aria-label="관심 공고 목록">
-      <section className={s.emptyCard} aria-label="조건에 맞는 관심 공고 없음">
-        <p className={workspacePageStyles.emptyNote}>조건에 맞는 관심 공고가 없어요.</p>
-        {filtersActive ? <button type="button" className={workspacePageStyles.secondaryButton} onClick={onResetFilters}>필터 초기화</button> : null}
-      </section>
+      <EmptyState title="조건에 맞는 관심 공고가 없어요"
+        action={filtersActive ? { label: '필터 초기화', onClick: onResetFilters } : undefined} />
     </div>
   }
   // 행의 동작은 [관심 공고에서 빼기] 하나입니다. 상세는 제목을 누르면 열립니다.

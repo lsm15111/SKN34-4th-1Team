@@ -1,13 +1,13 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react'
-import { daysUntil, formatDday, programStatusLabels } from '@govbiz/shared/domain/labels'
+import { daysUntil, programStatusLabels } from '@govbiz/shared/domain/labels'
 import type { ApplicationFormAvailability } from '../../../../domain/entities/ApplicationPreparation'
 import { regionNames } from '../../../../domain/entities/Region'
-import type { SupportProgramStatus } from '../../../../domain/entities/SupportProgram'
 import { supportProgramCategories } from '../../../../domain/entities/SupportProgramCategory'
 import { catalogSourceCodes, catalogSourceLabels, type SupportProgramCatalogFilters } from '../../../../domain/entities/SupportProgramCatalog'
 import { defaultProgramSelectionFilters, splitFilterValues } from '../../../shared/support-program/catalogSearchParams'
 import { SelectField } from '../../../shared/workspace/SelectField'
 import { MultiSelectField } from '../../../shared/workspace/MultiSelectField'
+import { StatusTag } from '../../../shared/workspace/StatusTag'
 import { toFilterChoiceOptions } from '../../../shared/workspace/filterChoiceOptions'
 import { useDelayedFlag } from '../../../shared/workspace/useDelayedFlag'
 import {
@@ -23,7 +23,6 @@ import { ButtonSpinner, PickerRowSkeletons } from './ApplicationPreparationSkele
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-const statusTones: Record<SupportProgramStatus, string> = { OPEN: b.brand, UPCOMING: b.info, CLOSED: b.neutral, UNKNOWN: b.warning }
 type ConditionKey = 'keyword' | 'region' | 'category' | 'sourceCode' | 'status'
 const filterStatusLabels: Record<SupportProgramCatalogFilters['status'], string> = { ALL: '전체', ...programStatusLabels }
 
@@ -31,12 +30,10 @@ function sourceLabel(sourceCode: string) {
   return (catalogSourceLabels as Record<string, string>)[sourceCode] ?? sourceCode
 }
 
-/** 접수 상태(점) · 마감까지 남은 날 · (선택) 출처 배지 한 줄입니다. 마감일이 없거나 지났으면 D-n은 두지 않습니다. */
+/** 접수 상태 · D-day(공용 StatusTag) · (선택) 출처 배지 한 줄입니다. 마감일이 없거나 지났거나 접수 중이 아니면 D-day는 두지 않습니다. */
 export function ProgramBadges({ program, withSource = false, extra }: { program: SelectableSupportProgram; withSource?: boolean; extra?: ReactNode }) {
-  const days = daysUntil(program.applicationEndDate)
   return <span className={b.row}>
-    <span className={`${b.badge} ${statusTones[program.status]}`}><span className={b.dot} aria-hidden="true" />{programStatusLabels[program.status]}</span>
-    {days !== null && days >= 0 && <span className={`${b.badge} ${days <= 3 ? b.warning : b.neutral}`}>{formatDday(days)}</span>}
+    <StatusTag status={program.status} daysLeft={daysUntil(program.applicationEndDate)} />
     {withSource && <span className={`${b.badge} ${b.outline}`}>{sourceLabel(program.sourceCode)}</span>}
     {extra}
   </span>

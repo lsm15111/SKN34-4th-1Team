@@ -1,6 +1,9 @@
 import { useRef, type KeyboardEvent, type ReactNode } from 'react'
 
-const searchModeTabLabels = ['AI 대화 검색', '필터 검색'] as const
+import { screenTitles } from '../routes/screenTitles'
+
+// 탭 이름은 브라우저 제목과 같은 화면 이름입니다.
+const searchModeTabLabels = [screenTitles.aiSearch, screenTitles.filterSearch] as const
 
 /**
  * 로그인 뒤 작업 화면에서 검색 탭을 담는 줄입니다. 다른 작업 화면의 머리글처럼 위에 붙고 본문은 작업 칸과 함께 스크롤됩니다.
