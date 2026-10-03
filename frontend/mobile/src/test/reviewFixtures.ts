@@ -7,7 +7,7 @@ export const reviewPrograms: SupportProgram[] = ['PBLN_100', 'PBLN_200', 'PBLN_3
   sourceCode: 'BIZINFO', id, title: `검토 사업 ${index + 1}`, organization: '모의 기관', summary: '공식 API 요약 테스트',
   regions: ['전국'], categories: ['기술'], targetDescription: '중소기업', applicationPeriod: '2026.10.01 ~ 2026.10.20',
   applicationStartDate: '2026-10-01', applicationEndDate: '2026-10-20', status: 'OPEN', sourceName: '기업마당',
-  sourceUrl: 'https://example.test/program', matchedReasons: [], recommendationScore: null, eligibilityReview: null,
+  sourceUrl: 'https://example.test/program', matchedReasons: [], recommendationScore: null, eligibilityReview: null, analysisSummary: null,
 }))
 export const mobileReview: CombinationReview = { id: 5, title: '동시 신청 검토', inputRevision: 1,
   createdAt: reviewTimeFixture, updatedAt: reviewTimeFixture, programs: reviewPrograms.slice(0, 2).map(program => ({

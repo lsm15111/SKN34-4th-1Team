@@ -10,7 +10,7 @@ const exampleProgram: SupportProgram = {
   sourceCode: 'BIZINFO', id: 'introduction-example', title: '2026 스마트공장 고도화 지원사업 2차', organization: '중소벤처기업부',
   summary: '', categories: ['기술'], regions: ['경기'], targetDescription: '', applicationPeriod: '신청 기간 예시',
   applicationStartDate: null, applicationEndDate: '2026-10-07', status: 'OPEN', sourceName: '기업마당', sourceUrl: 'https://www.bizinfo.go.kr',
-  matchedReasons: [], recommendationScore: 92, eligibilityReview: {
+  matchedReasons: [], recommendationScore: 92, analysisSummary: null, eligibilityReview: {
     status: 'MATCH', basis: 'OFFICIAL_API_TEXT',
     target: { status: 'MATCH', explanation: '소개 예시', evidence: [{ field: 'TARGET_DESCRIPTION', quote: '제조 중소기업 중 기초 수준 이상 스마트공장을 구축한 기업' }] },
     region: { status: 'MATCH', explanation: '소개 예시', evidence: [{ field: 'SUMMARY', quote: '경기도 소재 제조기업' }] },

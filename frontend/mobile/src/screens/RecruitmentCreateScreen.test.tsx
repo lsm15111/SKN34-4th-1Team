@@ -20,7 +20,7 @@ const after = (days: number) => new Date(Date.parse(`${today}T00:00:00Z`) + days
 const program: SupportProgram = { sourceCode: 'BIZINFO', id: 'same-id', title: '공동 제조 과제', organization: '지원 기관',
   summary: '', categories: [], regions: ['전국'], targetDescription: '제조 중소기업', applicationPeriod: '',
   applicationStartDate: null, applicationEndDate: after(2), status: 'OPEN', sourceName: '기업마당',
-  sourceUrl: 'https://example.test/program', matchedReasons: [], recommendationScore: null, eligibilityReview: null }
+  sourceUrl: 'https://example.test/program', matchedReasons: [], recommendationScore: null, eligibilityReview: null, analysisSummary: null }
 const callbacks = { onLogin: jest.fn(), onCompany: jest.fn(), onSavedPrograms: jest.fn(), onCreated: jest.fn(), onCancel: jest.fn() }
 const invalidateSession = jest.fn().mockResolvedValue(undefined)
 const auth = { status: 'signedIn', session: { accessToken: 'owner-token', account: {

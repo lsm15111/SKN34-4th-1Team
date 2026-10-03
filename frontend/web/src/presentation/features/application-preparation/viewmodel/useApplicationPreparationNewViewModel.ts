@@ -21,7 +21,7 @@ import { formAnalysisNeedsSource, formAnalysisState } from './useApplicationPrep
  * 신청 준비가 공고 선택에 쓰는 필드입니다. 검색 결과·관심 공고·상세 조회 어느 쪽에서 골라도 같습니다.
  * 신청 경로는 상세 조회에서 고른 공고에만 있고, 없으면 양식 조회와 함께 상세를 한 번 읽어 확인합니다.
  */
-export type SelectableSupportProgram = Omit<SupportProgram, 'matchedReasons' | 'recommendationScore' | 'eligibilityReview'> & {
+export type SelectableSupportProgram = Omit<SupportProgram, 'matchedReasons' | 'recommendationScore' | 'eligibilityReview' | 'analysisSummary'> & {
   applicationRoute?: SupportProgramDetail['applicationRoute']
 }
 

@@ -6,6 +6,7 @@ import * as Crypto from 'expo-crypto'
 import type { ApplicationForm, ApplicationFormDiscoveryJob, ApplicationFormAvailability, ApplicationServiceField } from '@govbiz/shared/domain/entities/ApplicationPreparation'
 import { applicationServiceFieldLabels } from '@govbiz/shared/domain/entities/ApplicationPreparation'
 import type { SupportProgram, SupportProgramDetail } from '@govbiz/shared/domain/entities/SupportProgram'
+import { toSupportProgramDetail } from '@govbiz/shared/data/models/SupportProgramDto'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
 import { ApplicationPreparationError } from '@govbiz/shared/domain/errors/ApplicationPreparationError'
 import { useAuth } from '../auth/session'
@@ -66,7 +67,7 @@ function OwnedNew({ token, email, initialProgram, onOpenProgram, onCreated, onLi
     void programClient(token).getDetail(initialProgram, controller.signal).then(result => {
       if (controller.signal.aborted) return
       if (!result) throw new Error('출발한 공고를 찾지 못했어요. 필터 검색에서 다시 선택해 주세요.')
-      setProgram(result); setStep('form')
+      setProgram(toSupportProgramDetail(result)); setStep('form')
     }).catch(cause => { if (!controller.signal.aborted) reportError(cause) })
     return () => controller.abort()
   }, [initialProgram?.sourceCode, initialProgram?.sourceProgramId, reportError, token])

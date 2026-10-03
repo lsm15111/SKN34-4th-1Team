@@ -42,7 +42,7 @@ export const supportProgramDetailStyles = {
   summary: 'm-0 max-w-[620px] text-[1rem] leading-[1.75] text-app-ink max-[599px]:max-w-none max-[599px]:leading-[1.7]',
   // 한눈에 보기입니다. 넓은 화면은 흰 카드에 두 열 정의 목록, 좁은 화면은 연한 바탕에 한 열입니다.
   glance: 'rounded-2xl border border-line bg-surface px-6 pt-1.5 pb-2 max-[599px]:px-4 max-[599px]:pt-1',
-  // 공고 내용 카드입니다. 지원 내용 · 지원 대상 절과 자격 미평가 안내.
+  // 공고 내용 카드입니다. 지원 내용 · 지원 대상 절과 자격 안내.
   prose: 'flex flex-col gap-5 rounded-2xl border border-line bg-surface px-6 py-5 max-[599px]:gap-4 max-[599px]:px-4 max-[599px]:py-4',
   proseSection: 'flex flex-col gap-1.5',
   proseTitle: 'm-0 text-[0.9375rem] font-semibold text-app-ink',
@@ -56,8 +56,40 @@ export const supportProgramDetailStyles = {
   glanceValueMuted: 'text-ink-muted',
   tagList: 'm-0 flex list-none flex-wrap gap-1.5 p-0',
   tag: 'rounded-md bg-surface-muted px-[9px] py-1 text-[0.8125rem] font-medium text-ink-muted',
-  emptyValue: 'text-ink-muted',
-  note: 'm-0 flex items-start gap-2.5 text-[0.8125rem] leading-[1.6] text-ink-muted',
+  emptyValue: 'm-0 text-ink-muted',
+  // 공고 분석(AI) 요약 한 줄입니다. 제목·기관 아래에 두고 AI 표시를 붙입니다.
+  summaryLine: 'm-0 mt-1 flex items-start gap-2 text-[0.9375rem] leading-[1.6] text-app-ink',
+  aiPill: 'mt-[3px] shrink-0 rounded-full bg-brand-soft px-[7px] py-px text-[0.6875rem] font-bold text-brand-primary',
+  // 공고 분석 카드입니다. 조건 묶음(신청 조건 · 제외 대상 · 우대 사항)마다 항목과 접힌 원문 인용을 둡니다.
+  analysisHeader: 'flex flex-wrap items-center justify-between gap-2',
+  analysisMeta: 'text-[0.75rem] text-ink-subtle tabular-nums',
+  conditionList: 'm-0 flex list-none flex-col gap-2 p-0',
+  conditionItem: 'flex flex-col gap-1 rounded-xl bg-surface-muted px-3 py-2.5',
+  conditionLine: 'flex items-start gap-2 text-[0.9375rem] leading-[1.6] text-app-ink',
+  conditionChip: 'mt-[2px] shrink-0 rounded-md bg-surface px-[7px] py-px text-[0.75rem] font-semibold text-ink-muted',
+  // 내 조건과 비교입니다. 요약 한 줄과 조건마다 결과 알약·이유를 둡니다.
+  checkBanner: 'm-0 flex flex-wrap items-center gap-2 rounded-xl border border-line px-3 py-2.5 text-[0.8125rem] leading-[1.6] text-ink-muted',
+  checkLink: 'cursor-pointer border-0 bg-transparent p-0 text-[0.8125rem] font-semibold text-brand-primary underline-offset-2 hover:underline',
+  checkResult: 'flex flex-wrap items-center gap-2 text-[0.8125rem] leading-[1.5] text-ink-muted',
+  checkPill: 'shrink-0 rounded-full px-[8px] py-px text-[0.75rem] font-bold',
+  checkMet: 'bg-brand-soft text-brand-primary',
+  checkNotMet: 'bg-warning-soft text-warning',
+  checkUnknown: 'bg-surface text-ink-muted',
+  // 원문 근거·첨부 이름 도움말입니다. 항목 문장 끝의 ! 아이콘에 붙고, 열리면 아이콘 아래에 겹쳐 뜹니다.
+  hintLine: 'inline-flex flex-wrap items-center gap-1',
+  hint: 'relative inline-flex shrink-0 align-middle',
+  hintButton: classes(
+    'inline-grid size-6 cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 text-ink-subtle',
+    'hover:text-brand-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary aria-expanded:text-brand-primary',
+  ),
+  hintPopover: classes(
+    'absolute top-7 right-0 z-20 flex w-[min(20rem,calc(100vw-3rem))] flex-col gap-1.5 rounded-xl border border-line bg-surface px-3 py-2.5',
+    'text-left text-[0.8125rem] font-normal leading-[1.6] text-app-ink shadow-[0_8px_24px_rgba(15,23,42,0.12)]',
+  ),
+  hintTitle: 'text-[0.75rem] font-semibold text-ink-muted [overflow-wrap:anywhere]',
+  hintList: 'm-0 flex list-none flex-col gap-1 p-0 [overflow-wrap:anywhere]',
+  evidenceQuote: 'm-0 whitespace-pre-line border-l-2 border-line-strong pl-2',
+  note:'m-0 flex items-start gap-2.5 text-[0.8125rem] leading-[1.6] text-ink-muted',
   notePill: 'shrink-0 rounded-full bg-surface-muted px-[9px] py-0.5 text-[0.75rem] font-semibold text-ink-muted',
   // 할 일 카드입니다. 넓은 화면은 오른쪽 흰 카드, 좁은 화면은 아래 고정 동작 바가 되고 나머지 줄은 [더 보기]로 펼칩니다.
   aside: classes(

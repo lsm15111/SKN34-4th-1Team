@@ -1,7 +1,7 @@
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
 import type { ColorValue } from 'react-native'
 
-export type AppIconName = 'search' | 'bookmark' | 'collaboration' | 'report' | 'account' | 'pencil' | 'send' | 'calendar' | 'message' | 'document' | 'shield' | 'menu' | 'building' | 'bell' | 'inbox' | 'outbox' | 'back' | 'arrowUp'
+export type AppIconName = 'search' | 'bookmark' | 'collaboration' | 'report' | 'account' | 'pencil' | 'send' | 'calendar' | 'message' | 'document' | 'shield' | 'menu' | 'building' | 'bell' | 'inbox' | 'outbox' | 'back' | 'arrowUp' | 'info'
 
 /** Paths from the approved mobile design; do not substitute emoji or a heart for the bookmark. */
 export function AppIcon({ name, color, size = 24, selected = false }: {
@@ -32,5 +32,6 @@ export function AppIcon({ name, color, size = 24, selected = false }: {
     {name === 'menu' && <Path d="M4 6h16M4 12h16M4 18h16" />}
     {name === 'building' && <><Rect x={5} y={3} width={14} height={18} rx={2} /><Path d="M9 7h1M14 7h1M9 11h1M14 11h1M10 21v-6h4v6" /></>}
     {name === 'bell' && <Path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />}
+    {name === 'info' && <><Circle cx={12} cy={12} r={9} /><Path d="M12 7.5V13M12 16.5h.01" /></>}
   </Svg>
 }

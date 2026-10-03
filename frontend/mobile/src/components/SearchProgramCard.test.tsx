@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native'
 import { SearchProgramCard } from './SearchProgramCard'
 import { programDetail } from '../test/preparationFixtures'
 
-const program = { ...programDetail, matchedReasons: [], recommendationScore: null, eligibilityReview: null }
+const program = { ...programDetail, matchedReasons: [], recommendationScore: null, eligibilityReview: null, analysisSummary: null }
 test('unevaluated results do not fabricate scores or evidence and retain the compound detail identity', () => {
   const open = jest.fn()
   render(<SearchProgramCard program={program} onOpen={open} />)

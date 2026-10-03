@@ -4,7 +4,7 @@ export const documentTime = '2026-10-03T10:00:00+09:00'
 export const documentProgram: SupportProgram = {
   id: 'PBLN_123', sourceCode: 'BIZINFO', title: '테스트 신청 지원사업', organization: '테스트 기관', summary: '단위 테스트용 공고', categories: ['기술'], regions: ['서울'],
   targetDescription: '기업', applicationPeriod: '상시 접수', applicationStartDate: null, applicationEndDate: null, status: 'OPEN', sourceName: '기업마당',
-  sourceUrl: 'https://www.bizinfo.go.kr/sii/siia/selectSIIA200Detail.do?pblancId=PBLN_123', matchedReasons: [], recommendationScore: null, eligibilityReview: null,
+  sourceUrl: 'https://www.bizinfo.go.kr/sii/siia/selectSIIA200Detail.do?pblancId=PBLN_123', matchedReasons: [], recommendationScore: null, eligibilityReview: null, analysisSummary: null,
 }
 export const documentForm: ApplicationForm = {
   formVersionId: 'test-form-v1', sourceCode: 'BIZINFO', sourceProgramId: documentProgram.id, programTitle: documentProgram.title, formTitle: '사업계획서', sourceUrl: documentProgram.sourceUrl,
