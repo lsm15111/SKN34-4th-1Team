@@ -128,7 +128,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ops-image")
     args = parser.parse_args()
-    image = args.ops_image or "govbiz-ops-snapshot-test:" + uuid4().hex[:12]
+    tag = args.ops_image or "govbiz-ops-snapshot-test:" + uuid4().hex[:12]
     built = not args.ops_image
     if built:
         snapshot.run(
@@ -136,12 +136,12 @@ def main():
                 "docker",
                 "build",
                 "-t",
-                image,
+                tag,
                 str(Path(__file__).resolve().parents[2] / "backend/ops-service"),
             ],
             timeout=600,
         )
-    image = json.loads(snapshot.run(["docker", "image", "inspect", image]))[0]["Id"]
+    image = json.loads(snapshot.run(["docker", "image", "inspect", tag]))[0]["Id"]
     mysql_image = json.loads(snapshot.run(["docker", "image", "inspect", "mysql:8.4"]))[0]["Id"]
     with tempfile.TemporaryDirectory(prefix="govbiz-snapshot-test-") as temporary:
         root = Path(temporary)
@@ -249,7 +249,9 @@ def main():
                         check=False,
                     )
     if built:
-        snapshot.run(["docker", "image", "rm", image])
+        # Remove this run's tag, not the ID: a cached build of the same context can share the ID
+        # under another tag, and removing by ID then fails ("referenced in multiple repositories").
+        snapshot.run(["docker", "image", "rm", tag])
 
 
 if __name__ == "__main__":
