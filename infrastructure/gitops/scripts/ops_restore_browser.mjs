@@ -90,10 +90,18 @@ export async function checkRestoreBrowser(origin, responses, expected, reports, 
       await page.locator('dd').getByText(expected[id].execution_spec_sha256, { exact: true }).waitFor()
       await page.getByRole('region', { name: '실행 예산 장부' }).getByText('새 모델 호출을 예약하는 실행이 아닙니다.', { exact: false }).waitFor()
       const route = `/api/v1/ops/evaluations/${id}`
+      // The restored server mounts no evaluation evidence files, so a fixed-answer review
+      // reports unavailable material. Only those captured review problems may be shown.
+      const alerts = []
       if (responses[route].evaluation_scope === 'fixed-answer-context-only') {
-        await page.getByRole('region', { name: '응답 검토와 기준 지정' }).getByRole('region', { name: '검토 진행 안내' }).waitFor()
+        const review = page.getByRole('region', { name: '응답 검토와 기준 지정' })
+        await review.getByRole('region', { name: '검토 진행 안내' }).waitFor()
+        const captured = responses[route + '/review']
+        assert.ok(captured.material === null && captured.material_error, 'Captured restored review material state differs')
+        alerts.push(...[captured.material_error, captured.quality?.blocked_reason].filter(Boolean))
+        assert.equal(await review.getByRole('alert').count(), alerts.length, 'Review does not show its material problems')
       }
-      assert.equal(await page.getByRole('alert').count(), 0, 'Detail view contains an error')
+      assert.deepEqual((await page.getByRole('alert').allInnerTexts()).map((text) => text.trim()).sort(), alerts.sort(), 'Detail view contains an error')
       const link = page.getByRole('link', { name: 'Evidently 보고서', exact: true })
       onStage('REPORT')
       assert.equal(await link.getAttribute('href'), route + '/report')

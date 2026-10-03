@@ -27,14 +27,31 @@ const run = {
   created_at: at, started_at: null, finished_at: at, synced_at: at, error_code: '', error_message: '', summary: {},
   model_api_calls: 0, evaluation_run_id: null, trace_links: [], prefect_flow_run_id: null, prefect_url: null, langfuse_url: null,
   report_url: `/api/v1/ops/evaluations/${id}/report`, execution_spec_sha256: expected[id].execution_spec_sha256,
+  evaluation_scope: 'fixed-answer-context-only',
 }
+// Ops review responses. Kubernetes reads the evidence files; the restored server mounts
+// only restored results, so review_response reports its material as unavailable.
+const qualityBase = { status: 'NOT_EVALUATED', is_current: false, current_id: null, fixture_version: 0,
+  fixture_rubric_version: 'fixture-reference-review-v1', fixture_reviews: [], history: [] }
+const reviewBase = { can_promote: false, reviews: [], review_version: 0, rubric: { version: 'evidence-review-v1', criteria: ['근거 일치'] },
+  case_reviews: [], can_approve: false, approval_current: false, is_baseline: false, baseline_requires_review: false,
+  baseline_version: 0, baseline_history: [] }
+const readableReview = { ...reviewBase, material_error: '',
+  quality: { ...qualityBase, input_sha256: 'c'.repeat(64), policy: { definition: { version: 'quality-v1' }, code_sha256: 'd'.repeat(64) }, blocked_reason: '' },
+  material: { capture_sha256: 'e'.repeat(64), fixture_sha256: 'f'.repeat(64), cases: [{
+    case_id: 'E01', question: '지원 대상은 누구인가요?', document_title: '검증 공고', evidence: [{ order: 1, text: '중소기업이 대상입니다.' }],
+    answer: '중소기업입니다.', answer_status: 'ANSWERED', cited_orders: [1], reference_answer: '중소기업입니다.',
+    expected_status: 'ANSWERED', expected_citation_orders: [1], reference_facts: ['중소기업'], forbidden_claims: ['대기업'],
+  }] } }
+const unreadableReview = { ...reviewBase, material: null, material_error: '검토 자료를 확인할 수 없습니다. 완료 상태와 저장소를 확인하세요.',
+  quality: { ...qualityBase, input_sha256: null, policy: null, blocked_reason: '완료 자료 또는 정책 명세를 확인할 수 없습니다.' } }
 
-async function fixture(defect, verify, count = 1) {
+async function fixture(defect, verify, count = 1, restored = false) {
   let origin, vite, loggedIn = false, logouts = 0
   const token = randomUUID(), requests = [], violations = [], revokedReads = []
   const rows = Array.from({ length: count }, (_, index) => {
     const rowId = '10000000-0000-4000-8000-' + String(index + 1).padStart(12, '0')
-    return { ...run, id: rowId, report_url: `/api/v1/ops/evaluations/${rowId}/report` }
+    return { ...run, id: rowId, report_url: `/api/v1/ops/evaluations/${rowId}/report`, ...(defect === 'run_error' ? { error_message: '복원 실행 오류' } : {}) }
   })
   const required = Object.fromEntries([rows[0], rows.at(-1)].map((row) => [row.id, expected[id]]))
   const originalEnv = Object.fromEntries(['K8S_CORE_PORT', 'K8S_OPS_PORT', 'K8S_DEV_LOGIN'].map((key) => [key, process.env[key]]))
@@ -72,6 +89,7 @@ async function fixture(defect, verify, count = 1) {
     const row = rows.find((item) => request.url === `/api/v1/ops/evaluations/${item.id}`)
     const report = rows.some((item) => request.url === item.report_url)
     const budget = rows.some((item) => request.url === `/api/v1/ops/evaluations/${item.id}/budget`)
+    const reviewed = rows.some((item) => request.url === `/api/v1/ops/evaluations/${item.id}/review`)
     const invalidSessionAccepted = hasCookie(request) && (
       defect === 'revoked_list' && url.pathname === '/api/v1/ops/evaluations' ||
       defect === 'revoked_detail' && row || defect === 'revoked_budget' && budget || defect === 'revoked_report' && report
@@ -93,6 +111,7 @@ async function fixture(defect, verify, count = 1) {
     }
     else if (row) send(reply, 200, row)
     else if (budget) send(reply, 200, { as_of: at, state: 'not_applicable', reservation: null, calls: [] })
+    else if (reviewed) send(reply, 200, restored || defect === 'unreadable_review' ? unreadableReview : readableReview)
     else if (request.url === '/api/v1/ops/schedules?page=1') send(reply, 200, { enabled: false, timezone: 'Asia/Seoul', page: 1, total: 0, results: [] })
     else if (request.url === '/api/v1/ops/budget/reservations?page=1') send(reply, 200, { as_of: at, count: 0, next: null, previous: null, results: [],
       summary: { state: 'unconfigured', limits: null, allocated: null, remaining: null, breakdown: null, reservation_count: 0, legacy_live_run_count: 0, change_count: 0, recent_changes: [] } })
@@ -182,14 +201,23 @@ for (const defect of ['revoked_core', 'revoked_list', 'revoked_detail', 'revoked
   })
 }
 
-for (const [defect, message] of [['missing_cookie', /cookie is missing/], ['wrong_principal', /Core principal/], ['logout_bypass', /remained available/]]) {
+for (const [defect, message] of [
+  ['missing_cookie', /cookie is missing/], ['wrong_principal', /Core principal/], ['logout_bypass', /remained available/],
+  ['unreadable_review', /Management detail contains an error/],
+]) {
   test(`browser rejects ${defect} and cleans up`, { timeout: 120000 }, async () => {
     await fixture(defect, async (input) => { await assert.rejects(checkBrowserLogin(input), message) })
   })
 }
 
+test('restored review without evidence still rejects any other detail alert', { timeout: 120000 }, async () => {
+  await fixture('run_error', async (input) => {
+    await assert.rejects(checkBrowserLogin({ ...input, reviewMaterial: 'unavailable' }), /Management detail contains an error/)
+  }, 1, true)
+})
+
 test('external origins and missing credentials are rejected before opening a browser', async () => {
-  for (const input of [{ origin: 'https://external.invalid' }, { origin: 'http://127.0.0.1:5173', password: '' }]) {
+  for (const input of [{ origin: 'https://external.invalid' }, { origin: 'http://127.0.0.1:5173', password: '' }, { reviewMaterial: 'ignored' }]) {
     await assert.rejects(checkBrowserLogin({ origin: 'http://127.0.0.1:5173', email, password, expected, ...input }))
   }
 })
@@ -260,7 +288,7 @@ for (const failExit of [false, true]) {
       assert.ok(child.exitCode !== null || child.signalCode !== null)
       assert.deepEqual(await caches(), before)
       assert.deepEqual(['K8S_CORE_PORT', 'K8S_OPS_PORT', 'K8S_DEV_LOGIN'].map((key) => process.env[key]), envBefore)
-    })
+    }, 1, true)
   })
 }
 

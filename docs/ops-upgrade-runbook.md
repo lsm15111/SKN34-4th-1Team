@@ -269,6 +269,8 @@ RESTORE_BROWSER_CHANNEL=chrome node --test infrastructure/gitops/scripts/test_op
 복원된 Core·Ops·결과 HTTP 서버가 실행 중일 때 `ops_restore_live_browser.mjs`가 새 브라우저를 연다.
 로그인 폼 → 실제 Core 세션 발급 → Ops 목록 전체 페이지 → 복원 평가 3건의 상세·보고서 해시 →
 로그아웃 → 익명 및 폐기된 쿠키의 401을 같은 브라우저 검사로 확인한다. 응답을 재생하지 않는다.
+복원 서버는 평가 근거 파일 없이 복원 결과만 읽으므로 고정 답변 평가의 검토 응답은 자료 미확인이어야 하고,
+화면에는 그 응답의 안내만 표시되어야 한다. Kubernetes 로그인 검사는 검토 자료 오류도 실패로 처리한다.
 
 복원 DB는 `--network none`을 유지하고 공개 포트도 추가하지 않는다. CI가 소유한 Vite의
 `http://127.0.0.1:5173` 요청을 Docker attach 표준입출력 통로로 전달하며, 컨테이너 안에서
@@ -359,7 +361,8 @@ Prefect를 중지한다. 컨테이너 ID·이미지·Compose 소유권·볼륨 �
   이어서 테스트 전용 `playwright-core`로 별도 headless 브라우저·새 컨텍스트를 만든다.
   실제 `/ops/evaluations`의 JS·React·CSS를 로드하고 관리자 표시, 전체 이력의 페이지 이동·행 수·요청 ID,
   예산 영역의 조회 완료를 확인한다. 복원 대상 3건은 목록 링크를 클릭해 상세 화면의 요청 ID·명세 ID와
-  실행 예산 장부도 확인한다. 고정 답변 평가의 검토 자료가 로드되고 화면 오류가 없어야 한다.
+  실행 예산 장부도 확인한다. 고정 답변 평가는 검토 응답이 로드되어야 한다. 복원 검사는 평가 근거 파일을
+  연결하지 않으므로 검토 응답의 자료 미확인·품질 판정 차단 안내만 그대로 표시되어야 하며, 그 외 화면 오류는 실패다.
   상세 화면의 Evidently 보고서 링크는 `noopener noreferrer`가 있는 새 탭으로 열려야 한다.
   복원 HTTP에서 수집한 HTML 원문·Content-Type·Cache-Control·CSP를 그대로 재생하고,
   브라우저가 받은 본문의 SHA-256을 복원 기대값과 대조한다. 본문 표시와 새 탭의 opener 차단,

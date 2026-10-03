@@ -4,7 +4,10 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from '../../../frontend/web/node_modules/playwright-core/index.mjs'
 
-export async function checkBrowserLogin({ origin, email, password, expected }) {
+// reviewMaterial: 'available' when Ops reads evaluation evidence files (Kubernetes), or
+// 'unavailable' for the restored server, which mounts only restored results by design.
+export async function checkBrowserLogin({ origin, email, password, expected, reviewMaterial = 'available' }) {
+  assert.ok(['available', 'unavailable'].includes(reviewMaterial), 'Unknown review material expectation')
   assert.ok(typeof origin === 'string' && /^http:\/\/(127\.0\.0\.1|localhost):[0-9]{4,5}$/.test(origin), 'Use an owned loopback Vite server')
   assert.ok(Number(new URL(origin).port) >= 1024 && Number(new URL(origin).port) <= 65535)
   assert.ok(typeof email === 'string' && email.length <= 254 && email.includes('@'), 'Missing test login identity')
@@ -77,7 +80,7 @@ export async function checkBrowserLogin({ origin, email, password, expected }) {
     await page.reload({ waitUntil: 'domcontentloaded' })
     await page.getByRole('navigation', { name: '운영 메뉴' }).getByText(email, { exact: true }).waitFor()
     const history = page.getByRole('region', { name: '평가 실행 이력' })
-    const locations = new Map(), listings = []
+    const locations = new Map(), scopes = new Map(), listings = []
     for (let number = 1; ; number++) {
       const listed = await read(`/api/v1/ops/evaluations?page=${number}`)
       assert.equal(listed.status, 200, 'Evaluation page is unavailable')
@@ -94,6 +97,7 @@ export async function checkBrowserLogin({ origin, email, password, expected }) {
         assert.match(row.id, /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/)
         assert.ok(!locations.has(row.id), 'Evaluation pagination repeated a row')
         locations.set(row.id, number)
+        scopes.set(row.id, row.evaluation_scope)
         if (ids.includes(row.id)) assert.ok(row.status === 'COMPLETED' && row.execution_spec_sha256 === expected[row.id].execution_spec_sha256, 'Expected evaluation differs')
         await history.locator(`a[href="/ops/evaluations/${row.id}"]`).waitFor()
       }
@@ -128,7 +132,20 @@ export async function checkBrowserLogin({ origin, email, password, expected }) {
       }, reportPath)
       assert.ok(report.status === 200 && report.hash === expected[id].report_sha256, 'Actual Ops report bytes differ')
       assert.ok(report.csp?.includes('sandbox allow-scripts;') && report.cache?.includes('no-store'), 'Actual report security headers differ')
-      assert.equal(await page.getByRole('alert').count(), 0, 'Management detail contains an error')
+      // A fixed-answer detail loads its review automatically; wait until it settles before
+      // reading alerts. Without evidence files only the reported material problems may show.
+      const alerts = []
+      if (scopes.get(id) === 'fixed-answer-context-only') {
+        const review = page.getByRole('region', { name: '응답 검토와 기준 지정', exact: true })
+        await review.getByRole('region', { name: '검토 진행 안내', exact: true }).waitFor()
+        if (reviewMaterial === 'unavailable') {
+          const state = await read(`/api/v1/ops/evaluations/${id}/review`)
+          assert.ok(state.status === 200 && state.body.material === null && state.body.material_error, 'Restored review material state differs')
+          alerts.push(...[state.body.material_error, state.body.quality?.blocked_reason].filter(Boolean))
+          assert.equal(await review.getByRole('alert').count(), alerts.length, 'Review does not show its material problems')
+        }
+      }
+      assert.deepEqual((await page.getByRole('alert').allInnerTexts()).map((text) => text.trim()).sort(), alerts.sort(), 'Management detail contains an error')
     }
     const [logout] = await Promise.all([
       page.waitForResponse((reply) => reply.url() === origin + '/api/v1/auth/logout' && reply.request().method() === 'POST'),

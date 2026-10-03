@@ -48,10 +48,17 @@ for (const index of [0, 24, 25]) {
   row.evaluation_scope = index === 25 ? 'source-chunks-retrieval-answer' : 'fixed-answer-context-only'
   responses[path] = { ...row }
   responses[path + '/budget'] = { as_of: at, state: 'not_applicable', reservation: null, calls: [] }
+  // Restored Ops mounts no evidence files, so review_response reports unavailable material.
   if (index !== 25) responses[path + '/review'] = {
-    is_baseline: false, material_error: '', baseline_version: 0, review_version: 0,
+    is_baseline: false, baseline_version: 0, review_version: 0, can_promote: false,
     can_approve: false, approval_current: false, baseline_requires_review: false,
-    rubric: { version: 'fixture', criteria: [] }, case_reviews: [], baseline_history: [], reviews: [], material: null,
+    rubric: { version: 'fixture', criteria: [] }, case_reviews: [], baseline_history: [], reviews: [],
+    material: null, material_error: '검토 자료를 확인할 수 없습니다. 완료 상태와 저장소를 확인하세요.',
+    quality: {
+      status: 'NOT_EVALUATED', is_current: false, current_id: null, input_sha256: null, policy: null,
+      blocked_reason: '완료 자료 또는 정책 명세를 확인할 수 없습니다.', fixture_version: 0,
+      fixture_rubric_version: 'fixture-reference-review-v1', fixture_reviews: [], history: [],
+    },
   }
   const body = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>복원 검증 보고서</title></head><body><script>document.body.appendChild(Object.assign(document.createElement('h1'), {textContent: '복원 보고서 ${index}'}))</script></body></html>`
   reports[path + '/report'] = { body, headers: {
@@ -80,6 +87,14 @@ test('real browser opens details and sandboxed report tabs across both list page
   assert.equal(result.proxy_http.servers_stopped, true)
   assert.match(result.browser_ui.browser_version, /^[0-9]+(?:\.[0-9]+){3}$/)
   context.diagnostic('Browser version: ' + result.browser_ui.browser_version)
+})
+
+test('detail alerts other than the restored review material state still fail', { timeout: 120000 }, async () => {
+  const id = Object.keys(expected)[0], path = `/api/v1/ops/evaluations/${id}`
+  const snapshot = Object.fromEntries(Object.entries(responses).filter(([key]) => !key.startsWith('/api/v1/ops/evaluations/') || key.startsWith(path)))
+  snapshot[path] = { ...snapshot[path], error_message: '복원 실행 오류' }
+  const report = { [path + '/report']: reports[path + '/report'] }
+  await assert.rejects(withRestoreProxy(snapshot, (origin) => checkRestoreBrowser(origin, snapshot, { [id]: expected[id] }, report), report), /Detail view contains an error/)
 })
 
 test('tampered report bytes or missing reports cannot launch the browser', async () => {

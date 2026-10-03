@@ -105,7 +105,9 @@ export async function runLiveRestore({ program, password, expected }, child, por
     await optimizer?.scanProcessing
     await Promise.all(Object.values(optimizer?.metadata.discovered ?? {}).map((item) => item.processing))
     origin = 'http://127.0.0.1:' + vite.httpServer.address().port
-    proof = await checkBrowserLogin({ origin, email: ready.email, password, expected })
+    // The helper serves only restored results with an empty evidence directory, so
+    // fixed-answer reviews cannot build their material (ops_http_restore_probe.check_http).
+    proof = await checkBrowserLogin({ origin, email: ready.email, password, expected, reviewMaterial: 'unavailable' })
     assert.deepEqual(failures, [])
     const completed = await exchange({ phase: 'browser_done' }, 90000)
     assert.equal(completed.phase, 'complete')
