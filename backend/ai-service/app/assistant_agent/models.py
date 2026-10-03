@@ -7,7 +7,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 
 from app.assistant.models import (
     MAX_CITATIONS, MAX_HELP_ENTRIES, MAX_HISTORY_MESSAGES, AccountTopic, AnswerText, AssistantContext,
-    AssistantHelpEntry, AssistantHistoryMessage, AssistantSession, HelpEntryId, MessageText, ShortText,
+    AssistantHelpEntry, AssistantHistoryMessage, AssistantSession, ClarificationText, HelpEntryId, MessageText, ShortText,
 )
 from app.support_program_conversation.models import validate_text
 from app.support_program_identity import (
@@ -167,7 +167,7 @@ class AssistantClassification(BaseModel):
     intent: AgentIntent
     answer: AnswerText | None
     citations: list[HelpEntryId] = Field(max_length=MAX_CITATIONS)
-    clarification_question: ShortText | None = Field(alias="clarificationQuestion")
+    clarification_question: ClarificationText | None = Field(alias="clarificationQuestion")
     search_query: MessageText | None = Field(alias="searchQuery")
     account_topic: AccountTopic | None = Field(alias="accountTopic")
 
@@ -324,7 +324,7 @@ class AssistantAgentResponse(BaseModel):
     intent: AgentIntent
     answer: AnswerText | None
     citations: list[HelpEntryId] = Field(max_length=MAX_CITATIONS)
-    clarification_question: ShortText | None = Field(alias="clarificationQuestion")
+    clarification_question: ClarificationText | None = Field(alias="clarificationQuestion")
     search_query: MessageText | None = Field(alias="searchQuery")
     account_topic: AccountTopic | None = Field(alias="accountTopic")
     cards: list[AssistantCard] = Field(max_length=MAX_CARDS)

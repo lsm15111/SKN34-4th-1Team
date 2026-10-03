@@ -178,6 +178,9 @@ ANSWERED는 비어 있지 않은 answer와 빈 updates, null 질문을 반환합
 | `OUT_OF_SCOPE` | `answer` | 할 수 없는 일임을 알리고 가장 가까운 기능 안내 |
 | `UNCLEAR` | `clarificationQuestion` | 종류를 정할 수 없어 한 번 되묻기 |
 
+`answer`는 결론을 첫 문장에 두는 최대 두 문장(UTF-16 300자 이내)이고, 근거 항목의 제한·준비 중·로그인 조건은
+둘째 문장 하나에 모읍니다. `clarificationQuestion`은 120자 이내 질문 하나이며 보기는 꼭 필요할 때만 넣습니다.
+인사·칭찬·마무리·면책 문구·과정 설명은 쓰지 않게 하고 AI 답변 안내는 화면이 따로 표시합니다.
 Service는 의도별 필드 조합과 인용 id가 요청의 도움말 항목에 있는지 검증하고 위반이면 503으로 거절합니다.
 `HTTP API → AssistantService → AssistantAgent → OpenAI → Response`로 한 번의 typed structured 호출만 실행하며
 C02와 같은 모델·HTTP 25초/전체 실행 30초 제한, 최대 출력 1,200 tokens, store=false, tracing 비활성을 씁니다.
@@ -510,7 +513,7 @@ Agent는 후보를 빠짐없이 점수화하고 각 후보의 `targetAssessment`
 Service는 이를 HTTP의 `targetEligibility`, `regionEligibility`, `targetEvidence`, `targetExplanation`,
 `regionEvidence`, `regionExplanation`으로 옮깁니다.
 각 evidence는 `[{field: "SUMMARY" | "TARGET_DESCRIPTION", quote: "..."}]` 형태로 최대 1개이며,
-quote는 원문 그대로 1~240 Unicode code point, explanation은 1~160자입니다. 둘 다 원본 길이를 검사하고
+quote는 원문 그대로 1~240 Unicode code point, explanation은 1~90자입니다. 둘 다 원본 길이를 검사하고
 공백뿐인 값과 Unicode 제어·형식 문자를 거부하며 trim 등으로 변형하지 않습니다. MATCH·INCOMPATIBLE에는
 인용 1개가 필수이고 UNKNOWN은 0~1개와 확인할 조건을 적은 설명이 필요합니다.
 Service는 제외·점수 미달 후보까지 모두 해당 후보의 지정 본문 필드에 exact substring 인용이 존재하는지 검사합니다.
@@ -548,8 +551,10 @@ Agent가 전체 `summary`·`targetDescription`을 그대로 전달하면서 두 
 번호 배열이며 최대 1개입니다. 후보별 동적 스키마가 `0..선택지 수-1`의 정수만 허용하고 Agent가 다시
 범위를 검증한 뒤 해당 후보의 원래 field/quote를 복원합니다. 이 원문 복원 방식은 v5에서도 유지합니다.
 출력 스키마도 MATCH·UNKNOWN·INCOMPATIBLE을 각각 나눠 MATCH·INCOMPATIBLE의 근거 번호 1개를
-필수로 하고 UNKNOWN만 0~1개를 허용합니다. 추천 이유의 각 항목에도 1~120자 제한을 선언하여
+필수로 하고 UNKNOWN만 0~1개를 허용합니다. 추천 이유는 1~2개, 각 항목 1~60자 제한을 선언하여
 생성 형식은 통과했지만 서버 검증에서 거부되는 간극을 줄입니다. 원문 인용·자격 검증은 그대로 유지합니다.
+추천 이유와 설명은 결론을 첫 문장에 두고 인사·칭찬·마무리·면책 문구·과정 설명 없이 쓰도록 지시합니다.
+Core는 이전 응답과 호환되도록 기존 상한(이유 3개·120자, 설명 160자)으로 검증하므로 점수 계약 버전은 그대로입니다.
 사용하는 중첩 `anyOf`와 배열 길이 제약은 [OpenAI Structured Outputs 문서](https://developers.openai.com/api/docs/guides/structured-outputs)를 따릅니다.
 원본 식별자를 분해하지 않으며 서로 다른 후보의 같은 번호는 각자의 원문에만 대응합니다.
 

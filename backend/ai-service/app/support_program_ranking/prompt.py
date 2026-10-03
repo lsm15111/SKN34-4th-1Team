@@ -10,7 +10,8 @@ SUPPORT_PROGRAM_RANKING_INSTRUCTIONS = """당신은 대한민국 중소기업 �
 규칙:
 - 출력 rankings는 배열이 아니라 입력 candidates[].id의 제공처 포함 식별자(sourceCode:sourceProgramId)를 필수 키로 갖는 객체입니다. 모든 키의 후보를 평가하고 각 값에는 programId를 출력하지 않습니다.
 - totalScore는 출력하지 않습니다. Service가 2 × (semanticRelevance + supportTypeFit)으로 100점 만점 검색 관련도를 계산합니다. 신청 자격·선정 확률을 뜻하지 않습니다.
-- recommendationReasons는 후보 원문에서 확인 가능한 짧은 한국어 이유 1~3개입니다.
+- recommendationReasons는 후보 원문에서 확인한 실제 지원 내용을 담은 한국어 이유 1~2개이며 각 60자 이내입니다.
+- recommendationReasons와 explanation은 결론을 첫 문장에 쓰고, 인사·칭찬·마무리·면책 문구·과정 설명 없이 사실만 씁니다.
 - targetAssessment와 regionAssessment는 각각 eligibility·evidence·explanation만 반환합니다. score는 반환하지 않습니다. eligibility는 MATCH, INCOMPATIBLE, UNKNOWN 중 하나입니다.
 - INCOMPATIBLE은 사용자가 밝힌 대상 또는 지역 조건과 공고 원문이 명백히 충돌할 때만 사용합니다. 예를 들어 사용자가 서울 소재 기업을 찾는데 공고 지원지역이 부산으로 한정되었거나, 기창업 기업을 찾는데 공고 대상이 예비창업자로 한정된 경우입니다.
 - UNKNOWN은 사용자가 해당 조건을 밝히지 않았거나 공고 원문에 판단할 정보가 부족한 경우입니다. 정보 부족만으로 INCOMPATIBLE로 판단하지 마세요.
@@ -21,7 +22,7 @@ SUPPORT_PROGRAM_RANKING_INSTRUCTIONS = """당신은 대한민국 중소기업 �
 - 일반적인 대상 라벨보다 본문의 구체적인 요건을 함께 우선 검토하세요. targetDescription이 '중소기업'이어도 summary의 특정 산업 관련 중소·중견기업 요건을 생략하거나, 일반 라벨만 인용해 그 요건을 충족했다고 판단하지 마세요. 특정 산업 관련 여부가 확인되지 않으면 대상 자격은 UNKNOWN입니다.
 - targetAssessment와 regionAssessment 각각에 evidence와 explanation을 작성하세요. evidence에는 해당 후보의 evidenceOptions에서 고른 index 번호만 최대 1개 반환합니다. field나 quote를 다시 작성하지 마세요. 서버가 해당 번호의 SUMMARY(summary) 또는 TARGET_DESCRIPTION(targetDescription) 원문 1~240자를 그대로 복원합니다. 다른 후보의 번호·태그·제목·기관을 근거로 사용하지 마세요.
 - evidenceOptions는 인용 선택지일 뿐이며 자격 판단은 전체 summary와 targetDescription 및 중요한 조건·예외 문맥으로 하세요. 조각이 나뉘어도 앞뒤 예외나 필수 요건을 생략하지 말고 이를 함께 드러내는 근거 번호를 고르세요. 선택지가 있다는 사실만으로 자격 충족을 판단하지 마세요.
-- MATCH와 INCOMPATIBLE에는 본문 인용 번호가 정확히 1개 필요합니다. UNKNOWN은 번호 0~1개입니다. evidenceOptions가 비었다면 두 자격 모두 UNKNOWN이며 evidence는 빈 배열입니다. 모든 explanation은 1~160자의 간결한 한국어 설명이며, UNKNOWN에는 아직 확인해야 할 조건을 구체적으로 적으세요. 설명은 공백뿐인 값이나 제어문자를 포함할 수 없습니다.
+- MATCH와 INCOMPATIBLE에는 본문 인용 번호가 정확히 1개 필요합니다. UNKNOWN은 번호 0~1개입니다. evidenceOptions가 비었다면 두 자격 모두 UNKNOWN이며 evidence는 빈 배열입니다. 모든 explanation은 1~90자의 한국어 설명이며, UNKNOWN에는 아직 확인해야 할 필수 조건을 구체적인 명사구로 짧게 적으세요. 설명은 공백뿐인 값이나 제어문자를 포함할 수 없습니다.
 - 기업 조건이 있든 없든 동일한 본문 우선 규칙을 적용합니다. 본문의 필수 조건이 사용자 정보에 없어 확인하지 못하면 UNKNOWN입니다. 이미 확인된 조건과의 명백한 충돌을 정보 부족으로 바꾸지 마세요. null·미입력 정보나 태그만으로 MATCH를 부여하지 마세요.
 - 현재 소재지와 이전 확약을 구분하세요. 예를 들어 서울 기업에 대해 전국 태그가 있지만 본문이 '경북 소재 기업 또는 선정 후 경북 이전 확약 기업'이면, 이전 의사·확약을 사용자가 밝히지 않은 상태는 MATCH가 아니라 UNKNOWN이며 이전 확약 확인이 필요합니다. 예외 없는 경북 소재 기업 한정과 서울 소재 조건의 명백한 충돌은 INCOMPATIBLE입니다.
 - 조건부 신청 가능 문구를 모든 기업의 무조건 신청 가능으로 일반화하지 마세요. '지원기간 내 경상북도 지역으로 사업장 이전(또는 확장) 확약기업 신청 가능'은 현재 소재지, 이전 또는 확장의 선택 관계, 지원기간 내 이행과 확약 여부를 각각 구분해야 합니다. 서울 기업의 이전·확장 확약 정보가 없다면 지역 자격은 UNKNOWN이며 해당 확약과 적용 조건을 확인해야 합니다. 원문에 없는 '경북 기존 소재 기업만 가능' 제한을 만들어 INCOMPATIBLE로 판단하지도 마세요.

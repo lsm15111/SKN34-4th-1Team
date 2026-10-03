@@ -216,7 +216,7 @@ LLM은 입력 후보를 정확히 한 번씩 모두 평가합니다. 후보 문�
 프론트엔드도 서버 순서를 유지합니다. 접수 중 필터는 기존처럼 Core에서 접수 상태로 적용합니다.
 통과 공고가 없으면 `rankings`는 빈 배열입니다.
 
-각 대상·지역 판정에는 `explanation`(1~160 code point)과 `evidence`(0~1개)가 필수입니다. `MATCH`와
+각 대상·지역 판정에는 `explanation`(Core 검증 1~160 code point, AI 생성 1~90)과 `evidence`(0~1개)가 필수입니다. `MATCH`와
 `INCOMPATIBLE`에는 반드시 인용 1개가 있어야 하며, `UNKNOWN`은 정보 부족·사용자 확인 사항을 설명합니다.
 인용은 `{ "field": "SUMMARY" | "TARGET_DESCRIPTION", "quote": "…" }`이고 `quote`는 1~240 code point입니다.
 AI와 Core가 실제 전달한 해당 후보·해당 본문 필드의 정확한 부분 문자열인지 검사합니다. 다른 후보의 문장이나
@@ -260,7 +260,8 @@ Core는 다음 불변식을 다시 검사합니다.
 - 판정 설명·인용 개수·문자 상한과 실제 전달한 본문 내 인용의 정확한 존재 여부
 - 절단된 본문 후보는 대상·지역이 모두 `UNKNOWN`
 - 반환한 공고마다 `semanticRelevance >= 20`을 충족
-- 추천 이유가 1~3개이고 각 1~120 Unicode code point. Core와 AI가 같은 기준으로 검사하며 보조 평면 문자도 하나로 셈
+- 추천 이유가 1~3개이고 각 1~120 Unicode code point. AI는 더 짧게 1~2개·각 1~60자로 생성·검증하며 Core는 이전 응답과
+  호환되는 이 상한으로 검사합니다. 보조 평면 문자도 하나로 셈
 
 하나라도 위반하면 성공 결과를 만들지 않고 `AI_SERVICE_INVALID_RESPONSE`로 거부합니다.
 

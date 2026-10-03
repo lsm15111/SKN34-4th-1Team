@@ -22,6 +22,8 @@ from app.support_program_llm import (
 from app.support_program_ranking.errors import AgentExecutionError, AgentFailureCode, AgentTimeoutError
 
 from .models import (
+    MAX_RECOMMENDATION_REASON_LENGTH,
+    MAX_RECOMMENDATION_REASONS,
     AssessedSupportProgram,
     IncompatibleEligibilityAssessment,
     RegionEligibilityAssessment,
@@ -112,8 +114,8 @@ def _assessment_selection_type(option_count: int) -> type[SupportProgramAssessme
             ),
         )),
         recommendation_reasons=(
-            list[Annotated[str, Field(min_length=1, max_length=120)]],
-            Field(alias="recommendationReasons", min_length=1, max_length=3),
+            list[Annotated[str, Field(min_length=1, max_length=MAX_RECOMMENDATION_REASON_LENGTH)]],
+            Field(alias="recommendationReasons", min_length=1, max_length=MAX_RECOMMENDATION_REASONS),
         ),
         target_assessment=(target, Field(
             alias="targetAssessment",

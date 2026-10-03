@@ -15,6 +15,10 @@ from app.support_program_identity import (
 SCORING_VERSION = "govbiz-support-program-ranking-v5"
 MAX_CANDIDATES = 20
 MAX_CANONICAL_PROGRAM_ID_LENGTH = MAX_CANONICAL_SOURCE_PROGRAM_ID_LENGTH
+# 화면 카드에 그대로 보이는 문장이라 짧게 생성하게 한다. Core는 이전 응답과 호환되도록 더 넓은 상한을 유지한다.
+MAX_RECOMMENDATION_REASONS = 2
+MAX_RECOMMENDATION_REASON_LENGTH = 60
+MAX_ELIGIBILITY_EXPLANATION_LENGTH = 90
 
 
 def _normalize_recommendation_reasons(values: list[str]) -> list[str]:
@@ -22,8 +26,8 @@ def _normalize_recommendation_reasons(values: list[str]) -> list[str]:
     seen: set[str] = set()
     for value in values:
         reason = value.strip()
-        if not reason or len(reason) > 120:
-            raise ValueError("recommendation reasons must contain 1 to 120 characters")
+        if not reason or len(reason) > MAX_RECOMMENDATION_REASON_LENGTH:
+            raise ValueError("recommendation reasons must contain 1 to 60 characters")
         if reason not in seen:
             seen.add(reason)
             normalized.append(reason)
@@ -54,7 +58,7 @@ def _require_assessment_text(value: str) -> str:
 
 
 EligibilityExplanation = Annotated[
-    str, Field(min_length=1, max_length=160), AfterValidator(_require_assessment_text),
+    str, Field(min_length=1, max_length=MAX_ELIGIBILITY_EXPLANATION_LENGTH), AfterValidator(_require_assessment_text),
 ]
 
 
@@ -228,7 +232,7 @@ class ScoredSupportProgram(BaseModel):
     recommendation_reasons: list[str] = Field(
         alias="recommendationReasons",
         min_length=1,
-        max_length=3,
+        max_length=MAX_RECOMMENDATION_REASONS,
     )
 
     @field_validator("program_id", mode="before")
@@ -311,7 +315,7 @@ class SupportProgramAssessment(BaseModel):
     recommendation_reasons: list[str] = Field(
         alias="recommendationReasons",
         min_length=1,
-        max_length=3,
+        max_length=MAX_RECOMMENDATION_REASONS,
     )
 
     @field_validator("recommendation_reasons")
