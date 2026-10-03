@@ -240,7 +240,7 @@ export function PartnerRecruitmentDetailPage() {
                   {recruitment.program.organization}
                 </span>
               </div>
-              <p className="m-0 text-[0.82rem] leading-[1.55] text-sample-muted">
+              <p className="m-0 text-[0.82rem] leading-[1.55] text-ink-muted">
                 {recruitment.program.summary}
               </p>
               <div className={partnerRecruitmentStyles.rawBox}>

@@ -67,7 +67,7 @@ it('관심 공고를 내부 스크롤 없이 달력과 페이지 목록으로 �
   expect(screen.getByRole('navigation', { name: '관심 공고 페이지' })).toBeTruthy()
   const firstPage = screen.getByRole('button', { name: '1페이지' })
   expect(firstPage.classList.contains('text-white')).toBe(true)
-  expect(firstPage.classList.contains('text-sample-muted')).toBe(false)
+  expect(firstPage.classList.contains('text-ink-muted')).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: '2페이지' }))
   expect(screen.getByRole('button', { name: '2페이지' }).getAttribute('aria-current')).toBe('page')
   fireEvent.click(screen.getByRole('tab', { name: '달력' }))

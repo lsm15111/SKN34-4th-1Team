@@ -474,7 +474,7 @@ Repository → UseCase → Hook → Redux 결과 메시지 → `ProgramResults`�
 제공 횟수는 표시하지 않습니다. 상단 메뉴와 작업 사이드바에서 요금제에 진입할 수 있으며,
 페이지 조회와 FAQ 열기에는 API 요청이 발생하지 않습니다.
 
-모든 화면은 `src/index.css`의 흰색·중립 회색 바탕과 녹색 포인트 색상 변수를 공유합니다.
+모든 화면은 shared 디자인 토큰으로 만든 `src/design-tokens.css`의 흰색·중립 회색 바탕과 녹색 포인트 색상 변수를 공유합니다.
 상태관리 비교 예제는 일반 UI의 상단 메뉴에 노출하지 않습니다. 학습용 코드와 Hook·Redux 전환은
 그대로 유지하며 `/examples/sample-item/hook`, `/examples/sample-item/redux` 주소로 직접 접속할 수 있습니다.
 
@@ -732,7 +732,10 @@ ViewModel은 서버의 `detail` 대신 고정된 한국어 문구를 표시합�
 상세·원문 질문도 요청 완료·화면 이탈 때 타이머를 정리하고, 취소된 요청의 늦은 응답은 무시합니다.
 원문 질문 70초 역시 화면 고착 방지를 위한 상한이며 서버의 모델 실행 중단이나 비용 취소를 보장하지 않습니다.
 
-스타일은 `src/index.css`의 Tailwind `@theme` 토큰과 View 옆 `*.styles.ts`를 사용합니다.
+스타일은 Tailwind `@theme` 토큰과 View 옆 `*.styles.ts`를 사용합니다. 색 토큰(`brand-primary`, `ink-muted` 등)은
+`frontend/packages/shared/src/design/tokens.ts`가 원본이고, `src/design-tokens.css`는 `pnpm --filter govbiz-web tokens`로 만드는
+생성 파일입니다(테스트가 최신인지 확인). 화면 코드에는 16진수 색 대신 이 의미 이름을 씁니다. 그 밖의 `@theme` 값(그림자·폭·애니메이션)은
+`src/index.css`에 있습니다. 화면·문구 기준은 [화면·문구 통일 기준](../../docs/ui-guidelines.md)을 따릅니다.
 계층·DI의 상세 규칙은 [아키텍처 문서](../../docs/architecture.md#frontend와-내부-계약), 예제 API는
 [SampleItem 계약](../../docs/sample-item-contract.md)을 참고하세요.
 

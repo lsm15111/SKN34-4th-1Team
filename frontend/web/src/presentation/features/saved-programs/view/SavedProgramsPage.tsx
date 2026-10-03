@@ -183,7 +183,7 @@ export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase, 
                 <button type="button" className={s.arrow} aria-label="다음 달" title="다음 달" disabled={!vm.canNextMonth} onClick={() => vm.moveMonth(1)}><Arrow direction="right" /></button>
               </div>
               <button type="button" className={s.smallButton} onClick={vm.goToToday}>오늘</button>
-              <span className={s.note} role="status">표시 공고 <strong className="text-app-ink">{vm.programsInMonth}건</strong> / 전체 {vm.allProgramsInMonth}건</span>
+              <span className={s.note} role="status">표시 공고 <strong className="text-ink">{vm.programsInMonth}건</strong> / 전체 {vm.allProgramsInMonth}건</span>
             </div>
             <div className={s.legend} aria-label="일정 범례">
               <span className={s.legendItem}><span className={`${s.legendSwatch} bg-brand-soft border border-brand-line`} aria-hidden="true" />접수 시작</span>
@@ -196,11 +196,11 @@ export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase, 
           <div className={s.calendarFrame}>
               <table className={s.calendarTable} aria-label={`${monthLabel} 접수 일정`}>
                 <thead><tr>{['일', '월', '화', '수', '목', '금', '토'].map((day, index) =>
-                  <th key={day} scope="col" className={`${s.weekday} ${index === 0 ? 'text-danger' : index === 6 ? 'text-info' : 'text-sample-muted'}`}>{day}</th>,
+                  <th key={day} scope="col" className={`${s.weekday} ${index === 0 ? 'text-danger' : index === 6 ? 'text-info' : 'text-ink-muted'}`}>{day}</th>,
                 )}</tr></thead>
                 <tbody>{vm.weeks.map(week => <tr key={week[0]!.key}>{week.map((day, index) =>
                   <td key={day.key} className={`${s.cell} ${!day.inMonth ? 'bg-[#fafbfc]' : 'bg-white'}`}>
-                    <time dateTime={day.key} aria-current={day.isToday ? 'date' : undefined} className={`${s.date} ${day.isToday ? 'bg-brand-primary font-bold text-white' : !day.inMonth ? 'text-[#9ca3af]' : index === 0 ? 'text-danger' : index === 6 ? 'text-info' : 'text-sample-muted'}`}>{day.day}</time>
+                    <time dateTime={day.key} aria-current={day.isToday ? 'date' : undefined} className={`${s.date} ${day.isToday ? 'bg-brand-primary font-bold text-white' : !day.inMonth ? 'text-[#9ca3af]' : index === 0 ? 'text-danger' : index === 6 ? 'text-info' : 'text-ink-muted'}`}>{day.day}</time>
                     <CalendarEvents date={day.key} today={vm.today} events={day.events} />
                   </td>,
                 )}</tr>)}</tbody>
@@ -494,10 +494,10 @@ function CalendarEventRow({ event, date, today, expanded = false }: { event: Cal
   return <li className={expanded ? s.dialogEvent : `${s.event} ${tone}`} title={event.program.title}>
     <span className={expanded ? `${s.dday} ${tone}` : s.eventBadge}>{label}</span>
     <span className="min-w-0 flex-1">
-      {detailPath ? <Link className={expanded ? 'block font-semibold text-app-ink hover:text-brand-primary' : s.eventTitle}
+      {detailPath ? <Link className={expanded ? 'block font-semibold text-ink hover:text-brand-primary' : s.eventTitle}
         to={detailPath} state={{ searchReturnTo: savedProgramsPath('calendar') }}>{event.program.title}</Link>
-        : <span className={expanded ? 'block font-semibold text-app-ink' : s.eventTitle}>{event.program.title}</span>}
-      {expanded ? <span className="mt-1 block text-xs text-sample-muted">{event.program.organization} · {event.program.region} · {event.program.category}</span> : null}
+        : <span className={expanded ? 'block font-semibold text-ink' : s.eventTitle}>{event.program.title}</span>}
+      {expanded ? <span className="mt-1 block text-xs text-ink-muted">{event.program.organization} · {event.program.region} · {event.program.category}</span> : null}
     </span>
   </li>
 }
@@ -555,7 +555,7 @@ function SavedProgramList({ programs, page, totalPages, onPageChange, daysUntilD
             </article>
           </td>
           <td className={`${s.td} ${s.rowDeadline}`}>
-            {program.endDate === null ? <span className="text-sample-muted">기간 없음</span> : <span className="inline-flex items-center gap-1.5"><DeadlineBadge days={days} />{days === null ? <span>{formatShortDate(program.endDate)}</span> : <span className="text-[0.72rem]">{formatShortDate(program.endDate)}</span>}</span>}
+            {program.endDate === null ? <span className="text-ink-muted">기간 없음</span> : <span className="inline-flex items-center gap-1.5"><DeadlineBadge days={days} />{days === null ? <span>{formatShortDate(program.endDate)}</span> : <span className="text-[0.72rem]">{formatShortDate(program.endDate)}</span>}</span>}
           </td>
           <td className={s.td}><StageBadgeButton program={program} item={preparationFor(program)} onOpen={onOpenStage} /></td>
           <td className={`${s.td} ${s.rowDate}`}>{program.savedAt ? `${formatShortDate(program.savedAt)} 담음` : '—'}</td>
