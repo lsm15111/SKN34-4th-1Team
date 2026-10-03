@@ -255,6 +255,8 @@ describe('review screens and execution safety', () => {
       expect(screen.getByDisplayValue(reviewFixture.title)).toBeTruthy()
       expect(screen.getByRole('heading', { level: 1, name: '새 검토' })).toBeTruthy()
     }
+    // 모든 폭에서 아래에 붙는 단계 바는 도우미 런처를 그 위로 올립니다.
+    expect(document.querySelector('[data-assistant-lift="always"]')?.textContent).toContain('다음')
     const posts = fetch.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(posts).toHaveLength(1)
     expect(posts[0][0]).toMatch(/\/api\/v1\/combination-reviews$/)

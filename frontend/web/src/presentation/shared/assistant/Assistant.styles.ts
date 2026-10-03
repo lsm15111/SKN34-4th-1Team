@@ -7,13 +7,13 @@ function classes(...groups: string[]) {
  * 알약 빠른 답변, 카드 + 전폭 링크 버튼)를 따르고 색은 전부 기존 토큰만 씁니다.
  */
 export const assistantStyles = {
-  // 런처: 우측 하단 56px 원. 채팅 화면에서는 입력창을 가리지 않게 위로 올립니다.
-  launcherWrap: 'fixed right-6 z-[30] flex items-center gap-2.5 max-[639px]:right-4',
-  launcherWrapDefault: 'bottom-6',
-  launcherWrapLifted: 'bottom-[92px]',
-  // 답변 입력 화면: 600px 미만에서만 아래 이동 바(약 72px) 위로 올립니다. 그 화면이 `data-covers-assistant`를 단
-  // 요소(항목 목록 시트 · 문서 메뉴)를 그리는 동안에는 런처가 그 위에 떠 있지 않도록 숨깁니다. PC는 기본 자리 그대로입니다.
-  launcherWrapAnswerEditor: 'bottom-6 max-[599px]:bottom-[92px] max-[599px]:[body:has([data-covers-assistant])_&]:hidden',
+  // 런처: 우측 하단 56px 원. 아래 고정 바가 `data-assistant-lift`를 달면 index.css가 --assistant-lift를 채워 그 바 위로 올립니다.
+  // 화면이 `data-covers-assistant`를 단 요소(옆 패널·아래 시트·펼친 동작 바·메뉴)를 그리는 동안에는 그 위에 떠 있지 않도록 숨깁니다.
+  // 값이 always면 모든 폭, 그 밖(narrow)은 600px 미만에서만 숨깁니다(assistantPlacement.ts).
+  launcherWrap: classes(
+    'fixed right-6 bottom-[calc(1.5rem+var(--assistant-lift,0px))] z-[30] flex items-center gap-2.5 max-[639px]:right-4',
+    '[body:has([data-covers-assistant=always])_&]:hidden max-[599px]:[body:has([data-covers-assistant])_&]:hidden',
+  ),
   launcher: classes(
     'relative flex size-14 cursor-pointer items-center justify-center rounded-full border-0 bg-brand-primary text-white',
     'shadow-[0_8px_22px_-8px_rgb(8_127_70_/_60%)] hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
@@ -30,15 +30,13 @@ export const assistantStyles = {
   ),
 
   // 패널: 데스크톱 380×min(600, 화면 높이 - 아래 여백 - 위 여백 20px) 비모달 팝오버, 모바일 전체 화면.
-  // 높이는 아래 여백(bottom)과 함께 정해야 창을 줄여도 위쪽이 화면 밖으로 잘리지 않습니다.
+  // 높이는 아래 여백(bottom)과 함께 정해야 창을 줄여도 위쪽이 화면 밖으로 잘리지 않습니다. 런처를 올린 만큼(--assistant-lift) 함께 올립니다.
   panel: classes(
-    'fixed right-6 z-[31] flex w-[380px] flex-col overflow-hidden rounded-2xl border border-line bg-white',
+    'fixed right-6 bottom-[calc(5.75rem+var(--assistant-lift,0px))] z-[31] flex h-[min(600px,calc(100dvh-7rem-var(--assistant-lift,0px)))] w-[380px]',
+    'flex-col overflow-hidden rounded-2xl border border-line bg-white',
     'shadow-[0_2px_4px_rgb(20_24_22_/_6%),0_20px_44px_-20px_rgb(20_24_22_/_30%)]',
     'max-[639px]:inset-0 max-[639px]:h-auto max-[639px]:w-auto max-[639px]:rounded-none max-[639px]:border-0',
   ),
-  panelDefault: 'bottom-[92px] h-[min(600px,calc(100dvh-112px))]',
-  // 채팅 화면에서는 입력창 위로 올리므로(bottom 160px) 그만큼 높이도 줄입니다.
-  panelLifted: 'bottom-[160px] h-[min(600px,calc(100dvh-180px))]',
   header: 'flex shrink-0 items-center gap-2.5 bg-brand-primary px-3.5 py-3 text-white',
   headerBack: 'hidden max-[639px]:flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-white text-lg',
   avatar: 'flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-[15px] font-bold text-brand-primary',

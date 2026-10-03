@@ -66,7 +66,7 @@ export function AssistantPanel({ vm, launcherRef }: { vm: AssistantViewModel; la
 
   return (
     <section
-      className={`${styles.panel} ${vm.isLifted ? styles.panelLifted : styles.panelDefault}`}
+      className={styles.panel}
       role="dialog"
       aria-modal="false"
       aria-label={assistantMessages.name}

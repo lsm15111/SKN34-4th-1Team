@@ -6,6 +6,7 @@ import { applicationServiceFieldLabels, type ApplicationPreparationSummary, type
 import type { SupportProgramStatus } from '../../../../domain/entities/SupportProgram'
 import { regionNames } from '../../../../domain/entities/Region'
 import { supportProgramCategories } from '../../../../domain/entities/SupportProgramCategory'
+import { assistantCover } from '../../../shared/assistant/assistantPlacement'
 import { appPaths, readSavedProgramsViewMode, savedProgramsPath, supportProgramDetailPath, type SavedProgramsViewMode } from '../../../shared/routes/appPaths'
 import { EmptyState } from '../../../shared/workspace/EmptyState'
 import { ErrorState } from '../../../shared/workspace/ErrorState'
@@ -619,7 +620,7 @@ function ProgressStagePanel({ program, item, changing, error, onClose, onSave }:
     : null
   return <>
     <button type="button" className={s.panelScrim} aria-label="닫기" onClick={onClose} />
-    <section ref={panelRef} className={s.panel} role="dialog" aria-label="진행 단계 바꾸기" tabIndex={-1}
+    <section ref={panelRef} className={s.panel} role="dialog" aria-label="진행 단계 바꾸기" tabIndex={-1} {...assistantCover.always}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }}>
       <header className={s.panelHeader}>
         <span className={s.panelGrab} aria-hidden="true" />

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { isWritableApplicationAnswer } from '@govbiz/shared/domain/entities/ApplicationDocumentGeneration'
 import { daysUntil, formatDday, programStatusLabels } from '@govbiz/shared/domain/labels'
 import { useAppSelector } from '../../../../app/hooks'
+import { assistantCover, assistantLift } from '../../../shared/assistant/assistantPlacement'
 import {
   applicationServiceFieldLabels,
   type ApplicationFormField,
@@ -387,8 +388,8 @@ function AnswerEditor({ vm }: { vm: EditorViewModel }) {
     requiredMissing={requiredMissing} reviewing={reviewing} onReview={() => move('review')} />
   const hasQuestions = questions.length > 0
   // [← 이전] · 자동 저장 상태 · [다음 →](검토에서는 [초안 만들기]). PC는 카드 바닥 줄, 600px 미만은 아래 고정 바입니다.
-  // 600px 미만에서는 자동 저장 상태를 위쪽 진행 줄에 두므로 바에는 버튼만 둡니다.
-  const moveButtons = hasQuestions ? <div className={narrow ? e.bar : e.cardFooter}>
+  // 600px 미만에서는 자동 저장 상태를 위쪽 진행 줄에 두므로 바에는 버튼만 둡니다. 아래 고정 바일 때는 도우미 런처를 그 위로 올립니다.
+  const moveButtons = hasQuestions ? <div className={narrow ? e.bar : e.cardFooter} {...(narrow ? assistantLift.narrow : {})}>
     <button type="button" className={e.prevButton} disabled={!reviewing && index === 0} aria-keyshortcuts="Control+Shift+Enter" onClick={goPrevious}>← 이전</button>
     {!narrow && <p className={e.footerStatus} role="status" aria-live="polite">{saveStatus}</p>}
     {reviewing
@@ -453,8 +454,8 @@ function AnswerEditor({ vm }: { vm: EditorViewModel }) {
         {vm.documentCount > 0 && <Link className={`${workspacePageStyles.secondaryButton} max-[599px]:hidden`} to={documentsTo}><EditorIcon name="doc" size={16} />문서 보기</Link>}
         <div ref={menuRef} className="relative">
           <button ref={menu.reference} type="button" className={e.iconButton} aria-label="문서 메뉴" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><EditorIcon name="more" /></button>
-          {/* data-covers-assistant: 600px 미만에서 열려 있는 동안 도우미 런처를 숨깁니다(Assistant.styles 참고). */}
-          {menuOpen && <div ref={menu.floating} style={menu.floatingStyles} className={e.menu} role="menu" aria-label="문서 메뉴" data-covers-assistant="true">
+          {/* assistantCover.narrow: 600px 미만에서 열려 있는 동안 도우미 런처를 숨깁니다(assistantPlacement 참고). */}
+          {menuOpen && <div ref={menu.floating} style={menu.floatingStyles} className={e.menu} role="menu" aria-label="문서 메뉴" {...assistantCover.narrow}>
             {vm.documentCount > 0 && <Link className={`${e.menuItem} min-[600px]:hidden`} role="menuitem" to={documentsTo} onClick={() => setMenuOpen(false)}>문서 보기</Link>}
             <a className={e.menuItem} role="menuitem" href={form.sourceUrl} target="_blank" rel="noreferrer" onClick={() => setMenuOpen(false)}>원문 보기 ↗</a>
             <Link className={e.menuItem} role="menuitem" to={reanalyzeTo} onClick={() => setMenuOpen(false)}>양식 다시 분석해 새로 시작</Link>
@@ -560,7 +561,7 @@ function AnswerEditor({ vm }: { vm: EditorViewModel }) {
     </main>
     {sheetOpen && <>
       <button type="button" className={e.sheetScrim} aria-label="항목 목록 닫기" tabIndex={-1} onClick={() => setSheetOpen(false)} />
-      <div ref={sheetRef} className={e.sheet} role="dialog" aria-modal="true" aria-label="항목 목록" tabIndex={-1} onKeyDown={onSheetKeyDown} data-covers-assistant="true">
+      <div ref={sheetRef} className={e.sheet} role="dialog" aria-modal="true" aria-label="항목 목록" tabIndex={-1} onKeyDown={onSheetKeyDown} {...assistantCover.narrow}>
         <span className={e.sheetGrab} aria-hidden="true" />
         <div className={e.sheetHeader}>
           <h2 className={e.sheetTitle}>항목 목록</h2>

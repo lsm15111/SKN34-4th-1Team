@@ -136,6 +136,21 @@
 }
 
 /*
+ * 도우미 런처·패널을 화면 아래 고정 바 위로 올리는 높이입니다(presentation/shared/assistant/assistantLift.ts).
+ * 바가 data-assistant-lift를 달고 그려져 있는 동안에만 값이 생깁니다. "always"는 모든 폭, "narrow"는 600px 미만에서만 올립니다.
+ * 5.5rem은 지금 가장 높은 바(공고 상세의 아래 동작 바, 약 93px)와 두 줄짜리 중복 검토 단계 바를 넘는 높이입니다.
+ */
+:root:has([data-assistant-lift='always']) {
+  --assistant-lift: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 599px) {
+  :root:has([data-assistant-lift='narrow']) {
+    --assistant-lift: calc(5.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+/*
  * 관심 공고함의 연도·월 select입니다. 브라우저가 select의 펼침 목록 꾸미기(appearance: base-select)를 지원하면
  * 기본 select 그대로 두고 목록만 여섯 줄(줄당 2.25rem)까지 보이게 하고 나머지는 안에서 스크롤합니다.
  * 지원하지 않는 브라우저에서는 평소의 기본 목록이 그대로 열립니다.

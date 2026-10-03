@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { programStatusLabels } from '@govbiz/shared/domain/labels'
 import { useAppDispatch, useAppSelector } from '../../../../app/hooks'
+import { assistantLift } from '../../../shared/assistant/assistantPlacement'
 import { selectCurrentAccount, signedOut } from '../../../shared/auth/state/authSlice'
 import { appPaths, combinationReviewRunResultPath, supportProgramDetailPath } from '../../../shared/routes/appPaths'
 import { reviewProgramKey, supportsAutomaticReview, type ReviewListItem, type RunSummary } from '../../../../domain/entities/CombinationReview'
@@ -394,7 +395,8 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
  * 왼쪽 [← 이전] · 가운데 저장 상태 안내 · 오른쪽 주 동작. 주 동작을 누를 수 없으면 그 이유를 버튼 앞에 적습니다.
  */
 function StepBar({ back, note, reason = null, reasonId, next }: { back?: ReactNode; note: string; reason?: string | null; reasonId?: string; next: ReactNode }) {
-  return <div className={s.stepBar}>
+  // 모든 폭에서 아래에 붙는 바라 도우미 런처를 그 위로 올립니다.
+  return <div className={s.stepBar} {...assistantLift.always}>
     {back}
     <span className={s.stepBarNote} role="status" aria-live="polite">{note}</span>
     <div className="ml-auto flex flex-wrap items-center justify-end gap-2">

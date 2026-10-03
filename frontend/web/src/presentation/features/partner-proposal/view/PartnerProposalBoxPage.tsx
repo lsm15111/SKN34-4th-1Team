@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 
 import { partnerProposalStatusTones, type PartnerProposal } from '../../../../domain/entities/PartnerProposal'
 import { toRegionName } from '../../../../domain/entities/Region'
+import { assistantCover } from '../../../shared/assistant/assistantPlacement'
 import { companyInitial } from '../../../shared/partner-recruitment/partnerRecruitmentLabels'
 import { workspaceChipClassName, workspacePageStyles, workspaceTagClassName } from '../../../shared/workspace/WorkspacePage.styles'
 import { WorkspaceModal } from '../../../shared/workspace/WorkspaceModal'
@@ -256,6 +257,7 @@ function ProposalPanel({ proposal, boxLabel, statusLabel, actions, recruitmentPa
       role="region"
       aria-label={`${boxLabel} 상세`}
       tabIndex={-1}
+      {...assistantCover.always}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }}
     >
       <header className={s.panelHeader}>

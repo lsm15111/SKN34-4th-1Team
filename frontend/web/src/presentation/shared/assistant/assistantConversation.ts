@@ -388,31 +388,13 @@ export function receivedProposalsAnswer(
   })
 }
 
-/** 로그인·회원가입처럼 도우미를 두지 않는 화면입니다. */
+/**
+ * 도우미를 두지 않는 화면입니다. 로그인·회원가입처럼 필요 없는 화면과, 아래 입력창을 가리는 채팅 화면(`/`, `/app/chat`)입니다
+ * (docs/ui-guidelines.md 5절 "도우미 버튼"). 아래 고정 바가 있는 다른 화면은 숨기지 않고 바 위로 올립니다(assistantLift).
+ */
 export function isAssistantHiddenOn(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, '') || publicPaths.landing
-  return path === appPaths.welcome || path === appPaths.welcomeCompany || [publicPaths.login, publicPaths.signup, publicPaths.oauthComplete, publicPaths.reportEmail, '/forgot-password', '/reset-password'].includes(path)
-    || path.startsWith('/examples/')
-}
-
-/** 채팅 입력창이 아래에 있는 화면에서는 런처를 위로 올립니다. */
-export function isComposerScreen(pathname: string): boolean {
-  const path = pathname.replace(/\/+$/, '') || publicPaths.landing
   return path === publicPaths.landing || path === appPaths.chat
-}
-
-/** 중복 검토 입력 화면(`/app/combination-reviews/new` · `/:id`)입니다. 아래 고정 단계 바의 주 버튼을 가리지 않게 런처를 그 위로 올립니다. */
-export function isReviewStepScreen(pathname: string): boolean {
-  const path = pathname.replace(/\/+$/, '')
-  const prefix = `${appPaths.combinationReviews}/`
-  if (!path.startsWith(prefix)) return false
-  const rest = path.slice(prefix.length)
-  return rest === 'new' || /^\d+$/.test(rest)
-}
-
-/** 답변 입력 화면(`/app/application-preparations/:id`)입니다. 600px 미만에서 아래 고정 바가 있어 런처를 그 위로 올립니다. */
-export function isAnswerEditorScreen(pathname: string): boolean {
-  const path = pathname.replace(/\/+$/, '')
-  const prefix = `${appPaths.applicationPreparations}/`
-  return path.startsWith(prefix) && /^\d+$/.test(path.slice(prefix.length))
+    || path === appPaths.welcome || path === appPaths.welcomeCompany || [publicPaths.login, publicPaths.signup, publicPaths.oauthComplete, publicPaths.reportEmail, '/forgot-password', '/reset-password'].includes(path)
+    || path.startsWith('/examples/')
 }
