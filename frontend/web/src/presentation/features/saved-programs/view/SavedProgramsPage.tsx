@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
+import { applicationProgressStageLabels, programStatusLabels } from '@govbiz/shared/domain/labels'
 
 import { applicationServiceFieldLabels, type ApplicationPreparationSummary, type ApplicationProgressStage } from '../../../../domain/entities/ApplicationPreparation'
 import type { SupportProgramStatus } from '../../../../domain/entities/SupportProgram'
@@ -242,16 +243,18 @@ function DeadlineBadge({ days }: { days: number | null }) {
   return <span className={`${s.dday} ${tone}`}>{days === 0 ? '오늘 마감' : `D-${days}`}</span>
 }
 
-function StatusBadge({ status }: { status: SupportProgramStatus }) {
-  const label = programStatus(status)
-  const tone = { '접수 중': 'bg-brand-soft text-brand-primary', '접수 예정': 'bg-info-soft text-info', '접수 마감': 'bg-surface-muted text-ink-muted', '상태 미확인': 'bg-warning-soft text-warning' }[label]
-  return <span className={`${s.status} ${tone}`}><span className={s.statusDot} aria-hidden="true" />{label}</span>
+const statusTones: Record<SupportProgramStatus, string> = {
+  OPEN: 'bg-brand-soft text-brand-primary', UPCOMING: 'bg-info-soft text-info', CLOSED: 'bg-surface-muted text-ink-muted', UNKNOWN: 'bg-warning-soft text-warning',
 }
 
-/** 5열 보드입니다. 7단계 데이터는 그대로 두고 심사 중(서류 · 발표) · 결과(선정 · 탈락)로 묶어 카드 배지로 세부 단계를 보여 줍니다. */
+function StatusBadge({ status }: { status: SupportProgramStatus }) {
+  return <span className={`${s.status} ${statusTones[status]}`}><span className={s.statusDot} aria-hidden="true" />{programStatusLabels[status]}</span>
+}
+
+/** 5열 보드입니다. 7단계 데이터는 그대로 두고 심사 중(서류 · 발표) · 결과(선정 · 미선정)로 묶어 카드 배지로 세부 단계를 보여 줍니다. */
 const pipelineColumns: { key: string; label: string; stages: ApplicationProgressStage[] }[] = [
-  { key: 'PREPARING', label: '준비 중', stages: ['PREPARING'] },
-  { key: 'APPLIED', label: '지원 완료', stages: ['APPLIED'] },
+  { key: 'PREPARING', label: applicationProgressStageLabels.PREPARING, stages: ['PREPARING'] },
+  { key: 'APPLIED', label: applicationProgressStageLabels.APPLIED, stages: ['APPLIED'] },
   { key: 'REVIEW', label: '심사 중', stages: ['DOCUMENT_REVIEW', 'PRESENTATION_REVIEW'] },
   { key: 'RESULT', label: '결과', stages: ['SELECTED', 'REJECTED'] },
 ]
@@ -406,8 +409,6 @@ function InterestPipelineCard({ program, today }: { program: CalendarProgram; to
   </article>
 }
 
-const stageLabels = Object.fromEntries(applicationPipelineStages.map(stage => [stage.key, stage.label])) as Record<ApplicationProgressStage, string>
-
 function PipelineCard({ item, showStageBadge, changing, onOpenStage }: {
   item: ApplicationPreparationSummary
   showStageBadge: boolean
@@ -416,7 +417,7 @@ function PipelineCard({ item, showStageBadge, changing, onOpenStage }: {
 }) {
   return <article className={s.pipelineCard}>
     <div className={s.pipelineCardTop}>
-      {showStageBadge ? <span className={workspaceTagClassName(item.progressStage === 'SELECTED' ? 'ok' : item.progressStage === 'REJECTED' ? 'muted' : 'info')}>{stageLabels[item.progressStage]}</span> : null}
+      {showStageBadge ? <span className={workspaceTagClassName(item.progressStage === 'SELECTED' ? 'ok' : item.progressStage === 'REJECTED' ? 'muted' : 'info')}>{applicationProgressStageLabels[item.progressStage]}</span> : null}
       <span className={workspaceTagClassName('muted')}>{applicationServiceFieldLabels[item.serviceField]}</span>
     </div>
     <h3 className={s.pipelineCardTitle} title={item.programTitle}>
@@ -597,7 +598,7 @@ function StageBadgeButton({ program, item, onOpen }: {
   item: ApplicationPreparationSummary | null
   onOpen: (program: CalendarProgram, item: ApplicationPreparationSummary | null) => void
 }) {
-  const label = item ? stageLabels[item.progressStage] : '관심'
+  const label = item ? applicationProgressStageLabels[item.progressStage] : '관심'
   const tone = !item ? 'bg-surface-muted text-ink-muted' : item.progressStage === 'SELECTED' ? 'bg-brand-soft text-brand-primary' : item.progressStage === 'REJECTED' ? 'bg-surface-muted text-ink-muted' : 'bg-info-soft text-info'
   return <button type="button" className={`${s.stageButton} ${tone}`} aria-label={`${program.title} 진행 단계: ${label}`} onClick={() => onOpen(program, item)}>
     {label}
@@ -648,7 +649,7 @@ function ProgressStagePanel({ program, item, changing, error, onClose, onSave }:
           </label>)}
         </fieldset> : <div className={s.stageNote} role="note">
           <span className="font-bold">아직 신청 준비를 시작하지 않은 공고예요</span>
-          <span>신청 문서를 만들면 준비 중 · 지원 완료 · 심사 중 · 결과 단계를 이 패널에서 관리할 수 있어요.</span>
+          <span>신청 문서를 만들면 {applicationProgressStageLabels.PREPARING} · {applicationProgressStageLabels.APPLIED} · 심사 중 · 결과 단계를 이 패널에서 관리할 수 있어요.</span>
         </div>}
       </div>
       <footer className={s.panelFooter}>
@@ -696,13 +697,4 @@ function pageItems<Item>(items: readonly Item[], page: number, pageSize: number)
 function getDetailPath(program: CalendarProgram): string | null {
   if (!program.sourceCode || !program.sourceProgramId) return null
   return supportProgramDetailPath({ sourceCode: program.sourceCode, sourceProgramId: program.sourceProgramId }, true)
-}
-
-type ProgramStatus = '접수 예정' | '접수 중' | '접수 마감' | '상태 미확인'
-
-function programStatus(status: SupportProgramStatus): ProgramStatus {
-  if (status === 'OPEN') return '접수 중'
-  if (status === 'UPCOMING') return '접수 예정'
-  if (status === 'CLOSED') return '접수 마감'
-  return '상태 미확인'
 }

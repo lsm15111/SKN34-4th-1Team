@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { Link, useLocation } from 'react-router'
+import { programStatusLabels } from '@govbiz/shared/domain/labels'
 
 import type { SupportProgram, SupportProgramEligibilityAxis } from '../../../../domain/entities/SupportProgram'
 import { loginPathFor, signupPathFor } from '../../../shared/auth/returnPath'
@@ -111,7 +112,7 @@ function ProgramCard({ program, interests }: { program: SupportProgram; interest
           ) : null}
         </div>
         <span className={chatPageStyles.programDeadline}>
-          {{ OPEN: '접수 중', UPCOMING: '접수 예정', CLOSED: '접수 마감', UNKNOWN: '상태 확인 필요' }[program.status]} ·{' '}
+          {programStatusLabels[program.status]} ·{' '}
           {formatApplicationDeadline(program)}
         </span>
       </div>

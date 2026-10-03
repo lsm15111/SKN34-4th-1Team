@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
+import { programStatusLabels } from '@govbiz/shared/domain/labels'
 import { useAppDispatch, useAppSelector } from '../../../../app/hooks'
 import { selectCurrentAccount, signedOut } from '../../../shared/auth/state/authSlice'
 import { appPaths, combinationReviewRunResultPath, supportProgramDetailPath } from '../../../shared/routes/appPaths'
@@ -307,7 +308,7 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
           <div className={s.card}><label className="font-semibold">검토 제목<input className={s.input} value={vm.draft.title} onChange={(e) => vm.setDraft({ ...vm.draft, title: e.target.value })} required placeholder="예: 창업 지원사업 참여 검토" /></label><p className={s.muted}>제목은 200자 이내입니다. 참여 상태는 다음 단계에서 입력합니다.</p></div>
           <section className={s.card} aria-label="공고 선택">
             <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold">비교할 공고 선택</h2><strong className="rounded-full bg-brand-soft px-3 py-1 text-sm text-brand-primary">{vm.draft.programs.length}/2 선택</strong></div>
-            <p className={s.muted}>관심 공고함이나 전체 공고 검색에서 서로 비교할 공고를 정확히 2개 선택하세요. 접수 종료 공고도 참여 이력 검토에 사용할 수 있습니다.</p>
+            <p className={s.muted}>관심 공고함이나 전체 공고 검색에서 서로 비교할 공고를 정확히 2개 선택하세요. 접수 마감 공고도 참여 이력 검토에 사용할 수 있습니다.</p>
             <div className="mt-3 flex min-h-12 flex-col items-stretch gap-2 rounded-xl bg-slate-50 px-3 py-2" aria-label="현재 선택한 공고">
               {vm.draft.programs.length === 0 && <span className="text-sm text-slate-500">선택한 공고가 없습니다.</span>}
               {vm.draft.programs.map((program, index) => {
@@ -326,7 +327,7 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
             <ul className="mt-4 divide-y divide-slate-200">{vm.catalog?.programs.map((program) => {
               const identity = { sourceCode: program.sourceCode, sourceProgramId: program.id, subProgramId: null }
               const selected = vm.draft.programs.some((p) => reviewProgramKey(p) === reviewProgramKey(identity))
-              return <li className={`my-2 rounded-xl border px-3 py-3 transition-colors ${selected ? 'border-brand-primary bg-brand-soft ring-1 ring-brand-primary/20' : 'border-transparent'}`} key={reviewProgramKey(identity)}><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0 flex-1"><strong>{program.title}</strong><p className={s.muted}>{program.organization} · {({ OPEN: '접수 중', CLOSED: '접수 종료', UPCOMING: '접수 예정', UNKNOWN: '접수 상태 미확인' })[program.status]}</p><p className={s.muted}>{program.applicationPeriod}</p></div><button type="button" className={selected ? s.primary : s.button} aria-pressed={selected} disabled={!selected && vm.draft.programs.length >= 2} onClick={() => vm.toggle(program)}>{selected ? '선택 해제' : '선택'}</button></div>
+              return <li className={`my-2 rounded-xl border px-3 py-3 transition-colors ${selected ? 'border-brand-primary bg-brand-soft ring-1 ring-brand-primary/20' : 'border-transparent'}`} key={reviewProgramKey(identity)}><div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0 flex-1"><strong>{program.title}</strong><p className={s.muted}>{program.organization} · {programStatusLabels[program.status]}</p><p className={s.muted}>{program.applicationPeriod}</p></div><button type="button" className={selected ? s.primary : s.button} aria-pressed={selected} disabled={!selected && vm.draft.programs.length >= 2} onClick={() => vm.toggle(program)}>{selected ? '선택 해제' : '선택'}</button></div>
                 {!supportsAutomaticReview(identity) && <p className="text-sm text-amber-800">현재 자동 분석을 지원하지 않는 공고입니다.</p>}
                 <Link className="text-sm text-brand-primary underline" to={supportProgramDetailPath({ sourceCode: identity.sourceCode, sourceProgramId: identity.sourceProgramId }, true)} target="_blank">공고 상세 확인</Link>
               </li>

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
+import { programStatusLabels } from '@govbiz/shared/domain/labels'
 
 import type { SupportProgram } from '../../../domain/entities/SupportProgram'
 
@@ -50,7 +51,7 @@ export function SavedSupportProgramPickerDialog({
           const action = !supported
             ? (typeof unsupportedLabel === 'function' ? unsupportedLabel(program) : unsupportedLabel)
             : selected ? '선택 해제' : '선택'
-          return <li className={`rounded-xl border p-4 transition-colors ${selected ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200' : 'border-slate-200 bg-white'}`} key={key}><div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0 flex-1"><strong>{program.title}</strong><p className={muted}>{program.organization} · {({ OPEN: '접수 중', CLOSED: '접수 종료', UPCOMING: '접수 예정', UNKNOWN: '접수 상태 미확인' })[program.status]}</p><p className={muted}>{program.applicationPeriod}</p></div><button type="button" className={selected ? primary : button} aria-label={`${program.title} 관심 공고 ${action}`} aria-pressed={selected} disabled={!supported || (!selected && selectedProgramKeys.length >= selectionLimit)} onClick={() => onToggle(program)}>{action}</button></div></li>
+          return <li className={`rounded-xl border p-4 transition-colors ${selected ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200' : 'border-slate-200 bg-white'}`} key={key}><div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0 flex-1"><strong>{program.title}</strong><p className={muted}>{program.organization} · {programStatusLabels[program.status]}</p><p className={muted}>{program.applicationPeriod}</p></div><button type="button" className={selected ? primary : button} aria-label={`${program.title} 관심 공고 ${action}`} aria-pressed={selected} disabled={!supported || (!selected && selectedProgramKeys.length >= selectionLimit)} onClick={() => onToggle(program)}>{action}</button></div></li>
         })}</ul>}
       </div>
       <footer className={`flex items-center gap-3 border-t border-slate-200 px-5 py-4 ${selectionLimit === 1 ? 'justify-end' : 'justify-between'}`}>

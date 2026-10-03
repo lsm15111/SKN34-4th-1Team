@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { sendHourLabel } from '@govbiz/shared/domain/entities/DailyReport'
+import { programStatusLabels } from '@govbiz/shared/domain/labels'
 import type { DailyReport, DailyReportItem } from '../../../../domain/entities/DailyReport'
 import { appPaths, supportProgramDetailPath } from '../../../shared/routes/appPaths'
 import { supportProgramSaveMessages, supportProgramSaveNoticeDurationMs, useSupportProgramSaveViewModel } from '../../../shared/support-program/useSupportProgramSaveViewModel'
@@ -174,9 +175,9 @@ function ReportContent({ report, today }: { report: DailyReport; today: string }
 }
 
 const periodStatus = {
-  OPEN: ['접수 중', 'bg-brand-soft text-brand-primary'],
-  UPCOMING: ['접수 예정', 'bg-info-soft text-info'],
-  CLOSED: ['접수 마감', 'bg-surface-muted text-ink-muted'],
+  OPEN: [programStatusLabels.OPEN, 'bg-brand-soft text-brand-primary'],
+  UPCOMING: [programStatusLabels.UPCOMING, 'bg-info-soft text-info'],
+  CLOSED: [programStatusLabels.CLOSED, 'bg-surface-muted text-ink-muted'],
 } as const
 
 // 자격 배지는 검색 결과와 같은 한 벌입니다. 대상·지역 판정 근거는 "매칭 근거" 줄 맨 앞에 둡니다.

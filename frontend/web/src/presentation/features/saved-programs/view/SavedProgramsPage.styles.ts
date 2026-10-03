@@ -132,7 +132,7 @@ export const savedCalendarStyles = {
   ),
   inactivePageButton: 'border-line bg-white text-ink-muted hover:border-brand-primary hover:text-brand-primary',
   activePageButton: 'border-brand-primary bg-brand-primary text-white',
-  // 진행 관리: 5열 보드(관심 · 준비 중 · 지원 완료 · 심사 중 · 결과). 열 배경은 한 가지, 설명 문장은 없습니다.
+  // 진행 관리: 5열 보드(관심 · 준비 중 · 제출 완료 · 심사 중 · 결과). 열 배경은 한 가지, 설명 문장은 없습니다.
   // 보드: PC 5열. 태블릿은 열 최소 220px로 가로 스크롤, 좁은 폭(760px 미만)은 한 열 86% 폭에 스냅해 옆 열이 살짝 보입니다.
   pipelineSection: 'flex min-w-0 flex-col gap-4',
   pipelineBoard: 'grid grid-cols-[repeat(5,minmax(220px,1fr))] items-stretch gap-3 overflow-x-auto pb-2 max-chat:flex max-chat:snap-x max-chat:snap-mandatory max-chat:gap-3 max-chat:[scrollbar-width:none]',

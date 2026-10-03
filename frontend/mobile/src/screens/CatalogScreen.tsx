@@ -8,6 +8,7 @@ import {
 } from '@govbiz/shared/domain/entities/SupportProgramCatalogFilterOptions'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
 import type { SupportProgram } from '@govbiz/shared/domain/entities/SupportProgram'
+import { programStatusLabels } from '@govbiz/shared/domain/labels'
 import { errorMessage, programClient } from '../api/client'
 import { ChoiceField } from '../components/ChoiceField'
 import { ProgramCard, type ProgramSelectionLabels } from '../components/ProgramCard'
@@ -67,8 +68,7 @@ export function CatalogScreen({ onOpenProgram, keyboardOffset = 0, selection, he
         <ChoiceField label="출처" value={draft.sourceCode} options={catalogSourceCodes.map((value) => ({ value, label: catalogSourceLabels[value] }))}
           onChange={(value) => change('sourceCode', value as SupportProgramCatalogFilters['sourceCode'])} />
         <ChoiceField label="접수 상태" value={draft.status} options={[
-          { value: 'ALL', label: '전체' }, { value: 'OPEN', label: '접수 중' }, { value: 'UPCOMING', label: '접수 예정' },
-          { value: 'CLOSED', label: '마감' }, { value: 'UNKNOWN', label: '상태 미확인' },
+          { value: 'ALL', label: '전체' }, ...Object.entries(programStatusLabels).map(([value, label]) => ({ value, label })),
         ]} onChange={(value) => change('status', value as SupportProgramCatalogFilters['status'])} />
         <ChoiceField label="정렬" value={draft.sort} options={[{ value: 'RECENT', label: '최신순' }, { value: 'DEADLINE', label: '마감일순' }]}
           onChange={(value) => change('sort', value as SupportProgramCatalogFilters['sort'])} />

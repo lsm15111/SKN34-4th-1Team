@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
+import { programStatusLabels } from '@govbiz/shared/domain/labels'
 
 import type { SupportProgram } from '../../../../domain/entities/SupportProgram'
 import { catalogSourceCodes, catalogSourceLabels, type SupportProgramCatalogFilters } from '../../../../domain/entities/SupportProgramCatalog'
@@ -12,7 +13,7 @@ import { useSupportProgramCatalogViewModel } from '../viewmodel/useSupportProgra
 
 const inputStyle = 'min-h-11 w-full min-w-0 rounded-xl border border-line bg-white px-3 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary'
 const buttonStyle = 'min-h-11 cursor-pointer rounded-xl px-5 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary disabled:cursor-not-allowed disabled:opacity-40'
-const statusLabels = { ALL: '전체 접수 상태', OPEN: '접수 중', UPCOMING: '접수 예정', CLOSED: '접수 마감', UNKNOWN: '상태 미확인' }
+const statusLabels: Record<SupportProgramCatalogFilters['status'], string> = { ALL: '전체 접수 상태', ...programStatusLabels }
 
 /** 자연어 추천과 구분되는 DB 목록 화면입니다. AI 자격 판정을 표시하지 않습니다. */
 export function SupportProgramCatalogPanel() {
@@ -123,7 +124,7 @@ function CatalogFilters({ filters, regions, categories, startupStages, applicant
         </label>
       </div>
       {needsPeriodNotice ? <p id="catalog-period-notice" className="m-0 rounded-xl bg-[#f7f8f9] px-3 py-2 text-xs leading-relaxed text-ink-muted">
-        접수 기간을 제공하지 않는 공고는 ‘상태 미확인’에 표시됩니다. ‘전체 접수 상태’ 또는 ‘상태 미확인’으로 검색해 주세요.
+        접수 기간을 제공하지 않는 공고는 ‘상태 확인 필요’에 표시됩니다. ‘전체 접수 상태’ 또는 ‘상태 확인 필요’로 검색해 주세요.
       </p> : null}
       {draft.sourceCode === 'KSTARTUP' ? <div className="min-w-0 rounded-xl bg-[#f7f8f9] px-3 py-2">
         <button type="button" aria-expanded={showStartupFilters} aria-controls="catalog-startup-filters"

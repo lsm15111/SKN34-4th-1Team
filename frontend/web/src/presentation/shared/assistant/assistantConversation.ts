@@ -1,3 +1,5 @@
+import { daysUntil, formatDday } from '@govbiz/shared/domain/labels'
+
 import type { AssistantAnswer, AssistantCard as AssistantAnswerCard } from '../../../domain/entities/AssistantAnswer'
 import type { PartnerProposal } from '../../../domain/entities/PartnerProposal'
 import type { SavedSupportProgram } from '../../../domain/entities/SavedSupportProgram'
@@ -74,7 +76,6 @@ export type AssistantSession = {
   contactUrl: string | null
 }
 
-const DAY_MS = 86_400_000
 const SOON_DAYS = 7
 
 let sequence = 0
@@ -299,24 +300,12 @@ export function loginBenefitsAnswer(returnTo: string): AssistantMessage {
   })
 }
 
-/** 서울 기준 오늘 0시입니다. */
-function startOfSeoulDay(now: Date): number {
-  const seoul = new Date(now.getTime() + 9 * 60 * 60 * 1000)
-  return Date.UTC(seoul.getUTCFullYear(), seoul.getUTCMonth(), seoul.getUTCDate()) - 9 * 60 * 60 * 1000
-}
-
-/** YYYY-MM-DD까지 남은 날수입니다. 지난 날짜는 음수입니다. */
-export function daysUntil(date: string, now: Date): number {
-  return Math.round((Date.parse(`${date}T00:00:00+09:00`) - startOfSeoulDay(now)) / DAY_MS)
-}
-
+/** 마감일 태그입니다. 글자는 shared D-day 문구(D-3 · D-day · 마감)이고, 색은 3일 이내 hot · 7일 이내 soon입니다. */
 function deadlineTag(applicationEndDate: string | null, now: Date): AssistantCardRow['tag'] {
-  if (applicationEndDate === null) return { label: '미정', tone: 'muted' }
   const remaining = daysUntil(applicationEndDate, now)
-  if (Number.isNaN(remaining)) return { label: '미정', tone: 'muted' }
-  if (remaining < 0) return { label: '마감', tone: 'muted' }
-  if (remaining === 0) return { label: 'D-day', tone: 'hot' }
-  return { label: `D-${remaining}`, tone: remaining <= 3 ? 'hot' : remaining <= SOON_DAYS ? 'soon' : 'ok' }
+  if (remaining === null) return { label: '미정', tone: 'muted' }
+  const tone = remaining < 0 ? 'muted' : remaining <= 3 ? 'hot' : remaining <= SOON_DAYS ? 'soon' : 'ok'
+  return { label: formatDday(remaining), tone }
 }
 
 function monthDay(date: string): string {
@@ -334,7 +323,7 @@ export function savedProgramsAnswer(saved: SavedSupportProgram[], now: Date): As
     })
   }
   const upcoming = saved
-    .filter((item) => item.program.applicationEndDate === null || daysUntil(item.program.applicationEndDate, now) >= 0)
+    .filter((item) => item.program.applicationEndDate === null || (daysUntil(item.program.applicationEndDate, now) ?? -1) >= 0)
     .sort((a, b) => {
       const left = a.program.applicationEndDate
       const right = b.program.applicationEndDate
@@ -343,7 +332,7 @@ export function savedProgramsAnswer(saved: SavedSupportProgram[], now: Date): As
       if (right === null) return -1
       return left < right ? -1 : 1
     })
-  const soon = upcoming.filter((item) => item.program.applicationEndDate !== null && daysUntil(item.program.applicationEndDate, now) <= SOON_DAYS).length
+  const soon = upcoming.filter((item) => (daysUntil(item.program.applicationEndDate, now) ?? Infinity) <= SOON_DAYS).length
   const rows: AssistantCardRow[] = upcoming.slice(0, 3).map((item) => ({
     tag: deadlineTag(item.program.applicationEndDate, now),
     title: item.program.title,

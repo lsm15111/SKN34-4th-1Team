@@ -1,3 +1,5 @@
+import { programStatusLabels } from '@govbiz/shared/domain/labels'
+
 import { regionNames } from '../../../domain/entities/Region'
 import { supportProgramCategories } from '../../../domain/entities/SupportProgramCategory'
 import { catalogSourceCodes, catalogSourceLabels, type SupportProgramCatalog, type SupportProgramCatalogFilters } from '../../../domain/entities/SupportProgramCatalog'
@@ -7,7 +9,7 @@ import { defaultProgramSelectionFilters } from './catalogSearchParams'
 const fieldStyle = 'grid min-w-0 gap-1 text-[0.7rem] font-bold text-ink-muted'
 const inputStyle = 'min-h-11 w-full min-w-0 rounded-[1rem] border border-line bg-white px-3 text-[0.85rem] font-semibold text-ink focus-visible:outline-2 focus-visible:outline-brand-primary disabled:opacity-50'
 const buttonStyle = 'min-h-11 cursor-pointer rounded-xl px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-brand-primary disabled:cursor-not-allowed disabled:opacity-50'
-const statusLabels = { ALL: '전체', OPEN: '접수 중', UPCOMING: '접수 예정', CLOSED: '접수 종료', UNKNOWN: '접수 상태 미확인' }
+const statusLabels: Record<SupportProgramCatalogFilters['status'], string> = { ALL: '전체', ...programStatusLabels }
 
 /** 작성 화면의 선택 상태와 분리하여 공고 검색 조건만 편집합니다. */
 export function SupportProgramSearchFilters({ filters, appliedFilters, catalog, disabled = false, loading = false, onChange, onSearch }: {

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import type { SavedSupportProgram } from '@govbiz/shared/domain/entities/SavedSupportProgram'
-import type { ApplicationProgressStage } from '@govbiz/shared/domain/entities/ApplicationPreparation'
+import { applicationProgressStages, type ApplicationProgressStage } from '@govbiz/shared/domain/entities/ApplicationPreparation'
+import { applicationProgressStageLabels, daysUntil, formatDday, programStatusLabels } from '@govbiz/shared/domain/labels'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
 import { ApiError, errorMessage } from '../api/client'
 import { listSavedPrograms, removeSavedProgram, saveProgram } from '../api/savedPrograms'
@@ -10,17 +11,15 @@ import { useAuth } from '../auth/session'
 import { Page, Button, Notice, Card, StatusBadge, colors, styles } from '../ui'
 import { AppIcon } from '../components/AppIcon'
 import { SegmentedControl } from '../components/SegmentedControl'
-import { partnerDeadlineDay } from '../components/PartnerDates'
-import { preparationDate, preparationKey, preparationStageLabels, PreparationRow, ReviewRow } from '../components/PreparationRows'
+import { preparationDate, preparationKey, PreparationRow, ReviewRow } from '../components/PreparationRows'
 import { usePreparationWorkspace } from '../components/usePreparationWorkspace'
-import { statusLabels } from '../components/ProgramCard'
 import { GuestFeatureNotice } from '../components/GuestFeatureNotice'
 
 type SavedState = { token: string | null; programs: SavedSupportProgram[]; loading: boolean; error: string | null }
 type Filter = 'all' | 'interest' | ApplicationProgressStage
 type Undo = { owner: string; item: SavedSupportProgram; index: number }
 const filters: { value: Filter; label: string }[] = [{ value: 'all', label: '전체' }, { value: 'interest', label: '관심' },
-  ...Object.entries(preparationStageLabels).map(([value, label]) => ({ value: value as ApplicationProgressStage, label }))]
+  ...applicationProgressStages.map((value) => ({ value, label: applicationProgressStageLabels[value] }))]
 
 export function SavedProgramsScreen({ onOpenProgram, onCountChange, onLogin }: {
   onOpenProgram(identity: SupportProgramIdentity): void; onCountChange?(count: number): void; onLogin(mode?: 'login' | 'signup'): void
@@ -117,12 +116,12 @@ export function SavedProgramsScreen({ onOpenProgram, onCountChange, onLogin }: {
           const prep = latestPreparation(identity)
           const docs = workspace.preparations?.filter((value) => preparationKey(value) === preparationKey(identity))
           const reviews = workspace.reviews?.filter(({ review }) => review.programs.some((value) => preparationKey(value) === preparationKey(identity)))
-          const days = program.applicationEndDate ? partnerDeadlineDay(program.applicationEndDate) : null
+          const days = daysUntil(program.applicationEndDate)
           return <Card key={preparationKey(identity)}>
             <View style={local.meta}><View style={[local.dot, { backgroundColor: program.status === 'OPEN' ? colors.primary : colors.muted }]} />
-              <Text style={[local.status, { color: program.status === 'OPEN' ? colors.primary : colors.muted }]}>{statusLabels[program.status]}</Text>
-              {days !== null && <StatusBadge label={days < 0 ? '마감' : days === 0 ? 'D-day' : `D-${days}`} tone={days >= 0 && days <= 3 ? 'warning' : 'neutral'} />}
-              <View style={{ flex: 1 }} /><StatusBadge label={workspace.preparations === null ? '단계 미확인' : prep ? preparationStageLabels[prep.progressStage] : '관심'} tone={prep ? 'info' : 'neutral'} /></View>
+              <Text style={[local.status, { color: program.status === 'OPEN' ? colors.primary : colors.muted }]}>{programStatusLabels[program.status]}</Text>
+              {days !== null && <StatusBadge label={formatDday(days)} tone={days >= 0 && days <= 3 ? 'warning' : 'neutral'} />}
+              <View style={{ flex: 1 }} /><StatusBadge label={workspace.preparations === null ? '단계 미확인' : prep ? applicationProgressStageLabels[prep.progressStage] : '관심'} tone={prep ? 'info' : 'neutral'} /></View>
             <Text style={styles.heading}>{program.title}</Text>
             <Text style={styles.muted}>{[program.organization, program.regions.join(' · '), program.applicationEndDate ? `${preparationDate(program.applicationEndDate)} 마감` : program.applicationPeriod].filter(Boolean).join(' · ')}</Text>
             {((docs?.length ?? 0) > 0 || (reviews?.length ?? 0) > 0) && <View style={local.summary}>

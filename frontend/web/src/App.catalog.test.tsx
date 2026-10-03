@@ -77,7 +77,7 @@ describe('지원사업 직접 필터 검색', () => {
     const params = new URL(fetchMock.mock.calls[2][0]).searchParams
     expect(params.get('sourceCode')).toBe(undated.sourceCode)
     expect(params.get('status')).toBe('UNKNOWN')
-    expect(within(screen.getByRole('region', { name: '필터 검색 결과' })).getByText('상태 미확인')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: '필터 검색 결과' })).getByText('상태 확인 필요')).toBeTruthy()
     fireEvent.click(screen.getByRole('link', { name: undated.title }))
     await screen.findByRole('heading', { name: undated.title })
     expect(screen.queryByRole('link', { name: '원문에 질문하기' })).toBeNull()

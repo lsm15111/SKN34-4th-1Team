@@ -1,9 +1,9 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { isWritableApplicationAnswer } from '@govbiz/shared/domain/entities/ApplicationDocumentGeneration'
+import { daysUntil, formatDday, programStatusLabels } from '@govbiz/shared/domain/labels'
 import { useAppSelector } from '../../../../app/hooks'
 import {
-  applicationDeadlineDays,
   applicationServiceFieldLabels,
   type ApplicationFormField,
   type ApplicationFormSection,
@@ -586,10 +586,10 @@ const listStatusTabs: { value: ApplicationPreparationListStatus | undefined; lab
   { value: undefined, label: '전체' }, { value: 'in_progress', label: '진행 중' }, { value: 'done', label: '완료' },
 ]
 function deadlineBadge(item: ApplicationPreparationSummary) {
-  const days = applicationDeadlineDays(item.applicationEndDate)
+  const days = daysUntil(item.applicationEndDate)
   if (days === null) return null
-  if (days < 0) return { label: '접수 마감', className: s.badgeDeadline }
-  return { label: days === 0 ? 'D-Day' : `D-${days}`, className: days <= 7 ? s.badgeUrgent : s.badgeDeadline }
+  if (days < 0) return { label: programStatusLabels.CLOSED, className: s.badgeDeadline }
+  return { label: formatDday(days), className: days <= 7 ? s.badgeUrgent : s.badgeDeadline }
 }
 /** 카드의 [⋯] 메뉴입니다. 공고 상세로 가거나(돌아오면 이 목록 · 같은 필터) 삭제 확인을 엽니다. 바깥 클릭·Esc로 닫힙니다. */
 function PreparationMenu({ item, returnTo, disabled, onDelete }: { item: ApplicationPreparationSummary; returnTo: string; disabled: boolean; onDelete: () => void }) {
