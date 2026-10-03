@@ -21,6 +21,21 @@ describe('native catalog', () => {
     expect(screen.queryByText('검색 결과 0건')).toBeNull()
   })
 
+  it('offers the same K-Startup startup stages as the web, including 2년미만, before provider additions', async () => {
+    const browseCatalog = jest.fn().mockResolvedValue({ ...emptyPage, startupStages: ['3년미만', '특화 창업자'] })
+    jest.mocked(programClient).mockReturnValue({ browseCatalog } as unknown as ReturnType<typeof programClient>)
+    render(<CatalogScreen onOpenProgram={jest.fn()} />)
+    await screen.findByText('검색 결과 0건')
+    fireEvent.press(screen.getByText('지역·분야·접수 조건'))
+    fireEvent.press(screen.getByLabelText('출처: 전체 출처'))
+    fireEvent.press(screen.getByText('K-Startup'))
+    fireEvent.press(screen.getByLabelText('창업 업력: 전체'))
+    const stages = screen.getAllByRole('radio').slice(1)
+    const expected = ['예비창업자', '1년미만', '2년미만', '3년미만', '5년미만', '7년미만', '10년미만', '특화 창업자']
+    expect(stages).toHaveLength(expected.length)
+    expected.forEach((stage, index) => expect(stages[index]).toHaveTextContent(stage))
+  })
+
   it('does not let a late old response overwrite the latest search', async () => {
     let resolveOld: (value: typeof emptyPage) => void = () => undefined
     const browseCatalog = jest.fn()
