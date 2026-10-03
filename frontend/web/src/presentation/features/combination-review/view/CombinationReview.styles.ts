@@ -16,7 +16,8 @@ export const reviewStyles = {
   menuItem: `flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2 text-left text-[0.8125rem] font-semibold text-app-ink no-underline hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 ${focus}`,
   menuItemDanger: 'text-red-800 hover:bg-red-50',
   dangerSolid: `inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full bg-[#9a3947] px-4 py-2 text-sm font-semibold text-white hover:bg-[#7f2d39] disabled:cursor-not-allowed disabled:opacity-50 ${focus}`,
-  stepBar: 'sticky bottom-0 z-[2] flex flex-wrap items-center gap-3 border-t border-line bg-[rgb(245_246_247_/_96%)] pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur',
+  // 내용 위에 떠 있는 흰 바입니다. 회색 띠는 아래 카드와 구분이 약해 흰 바탕 · 테두리 · 그림자로 경계를 만듭니다.
+  stepBar: 'sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-[2] flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3 shadow-[0_8px_28px_rgb(32_33_36_/_14%)] max-[599px]:px-3',
   stepBarNote: 'text-xs text-ink-muted max-[599px]:hidden',
   // 주 버튼을 아직 누를 수 없는 이유입니다. 600px 미만에서도 보입니다(신청 문서 [작성 시작]과 같은 방식).
   stepBarReason: 'text-xs font-semibold text-ink-muted max-[599px]:basis-full max-[599px]:order-first',
