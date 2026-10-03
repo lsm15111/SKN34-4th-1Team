@@ -3,21 +3,23 @@ package ai.govbiz.catalog.supportprogram.service.sync.config
 import ai.govbiz.catalog.supportprogram.service.sync.MsitSupportProgramCatalogSyncScheduler
 import ai.govbiz.catalog.supportprogram.service.sync.MsitSupportProgramCatalogSyncService
 import java.time.Duration
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
-import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
 class MsitSupportProgramCatalogSyncPropertiesTest {
     private val context = ApplicationContextRunner()
         .withBean(MsitSupportProgramCatalogSyncService::class.java, { mock(MsitSupportProgramCatalogSyncService::class.java) })
-        .withUserConfiguration(MsitSupportProgramCatalogSyncScheduler::class.java)
+        .withUserConfiguration(MsitSupportProgramCatalogSyncConfig::class.java, MsitSupportProgramCatalogSyncScheduler::class.java)
+        .withPropertyValues("app.msit.sync.initial-delay=1h")
 
     @Test
     fun isDisabledByDefaultAndDoesNotScheduleExternalCallsWithoutAnExplicitOptIn() {
@@ -34,19 +36,23 @@ class MsitSupportProgramCatalogSyncPropertiesTest {
     }
 
     @Test
-    fun assignsTheLongRunningCollectionToItsOwnOptInSingleThreadScheduler() {
-        val scheduled = MsitSupportProgramCatalogSyncScheduler::class.java
-            .getMethod("synchronize").getAnnotation(Scheduled::class.java)
-        assertEquals("msitCatalogTaskScheduler", scheduled.scheduler)
-        context.withUserConfiguration(MsitSupportProgramCatalogSyncConfig::class.java)
-            .run { assertThat(it).doesNotHaveBean("msitCatalogTaskScheduler") }
-        context.withUserConfiguration(MsitSupportProgramCatalogSyncConfig::class.java)
-            .withPropertyValues("app.msit.sync.enabled=true", "app.msit.sync.initial-delay=1h")
+    fun runsTheLongRunningCollectionOnItsOwnOptInSingleThreadScheduler() {
+        context.run { assertThat(it).doesNotHaveBean("msitCatalogTaskScheduler") }
+        val service = mock(MsitSupportProgramCatalogSyncService::class.java)
+        val syncThread = CompletableFuture<String>()
+        doAnswer {
+            syncThread.complete(Thread.currentThread().name)
+            0
+        }.`when`(service).sync()
+
+        ApplicationContextRunner()
+            .withBean(MsitSupportProgramCatalogSyncService::class.java, { service })
+            .withUserConfiguration(MsitSupportProgramCatalogSyncConfig::class.java, MsitSupportProgramCatalogSyncScheduler::class.java)
+            .withPropertyValues("app.msit.sync.enabled=true", "app.msit.sync.initial-delay=0s", "app.msit.sync.retry-delay=PT1M")
             .run {
-                val scheduler = it.getBean("msitCatalogTaskScheduler", ThreadPoolTaskScheduler::class.java)
-                assertEquals(1, scheduler.poolSize)
-                val thread = scheduler.submit(java.util.concurrent.Callable { Thread.currentThread().name }).get(5, TimeUnit.SECONDS)
-                assertThat(thread).startsWith("msit-catalog-sync-")
+                assertEquals(1, it.getBean("msitCatalogTaskScheduler", ThreadPoolTaskScheduler::class.java).poolSize)
+                assertEquals(Duration.ofMinutes(1), it.getBean(MsitSupportProgramCatalogSyncProperties::class.java).retryDelay)
+                assertThat(syncThread.get(5, TimeUnit.SECONDS)).startsWith("msit-catalog-sync-")
             }
     }
 

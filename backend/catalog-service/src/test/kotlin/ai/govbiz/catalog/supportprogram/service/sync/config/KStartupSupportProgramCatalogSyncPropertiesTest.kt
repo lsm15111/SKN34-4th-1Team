@@ -4,6 +4,7 @@ import ai.govbiz.catalog.supportprogram.service.sync.KStartupSupportProgramCatal
 import ai.govbiz.catalog.supportprogram.service.sync.KStartupSupportProgramCatalogSyncService
 import java.time.Duration
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -13,7 +14,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner
 class KStartupSupportProgramCatalogSyncPropertiesTest {
     private val context = ApplicationContextRunner()
         .withBean(KStartupSupportProgramCatalogSyncService::class.java, { mock(KStartupSupportProgramCatalogSyncService::class.java) })
-        .withUserConfiguration(KStartupSupportProgramCatalogSyncScheduler::class.java)
+        .withUserConfiguration(KStartupSupportProgramCatalogSyncConfig::class.java, KStartupSupportProgramCatalogSyncScheduler::class.java)
+        .withPropertyValues("app.kstartup.sync.initial-delay=1h")
 
     @Test
     fun isDisabledByDefaultAndDoesNotScheduleExternalCallsWithoutAnExplicitOptIn() {
@@ -27,6 +29,13 @@ class KStartupSupportProgramCatalogSyncPropertiesTest {
     fun registersTheSchedulerOnlyWhenExplicitlyEnabled() {
         context.withPropertyValues("app.kstartup.sync.enabled=true")
             .run { assertThat(it).hasSingleBean(KStartupSupportProgramCatalogSyncScheduler::class.java) }
+    }
+
+    @Test
+    fun bindsTheRetryDelayWithAFiveMinuteDefault() {
+        assertEquals(Duration.ofMinutes(5), KStartupSupportProgramCatalogSyncProperties().retryDelay)
+        context.withPropertyValues("app.kstartup.sync.retry-delay=PT1M")
+            .run { assertEquals(Duration.ofMinutes(1), it.getBean(KStartupSupportProgramCatalogSyncProperties::class.java).retryDelay) }
     }
 
     @Test

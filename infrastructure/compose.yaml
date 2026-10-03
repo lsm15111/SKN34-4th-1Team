@@ -127,6 +127,13 @@ services:
       LLM_RANKING_RUN_TIMEOUT_SECONDS: ${LLM_RANKING_RUN_TIMEOUT_SECONDS:-50.0}
     expose:
       - "8000"
+    # 런타임 이미지에 curl이 없어 Python 표준 라이브러리로 기존 상태 확인 API를 호출한다. Qdrant·OpenAI 연결은 확인하지 않는다.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/internal/v1/health', timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
 
   core-service:
     build:

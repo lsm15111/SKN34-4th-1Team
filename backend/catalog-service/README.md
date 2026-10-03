@@ -13,6 +13,8 @@ Core의 계정·세션·신청서·원문 캐시 코드 또는 Gradle 프로젝�
 ## 호출 흐름과 데이터 소유권
 
 - 수집: Scheduler → 제공처별 SyncService → Facade → 제공처 HTTP Client.
+  실패하면 기존 공개 공고를 유지하고 오류를 기록한 뒤, 다음 실행을 `*_SYNC_RETRY_DELAY`(기본 5분)부터
+  연속 실패마다 두 배로 늘린 간격(최대 `*_SYNC_FIXED_DELAY`)으로 앞당깁니다. 성공하면 정상 간격으로 돌아갑니다.
 - 공개 준비: SyncService → Elasticsearch Client + AI Service index Client.
 - 공개: SyncService → Repository → MyBatis Mapper → 자체 MySQL.
   전체 수집·두 색인이 성공한 뒤 최신 실행 세대만 제공처 단위 transaction으로 공개합니다.
@@ -96,12 +98,15 @@ readiness는 공공 API·AI Service·Elasticsearch에 요청하지 않으며 DB 
 | `{BIZINFO,KSTARTUP,MSIT,CNTRADE_NOTICE}_SYNC_ENABLED` | 각 수집 scheduler, 모두 기본 `false` |
 | `{BIZINFO,KSTARTUP,MSIT,CNTRADE_NOTICE}_SYNC_INITIAL_DELAY` | 각 수집 최초 지연, 기본 `PT0S` |
 | `{BIZINFO,KSTARTUP,MSIT,CNTRADE_NOTICE}_SYNC_FIXED_DELAY` | 각 수집 간격, 기본 `PT6H` |
+| `{BIZINFO,KSTARTUP,MSIT,CNTRADE_NOTICE}_SYNC_RETRY_DELAY` | 실패 뒤 첫 재시도 지연, 기본 `PT5M`; 연속 실패마다 두 배, 최대 수집 간격 |
 | `SUPPORT_PROGRAM_INDEX_ENABLED` | 색인 복구 scheduler, 기본 `false` |
 | `SUPPORT_PROGRAM_INDEX_INITIAL_DELAY`, `SUPPORT_PROGRAM_INDEX_FIXED_DELAY` | 색인 복구 최초 지연/간격 `PT0S` / `PT1M` |
 
 DB와 토큰을 준비한 뒤 이 디렉터리에서 `./gradlew bootRun`을 실행합니다. Docker build context도
 이 디렉터리 하나입니다. scheduler 활성화 시 공공 API·AI Service를 실제 호출하므로 승인된
 실행 환경과 비용 범위에서만 켭니다. 기본 실행은 외부 수집·색인을 시작하지 않습니다.
+루트 Compose는 AI Service의 `GET /internal/v1/health`가 healthy가 된 뒤 이 서비스를 시작합니다.
+이 확인은 Qdrant·OpenAI 연결까지 보장하지 않으므로, 기동 직후 색인 실패는 위 짧은 재시도로 복구합니다.
 
 기존 `catalog-sync-once` 프로필은 비용 상한 사전 검사·재실행 방지 receipt를 유지합니다.
 독립 DB migration은 미리 완료해야 하며 이 프로필 자체는 Flyway와 scheduler를 끕니다.

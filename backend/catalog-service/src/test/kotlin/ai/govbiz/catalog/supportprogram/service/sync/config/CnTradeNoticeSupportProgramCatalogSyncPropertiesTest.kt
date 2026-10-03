@@ -4,6 +4,7 @@ import ai.govbiz.catalog.supportprogram.service.sync.CnTradeNoticeSupportProgram
 import ai.govbiz.catalog.supportprogram.service.sync.CnTradeNoticeSupportProgramCatalogSyncService
 import java.time.Duration
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -13,7 +14,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner
 class CnTradeNoticeSupportProgramCatalogSyncPropertiesTest {
     private val context = ApplicationContextRunner()
         .withBean(CnTradeNoticeSupportProgramCatalogSyncService::class.java, { mock(CnTradeNoticeSupportProgramCatalogSyncService::class.java) })
-        .withUserConfiguration(CnTradeNoticeSupportProgramCatalogSyncScheduler::class.java)
+        .withUserConfiguration(CnTradeNoticeSupportProgramCatalogSyncConfig::class.java, CnTradeNoticeSupportProgramCatalogSyncScheduler::class.java)
+        .withPropertyValues("app.cntrade-notice.sync.initial-delay=1h")
 
     @Test
     fun isDisabledByDefaultAndDoesNotScheduleExternalCallsWithoutAnExplicitOptIn() {
@@ -27,6 +29,13 @@ class CnTradeNoticeSupportProgramCatalogSyncPropertiesTest {
     fun registersTheSchedulerOnlyWhenExplicitlyEnabled() {
         context.withPropertyValues("app.cntrade-notice.sync.enabled=true")
             .run { assertThat(it).hasSingleBean(CnTradeNoticeSupportProgramCatalogSyncScheduler::class.java) }
+    }
+
+    @Test
+    fun bindsTheRetryDelayWithAFiveMinuteDefault() {
+        assertEquals(Duration.ofMinutes(5), CnTradeNoticeSupportProgramCatalogSyncProperties().retryDelay)
+        context.withPropertyValues("app.cntrade-notice.sync.retry-delay=PT1M")
+            .run { assertEquals(Duration.ofMinutes(1), it.getBean(CnTradeNoticeSupportProgramCatalogSyncProperties::class.java).retryDelay) }
     }
 
     @Test

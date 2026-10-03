@@ -689,6 +689,8 @@ MySQL의 `support_program_sync_generation`은 제공처별 최신 **시작** 세
 미노출 처리·UPSERT·상태 행 성공 기록 중 하나라도 실패하면 전체를 rollback합니다. 외부 HTTP 수집·색인은 DB
 transaction 밖에서 실행하며, 수집 실패를 이유로 기존 행을 삭제하거나 다른 제공처 데이터를 변경하지 않습니다.
 동기화 Service가 수집·사전 색인·공개 과정의 RuntimeException을 한 번 기록한 뒤 Scheduler가 다음 주기에 계속 실행합니다.
+Catalog 분리 모드의 Scheduler는 실패 뒤 정상 주기를 기다리지 않고 `*_SYNC_RETRY_DELAY`(기본 5분)부터 연속 실패마다
+두 배로 늘린 간격(최대 정상 주기)으로 다시 시도합니다. 자세한 설정은 [Catalog Service 안내](../backend/catalog-service/README.md)를 참고하세요.
 
 ## 키워드·벡터 색인 정합성과 복구
 
