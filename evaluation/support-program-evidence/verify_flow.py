@@ -119,7 +119,9 @@ def expected_chunk(metadata, content):
 
 
 def _answer_contract(answer, chunks):
-    require(isinstance(answer, dict) and set(answer) == {"answer", "answerStatus", "citationChunkIds"}, "invalid AI answer fields")
+    # Captures recorded before the quote contract have no citationQuotes; newer ones must quote each cited chunk verbatim.
+    fields = {"answer", "answerStatus", "citationChunkIds"}
+    require(isinstance(answer, dict) and set(answer) in (fields, fields | {"citationQuotes"}), "invalid AI answer fields")
     require(isinstance(answer["answer"], str) and answer["answer"] == answer["answer"].strip()
             and 1 <= len(answer["answer"]) <= 1200, "invalid AI answer text")
     status, ids = answer["answerStatus"], answer["citationChunkIds"]
@@ -127,6 +129,12 @@ def _answer_contract(answer, chunks):
             and all(isinstance(value, str) for value in ids), "invalid answer status or citation IDs")
     require(len(ids) == len(set(ids)) and set(ids) <= {chunk["id"] for chunk in chunks}, "unknown or duplicate citation")
     require(bool(ids) == (status == "ANSWERED"), "answer status and citations disagree")
+    quotes = answer.get("citationQuotes")
+    if quotes is not None:
+        texts = {chunk["id"]: chunk["text"] for chunk in chunks}
+        require(isinstance(quotes, list) and len(quotes) == len(ids) and all(
+            isinstance(quote, str) and quote == quote.strip() and 1 <= len(quote) <= 200 and quote in texts[chunk_id]
+            for chunk_id, quote in zip(ids, quotes)), "citation quote is not verbatim in its cited chunk")
 
 
 def _usage_sum(calls, field, names):
@@ -205,7 +213,10 @@ def verify(core, api, fixture_path=DEFAULT_FIXTURE):
         require(answer["request"] == {"question": case["question"], "chunks": [answer_chunk]}, "answer did not use exactly the retrieved original text")
         result = answer["response"]
         _answer_contract(result, [chunk])
-        citations = [{"excerpt": chunk["text"], "sourceUrl": doc["sourceUrl"], "chunkOrder": 0} for _ in result["citationChunkIds"]]
+        # Core publishes the verified short quote; captures before the quote contract published the whole chunk.
+        quotes = result.get("citationQuotes")
+        excerpts = quotes if quotes is not None else [chunk["text"] for _ in result["citationChunkIds"]]
+        citations = [{"excerpt": excerpt, "sourceUrl": doc["sourceUrl"], "chunkOrder": 0} for excerpt in excerpts]
         require(observation["publicResponse"] == {"answer": result["answer"], "answerStatus": result["answerStatus"], "citations": citations}, "public answer or original citation differs from the validated AI response")
         require(all(type(value["chunkOrder"]) is int for value in observation["publicResponse"]["citations"]), "invalid public chunk order")
         answers.append(result)
@@ -232,8 +243,16 @@ def verify(core, api, fixture_path=DEFAULT_FIXTURE):
                     and response.get("hasRefusal") is False and response.get("outputTextTruncated") is False
                     and len(response.get("outputTexts", [])) == 1, "incomplete or refused model output")
             selection = _json(response["outputTexts"][0])
-            require(isinstance(selection, dict) and set(selection) == {"answer", "answerStatus", "citationChunkIndexes"}, "unexpected model output contract")
-            indexes = selection["citationChunkIndexes"]
+            require(isinstance(selection, dict) and set(selection) in (
+                {"answer", "answerStatus", "citationChunkIndexes"}, {"answer", "answerStatus", "citations"},
+            ), "unexpected model output contract")
+            if "citations" in selection:
+                require(isinstance(selection["citations"], list) and all(
+                    isinstance(citation, dict) and set(citation) == {"chunkIndex", "quote"} for citation in selection["citations"]
+                ), "invalid model citation selection")
+                indexes = [citation["chunkIndex"] for citation in selection["citations"]]
+            else:
+                indexes = selection["citationChunkIndexes"]
             require(isinstance(indexes, list) and all(type(value) is int and value == 0 for value in indexes)
                     and len(indexes) == len(set(indexes)), "invalid model citation selection")
             result = answers[answer_index]

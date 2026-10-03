@@ -65,9 +65,9 @@ async def test_failures_and_insufficient_evidence_remain_distinct(trace_environm
     settings, exporter = trace_environment
     output = valid_selection().model_dump(by_alias=True)
     if kind == "invalid-citation":
-        output["citationChunkIndexes"] = [99]
+        output["citations"] = [{**output["citations"][0], "chunkIndex": 99}]
     if kind == "insufficient":
-        output.update(answerStatus="INSUFFICIENT_EVIDENCE", citationChunkIndexes=[])
+        output.update(answerStatus="INSUFFICIENT_EVIDENCE", citations=[])
     service, tracing, stub = make_service(settings, json.dumps(output))
     if kind in {"timeout", "cancelled"}:
         entered = asyncio.Event()

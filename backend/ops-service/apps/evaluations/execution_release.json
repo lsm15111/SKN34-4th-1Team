@@ -13,42 +13,42 @@
     "code_sha256": "b2715707819f120f677aba684790f3f68d6c27c17c1613db455d162d89823b84"
   },
   "evaluation": {
-    "sha256": "3fb37825b907eec37915289e6a4b0cfd2a77d167993f96432663040b2f274cd5",
+    "sha256": "54913b65885ff204f1db8faa17f0b622d06e07b3f0319c6d3223c61b2b133e9d",
     "files": {
-      "evaluation/support-program-evidence/evaluate.py": "ed856fc2cd484f73be714d69787a08ee1de8a55db4da36b6ec09a7edb1d41ae2",
+      "evaluation/support-program-evidence/evaluate.py": "33a3ae511fe57a76fb222e31f3e904cc66bce2ef176729f5f6c992d1d7e86f4d",
       "evaluation/support-program-evidence/llmops.py": "3ff41d71316465d996e4b78f8cd4bfb7e718a8f74c0539cc0fc8b1b297a76b6d",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_identity.py": "aa706697f294fd4846263e73cd281c4a9d660a7939feb7e2e4e3d60fd5393fb1",
       "backend/ai-service/pyproject.toml": "50ef0fc8c53c9af3e1bb31fafed5200732725ea43691be538d90840d2168037c",
       "backend/ai-service/uv.lock": "349ecdd9152eb2f5479a3db41d39e9d1bf7a8f5a16103426c2cd78207add1fe3"
     },
-    "version": "3fb37825b907eec37915289e6a4b0cfd2a77d167993f96432663040b2f274cd5",
+    "version": "54913b65885ff204f1db8faa17f0b622d06e07b3f0319c6d3223c61b2b133e9d",
     "scope": "fixed-answer-context-only"
   },
   "rag_evaluation": {
-    "sha256": "d4f5c6ef6f65c5beef0f3212bce27e5537a55d9983cc10ac9f59627c7c0ea7e3",
+    "sha256": "2d2a40ba2d1c09b608c91e0545948e241f651f3b77c39ecfaa9607c99d27ee5a",
     "files": {
       "evaluation/support-program-evidence/rag_evaluate.py": "24f0f1988a63db96175309490969f909659291d4356c293ca9b71c9d643e81ba",
       "evaluation/support-program-evidence/rag_replay_flow.py": "d09db8d76e89bdb25af684128618b968fa70150e76d8b5899c808551593dffd9",
       "evaluation/support-program-evidence/llmops.py": "3ff41d71316465d996e4b78f8cd4bfb7e718a8f74c0539cc0fc8b1b297a76b6d",
       "backend/ops-service/apps/evaluations/rag_replay.py": "fd662693568d6ff2713ef38b77ab68733ec1711486b72c5d6bc80faaa6012c37",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_identity.py": "aa706697f294fd4846263e73cd281c4a9d660a7939feb7e2e4e3d60fd5393fb1",
       "backend/ai-service/pyproject.toml": "50ef0fc8c53c9af3e1bb31fafed5200732725ea43691be538d90840d2168037c",
       "backend/ai-service/uv.lock": "349ecdd9152eb2f5479a3db41d39e9d1bf7a8f5a16103426c2cd78207add1fe3"
     },
-    "version": "d4f5c6ef6f65c5beef0f3212bce27e5537a55d9983cc10ac9f59627c7c0ea7e3",
+    "version": "2d2a40ba2d1c09b608c91e0545948e241f651f3b77c39ecfaa9607c99d27ee5a",
     "scope": "source-chunks-retrieval-answer"
   },
   "generation": {
-    "sha256": "5407f001a5d5d6725d80225ffab195ecd11a3b46b3b6b70d579281a3c20bb80d",
+    "sha256": "22a8803262935897bd5665c69b2d38da43ea38a7c92d94d2b5b91724daf7d1ba",
     "files": {
-      "evaluation/support-program-evidence/evaluate.py": "ed856fc2cd484f73be714d69787a08ee1de8a55db4da36b6ec09a7edb1d41ae2",
+      "evaluation/support-program-evidence/evaluate.py": "33a3ae511fe57a76fb222e31f3e904cc66bce2ef176729f5f6c992d1d7e86f4d",
       "backend/ai-service/app/config.py": "7fc38debcdfb14249e64a195373072d14fc124406f0753d421118f197b16918d",
-      "backend/ai-service/app/support_program_evidence/prompt.py": "9619d00ab76b511cad15465ba5b97fe95e790dfe62b81333901c4ebda5ad5eb3",
-      "backend/ai-service/app/support_program_evidence/agent.py": "4b33489593b9af37a5f2bc27cc54f4545726b22c8c4a1d0d8b40f2322690e582",
-      "backend/ai-service/app/support_program_evidence/answer_service.py": "b223ad63c6f9d97e7e3f80b16a4cecf95b3b8c90fc8a2ba7642261b1fbc9aad5",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/prompt.py": "bad94a46174b1eb494a211b6c3680dd4d0808b58469bede41717a688913bef8f",
+      "backend/ai-service/app/support_program_evidence/agent.py": "ba4ede2df230e927489e2ccf059b0ae5e48c524dca59a9fcc970e39c60cc6b43",
+      "backend/ai-service/app/support_program_evidence/answer_service.py": "e137a1f1ce055b38efa33ed80daa95db3d8ec938abf3bf530a04013ff1c214e1",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_evidence/errors.py": "1297c9c6e5b964bad22c7badff4697a0703bc7f45b5490b158f0dd0294054b67",
       "backend/ai-service/app/tracing.py": "1a0495c2a9aead3ee219bab87767edc8d10371be350440440ad7534b1e1d74f1",
       "backend/ai-service/app/support_program_llm.py": "4cb756fba7473a7d13b91c620dc3652b355fa41300c7260e8e55e71d6329d79d",
@@ -56,7 +56,7 @@
       "backend/ai-service/pyproject.toml": "50ef0fc8c53c9af3e1bb31fafed5200732725ea43691be538d90840d2168037c",
       "backend/ai-service/uv.lock": "349ecdd9152eb2f5479a3db41d39e9d1bf7a8f5a16103426c2cd78207add1fe3"
     },
-    "prompt_sha256": "560ad134d3ce657561e6dfa67793078c7526c5b5f1ebb691e6e972b27924655c",
+    "prompt_sha256": "8e51abfbeeef908abf348c1140b84b54b1005398ac7d0464f9b15537596b0924",
     "settings": {
       "max_input_tokens": 32768,
       "max_output_tokens": 2000,
@@ -71,14 +71,14 @@
     }
   },
   "rag_generation": {
-    "sha256": "18e1c70f35acb21f4b462c5519a71831c42a0db0a84c216b9be0bb7758f2044d",
+    "sha256": "d21f2e67f715ea8d53d590779d3bcefc543b66eb52c05f3bfebb719ecb6b09e1",
     "files": {
-      "evaluation/support-program-evidence/evaluate.py": "ed856fc2cd484f73be714d69787a08ee1de8a55db4da36b6ec09a7edb1d41ae2",
+      "evaluation/support-program-evidence/evaluate.py": "33a3ae511fe57a76fb222e31f3e904cc66bce2ef176729f5f6c992d1d7e86f4d",
       "backend/ai-service/app/config.py": "7fc38debcdfb14249e64a195373072d14fc124406f0753d421118f197b16918d",
-      "backend/ai-service/app/support_program_evidence/prompt.py": "9619d00ab76b511cad15465ba5b97fe95e790dfe62b81333901c4ebda5ad5eb3",
-      "backend/ai-service/app/support_program_evidence/agent.py": "4b33489593b9af37a5f2bc27cc54f4545726b22c8c4a1d0d8b40f2322690e582",
-      "backend/ai-service/app/support_program_evidence/answer_service.py": "b223ad63c6f9d97e7e3f80b16a4cecf95b3b8c90fc8a2ba7642261b1fbc9aad5",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/prompt.py": "bad94a46174b1eb494a211b6c3680dd4d0808b58469bede41717a688913bef8f",
+      "backend/ai-service/app/support_program_evidence/agent.py": "ba4ede2df230e927489e2ccf059b0ae5e48c524dca59a9fcc970e39c60cc6b43",
+      "backend/ai-service/app/support_program_evidence/answer_service.py": "e137a1f1ce055b38efa33ed80daa95db3d8ec938abf3bf530a04013ff1c214e1",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_evidence/errors.py": "1297c9c6e5b964bad22c7badff4697a0703bc7f45b5490b158f0dd0294054b67",
       "backend/ai-service/app/tracing.py": "1a0495c2a9aead3ee219bab87767edc8d10371be350440440ad7534b1e1d74f1",
       "backend/ai-service/app/support_program_llm.py": "4cb756fba7473a7d13b91c620dc3652b355fa41300c7260e8e55e71d6329d79d",
@@ -96,7 +96,7 @@
       "backend/ai-service/app/support_program_evidence/service.py": "3206ead966556d3cf2f73e4ab278afd1fbbaaea563054faec4d3318726539fdf",
       "backend/ai-service/app/support_program_evidence/router.py": "4ff043f5d8b25c236c24ea74e5a26ed2ae5829661834ae4ffc80d98ced3e4f72"
     },
-    "prompt_sha256": "560ad134d3ce657561e6dfa67793078c7526c5b5f1ebb691e6e972b27924655c",
+    "prompt_sha256": "8e51abfbeeef908abf348c1140b84b54b1005398ac7d0464f9b15537596b0924",
     "settings": {
       "max_input_tokens": 32768,
       "max_output_tokens": 2000,

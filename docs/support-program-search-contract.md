@@ -452,7 +452,9 @@ Core만 아래 AI Service endpoint를 호출합니다. 브라우저에 공개하
 않도록 지시되며, Core도 `ANSWERED`의 인용 누락과 `INSUFFICIENT_EVIDENCE`의 인용 포함을 계약 위반으로 거부합니다.
 
 LLM 전용 입출력은 HTTP 계약과 다릅니다. Agent는 해시 ID 대신 요청 배열의 `index`와 텍스트를 전달하고,
-모델의 `citationChunkIndexes`를 범위·중복·상태 검증 후 원래 64자리 `citationChunkIds`로 복원합니다.
+모델의 `citations: [{chunkIndex, quote}]`를 범위·중복·상태 검증 후 원래 64자리 `citationChunkIds`와 같은 순서의
+`citationQuotes`로 복원합니다. `quote`는 해당 청크 text의 부분 문자열인 200 code point 이하 인용이어야 하며,
+AI Service와 Core가 각각 다시 대조합니다. 공개 응답의 `excerpt`는 이 짧은 인용입니다.
 클라이언트는 계속 위 HTTP 계약을 사용하며 `index`를 보내거나 받을 필요가 없습니다.
 
 ## 전체 카탈로그 후보 검색

@@ -43,6 +43,11 @@ def capture_for(loaded):
     }
 
 
+def quoted(request, order):
+    """모델 출력 계약처럼 인용한 청크 text 앞부분을 글자 그대로 옮긴다."""
+    return {"chunkIndex": order, "quote": request.chunks[order].text[:200].strip()}
+
+
 def test_default_reports_no_measurement(loaded):
     result = evaluate.report(*loaded)
     assert result["documentCount"] == 3
@@ -164,6 +169,7 @@ def test_saved_capture_cli_reads_utf8_with_a_legacy_locale(loaded, tmp_path, mon
 @pytest.mark.parametrize("status,category", [
     (200, None), (429, "unknown"), ("invalid-citation", "unknown_citation"),
     ("invalid-json", "invalid_json"), ("invalid-contract", "invalid_answer_contract"),
+    ("unverified-quote", "unverified_quote"),
     ("incomplete", "incomplete_response"), ("refusal", "model_refusal"),
     ("invalid-json-unknown-metadata", "invalid_json"),
 ])
@@ -206,14 +212,18 @@ def test_execute_uses_production_agent_with_mock_http_only(
         assert not body.get("tools")
         output = fake_capture["cases"][len(requests)]["response"]
         output.pop("citationChunkIds")
-        output["citationChunkIndexes"] = loaded[1][len(requests)][0]["expectedCitationOrders"]
+        case, case_request = loaded[1][len(requests)]
+        output["citations"] = [quoted(case_request, order) for order in case["expectedCitationOrders"]]
         requests.append(body)
         if status == 429:
             return httpx2.Response(status, json={"error": {"message": "SECRET-MUST-NOT-PERSIST", "type": "rate_limit_error"}})
         if status == "invalid-citation":
-            output["citationChunkIndexes"] = [4]
+            output["citations"] = [{"chunkIndex": 4, "quote": "고정 인용"}]
         if status == "invalid-contract":
-            output["citationChunkIndexes"] = []
+            output["citations"] = []
+        if status == "unverified-quote":
+            output["citations"] = [{**citation, "quote": citation["quote"] + " 원문에 없는 덧붙임"}
+                                   for citation in output["citations"]]
         output_text = "not-json" if status in ("invalid-json", "invalid-json-unknown-metadata") else json.dumps(output)
         response_body = {
             "id": "resp_test", "created_at": 0, "object": "response",
@@ -257,7 +267,10 @@ def test_execute_uses_production_agent_with_mock_http_only(
         {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150} if status != 429 else None
     )
     if status == "invalid-citation":
-        assert json.loads(capture["apiResponses"][0]["outputTexts"][0])["citationChunkIndexes"] == [4]
+        assert json.loads(capture["apiResponses"][0]["outputTexts"][0])["citations"][0]["chunkIndex"] == 4
+        assert "causeType" not in capture["cases"][0]
+    if status == "unverified-quote":
+        assert capture["cases"][0]["errorType"] == "SupportProgramEvidenceError"
         assert "causeType" not in capture["cases"][0]
     if category is not None:
         assert capture["cases"][0]["diagnosticCategory"] == category
@@ -461,8 +474,9 @@ def test_ops_budget_precedes_http_and_uncertain_usage_blocks_next_case(loaded, t
         attempts.append(request)
         if failure == "timeout":
             raise httpx2.ReadTimeout("offline", request=request)
+        case, case_request = loaded[1][index]
         answer = {"answer": "검증용 응답", "answerStatus": "ANSWERED",
-                  "citationChunkIndexes": loaded[1][index][0]["expectedCitationOrders"]}
+                  "citations": [quoted(case_request, order) for order in case["expectedCitationOrders"]]}
         return httpx2.Response(200, json={
             "id": "resp_test", "created_at": 0, "object": "response",
             "model": evaluate.DEFAULT_OPENAI_MODEL, "status": "completed",

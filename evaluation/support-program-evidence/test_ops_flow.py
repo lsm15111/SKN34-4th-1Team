@@ -288,12 +288,15 @@ def test_live_response_to_report_pipeline_uses_only_stub_transport(monkeypatch, 
         assert body["model"] == "gpt-6-luna"
         assert body["max_output_tokens"] == 2000
         requests.append(body)
+        user = next(item["content"] for item in body["input"] if item.get("role") == "user")
+        first_chunk = json.loads(user if isinstance(user, str) else user[0]["text"])["chunks"][0]["text"]
         return httpx2.Response(200, json={
             "id": "resp_stub", "created_at": 0, "object": "response", "status": "completed",
             "model": "gpt-6-luna", "error": None, "incomplete_details": None,
             "output": [{"id": "msg_stub", "type": "message", "role": "assistant", "status": "completed",
                         "content": [{"type": "output_text", "annotations": [], "text": json.dumps({
-                            "answerStatus": "ANSWERED", "answer": "무료 스텁 응답", "citationChunkIndexes": [0],
+                            "answerStatus": "ANSWERED", "answer": "무료 스텁 응답",
+                            "citations": [{"chunkIndex": 0, "quote": first_chunk[:200].strip()}],
                         })}]}],
             "parallel_tool_calls": False, "tool_choice": "none", "tools": [],
             "usage": {"input_tokens": 120, "output_tokens": 40, "total_tokens": 160},

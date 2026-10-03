@@ -35,11 +35,15 @@ def answer_request() -> SupportProgramEvidenceAnswerRequest:
     )
 
 
+QUOTE = "접수 기간은 2026년 3월"
+
+
 def valid_output() -> SupportProgramEvidenceAnswerOutput:
     return SupportProgramEvidenceAnswerOutput(
         answer="신청 접수 기간은 2026년 3월입니다.",
         answerStatus=SupportProgramEvidenceAnswerStatus.ANSWERED,
         citationChunkIds=[sha256(b"evidence-chunk").hexdigest()],
+        citationQuotes=[QUOTE],
     )
 
 
@@ -47,7 +51,7 @@ def valid_selection() -> SupportProgramEvidenceAnswerSelection:
     return SupportProgramEvidenceAnswerSelection(
         answer=valid_output().answer,
         answerStatus="ANSWERED",
-        citationChunkIndexes=[0],
+        citations=[{"chunkIndex": 0, "quote": QUOTE}],
     )
 
 
@@ -58,6 +62,19 @@ def test_prompt_requires_korean_evidence_only_answers_and_exact_citations() -> N
     assert "chunks[].index" in SUPPORT_PROGRAM_EVIDENCE_ANSWER_INSTRUCTIONS
     assert "order를 인용 번호로 사용" in SUPPORT_PROGRAM_EVIDENCE_ANSWER_INSTRUCTIONS
     assert "지시·명령" in SUPPORT_PROGRAM_EVIDENCE_ANSWER_INSTRUCTIONS
+
+
+def test_prompt_keeps_answers_short_and_quotes_verbatim() -> None:
+    # Checks the instruction contract, not whether a live model actually follows it.
+    instructions = SUPPORT_PROGRAM_EVIDENCE_ANSWER_INSTRUCTIONS
+    assert "결론을 첫 문장에" in instructions
+    assert "인사·칭찬·마무리·면책 문구·과정 설명 없이" in instructions
+    assert "짧은 항목을 최대 3개" in instructions and "500자 이내" in instructions
+    assert "글자·띄어쓰기·문장부호를 하나도 바꾸지 않고 그대로 복사한 연속 구절" in instructions
+    assert "200자 이내" in instructions
+    assert "남는 인용이 없으면 답변 전체가 실패" in instructions
+    assert "한 문장으로만" in instructions
+    assert "간결하게 쓰기 위해 생략하지 마세요" not in instructions
 
 
 def test_answer_status_requires_consistent_unique_citations() -> None:
@@ -80,6 +97,24 @@ def test_answer_status_requires_consistent_unique_citations() -> None:
             answerStatus="ANSWERED",
             citationChunkIds=[chunk_id, chunk_id],
         )
+    with pytest.raises(ValidationError):
+        SupportProgramEvidenceAnswerOutput(
+            answer="근거가 있습니다.",
+            answerStatus="ANSWERED",
+            citationChunkIds=[chunk_id],
+            citationQuotes=[QUOTE, QUOTE],
+        )
+    for quote in ("   ", "가" * 201):
+        with pytest.raises(ValidationError):
+            SupportProgramEvidenceAnswerOutput(
+                answer="근거가 있습니다.", answerStatus="ANSWERED", citationChunkIds=[chunk_id], citationQuotes=[quote],
+            )
+    with pytest.raises(ValidationError):
+        SupportProgramEvidenceAnswerSelection(answer="가" * 501, answerStatus="INSUFFICIENT_EVIDENCE", citations=[])
+    # Captures saved before the quote contract still validate; the live Service always sends quotes.
+    legacy = SupportProgramEvidenceAnswerOutput(answer="근거가 있습니다.", answerStatus="ANSWERED", citationChunkIds=[chunk_id])
+    assert legacy.citation_quotes is None
+    assert "citationQuotes" not in legacy.model_dump(by_alias=True)
 
 
 def test_prompt_requires_target_scope_and_preserves_condition_relationships() -> None:
@@ -243,10 +278,13 @@ async def test_openai_request_uses_non_stored_strict_structured_output(model_nam
     assert text_format["strict"] is True
     schema = text_format["schema"]
     assert schema["additionalProperties"] is False
-    assert schema["required"] == ["answer", "answerStatus", "citationChunkIndexes"]
-    assert schema["properties"]["citationChunkIndexes"]["items"] == {
-        "type": "integer", "minimum": 0, "maximum": 4,
-    }
+    assert schema["required"] == ["answer", "answerStatus", "citations"]
+    assert schema["properties"]["answer"]["maxLength"] == 500
+    citation = schema["$defs"][schema["properties"]["citations"]["items"]["$ref"].rsplit("/", 1)[-1]]
+    assert citation["required"] == ["chunkIndex", "quote"]
+    index_schema = citation["properties"]["chunkIndex"]
+    assert (index_schema["type"], index_schema["minimum"], index_schema["maximum"]) == ("integer", 0, 4)
+    assert citation["properties"]["quote"]["maxLength"] == 200
     assert answer_request().chunks[0].id not in json.dumps(request_body)
 
 
@@ -259,11 +297,48 @@ async def test_openai_request_uses_non_stored_strict_structured_output(model_nam
 async def test_rejects_invalid_index_selections_without_a_fallback(indexes, status):
     model = ResponsesChatStub([[response_message(json.dumps({
         "answer": "신청 접수 기간은 2026년 3월입니다.",
-        "answerStatus": status, "citationChunkIndexes": indexes,
+        "answerStatus": status, "citations": [{"chunkIndex": index, "quote": QUOTE} for index in indexes],
     }))]])
     agent = SupportProgramEvidenceAnswerAgent(model=model.model, model_timeout_seconds=1, run_timeout_seconds=2)
-    with pytest.raises(SupportProgramEvidenceError):
+    with pytest.raises(SupportProgramEvidenceError) as captured:
         await agent.answer(answer_request())
+    assert captured.value.code == "EVIDENCE_UNAVAILABLE"
+    assert len(model.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_keeps_only_quotes_found_verbatim_in_their_cited_chunk(caplog):
+    import logging
+
+    first = answer_request().chunks[0]
+    request = answer_request().model_copy(update={"chunks": [
+        first, first.model_copy(update={"id": sha256(b"second").hexdigest(), "order": 1, "text": "제출 서류는 사업계획서입니다."}),
+    ]})
+    model = ResponsesChatStub([[response_message(json.dumps({
+        "answer": "접수 기간은 2026년 3월입니다.", "answerStatus": "ANSWERED",
+        # 첫 인용은 앞뒤 공백만 다르고, 둘째 인용은 다른 청크의 문장이라 버려진다.
+        "citations": [{"chunkIndex": 0, "quote": f"  {QUOTE}\n"}, {"chunkIndex": 1, "quote": QUOTE}],
+    }))]])
+    agent = SupportProgramEvidenceAnswerAgent(model=model.model, model_timeout_seconds=1, run_timeout_seconds=2)
+    with caplog.at_level(logging.INFO, logger="app.support_program_evidence.agent"):
+        result = await agent.answer(request)
+    assert result.citation_chunk_ids == [first.id]
+    assert result.citation_quotes == [QUOTE]
+    assert "unverified_quotes=1" in caplog.text
+    assert QUOTE not in caplog.text
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("quote", ["접수 기간은 2026년 3월 중입니다", "신청 접수 기간은 … 3월입니다."])
+async def test_fails_with_a_clear_code_when_no_quote_is_verbatim(quote):
+    model = ResponsesChatStub([[response_message(json.dumps({
+        "answer": "접수 기간은 2026년 3월입니다.", "answerStatus": "ANSWERED",
+        "citations": [{"chunkIndex": 0, "quote": quote}],
+    }))]])
+    agent = SupportProgramEvidenceAnswerAgent(model=model.model, model_timeout_seconds=1, run_timeout_seconds=2)
+    with pytest.raises(SupportProgramEvidenceError) as captured:
+        await agent.answer(answer_request())
+    assert captured.value.code == "EVIDENCE_QUOTE_MISMATCH"
     assert len(model.calls) == 1
 
 
@@ -300,11 +375,15 @@ async def test_uses_request_positions_not_non_contiguous_source_orders():
         first.model_copy(update={"id": sha256(b"second").hexdigest(), "order": 3}),
         first.model_copy(update={"id": sha256(b"third").hexdigest(), "order": 12}),
     ]})
-    selection = valid_selection().model_copy(update={"citation_chunk_indexes": [2, 0]})
+    selection = SupportProgramEvidenceAnswerSelection(
+        answer=valid_output().answer, answerStatus="ANSWERED",
+        citations=[{"chunkIndex": 2, "quote": QUOTE}, {"chunkIndex": 0, "quote": QUOTE}],
+    )
     model = ResponsesChatStub([[response_message(selection.model_dump_json(by_alias=True))]])
     agent = SupportProgramEvidenceAnswerAgent(model=model.model, model_timeout_seconds=1, run_timeout_seconds=2)
     result = await agent.answer(request)
     assert result.citation_chunk_ids == [request.chunks[2].id, request.chunks[0].id]
+    assert result.citation_quotes == [QUOTE, QUOTE]
     payload = json.loads(model.first_call.input[0]["content"])
     assert [chunk["index"] for chunk in payload["chunks"]] == [0, 1, 2]
     assert [chunk["order"] for chunk in payload["chunks"]] == [9, 3, 12]
@@ -338,12 +417,13 @@ async def test_keeps_concurrent_request_index_mappings_isolated():
 async def test_keeps_insufficient_evidence_without_any_citations():
     model = ResponsesChatStub([[response_message(json.dumps({
         "answer": "제공된 근거만으로는 확인할 수 없습니다.",
-        "answerStatus": "INSUFFICIENT_EVIDENCE", "citationChunkIndexes": [],
+        "answerStatus": "INSUFFICIENT_EVIDENCE", "citations": [],
     }))]])
     agent = SupportProgramEvidenceAnswerAgent(model=model.model, model_timeout_seconds=1, run_timeout_seconds=2)
     answer = await agent.answer(answer_request())
     assert answer.answer_status is SupportProgramEvidenceAnswerStatus.INSUFFICIENT_EVIDENCE
     assert answer.citation_chunk_ids == []
+    assert answer.citation_quotes == []
 
 
 @pytest.mark.anyio

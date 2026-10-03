@@ -12,7 +12,14 @@ from app.support_program_evidence.models import SupportProgramEvidenceAnswerRequ
 from tests.langchain_stub import ResponsesChatStub
 
 
-VALID = json.dumps({"answer": "근거 답변", "answerStatus": "ANSWERED", "citationChunkIndexes": [0]})
+VALID = json.dumps({"answer": "근거 답변", "answerStatus": "ANSWERED", "citations": [{"chunkIndex": 0, "quote": "근거"}]})
+
+
+def test_accepts_a_completed_strict_selection():
+    selection = validate_support_program_output(
+        AIMessage(content=VALID, response_metadata={"status": "completed"}), SupportProgramEvidenceAnswerSelection,
+    )
+    assert [(citation.chunk_index, citation.quote) for citation in selection.citations] == [(0, "근거")]
 
 
 @pytest.mark.parametrize("status", ["incomplete", "failed", "cancelled", "in_progress", None])
@@ -26,7 +33,7 @@ def test_rejects_non_completed_responses_even_with_valid_json(status):
 
 @pytest.mark.parametrize("content", [
     VALID[:-1], chr(96) * 3 + "json\\n" + VALID + "\\n" + chr(96) * 3, VALID + " unexpected text",
-    VALID.replace("[0]", '["0"]'), VALID.replace("[0]", "[false]"),
+    VALID.replace('"chunkIndex": 0', '"chunkIndex": "0"'), VALID.replace('"chunkIndex": 0', '"chunkIndex": false'),
 ])
 def test_does_not_repair_json_or_coerce_citation_indexes(content):
     with pytest.raises(ValidationError):

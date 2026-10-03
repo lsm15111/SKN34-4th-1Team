@@ -596,9 +596,9 @@ POST /api/v1/support-programs/detail/answers
   → AiSupportProgramEvidenceFacade → AI Service
       → 별도 Qdrant evidence 컬렉션에 청크 색인
       → 질문과 가까운 청크 최대 5개 검색 (동일 질문 임베딩은 최대 256개/300초 재사용)
-      → 단일 typed Agent → OpenAI 근거 답변·짧은 인용 번호 선택
-      → Agent가 검증한 번호를 요청의 원래 청크 ID로 복원
-  → Core가 청크·인용을 검증 → 답변과 원문 발췌·URL 반환
+      → 단일 typed Agent → OpenAI 근거 답변·인용 청크 번호·원문 그대로의 짧은 인용 선택
+      → Agent가 번호를 원래 청크 ID로 복원하고 청크 원문에 글자 그대로 없는 인용은 버림
+  → Core가 청크·인용문을 다시 대조 → 답변과 200자 이내 원문 인용·URL 반환
 ```
 
 이 경로는 `BIZINFO` 현재 공고에만 제공됩니다. 기업마당 공식 `https://bizinfo.go.kr` 및 그 하위 도메인의
@@ -622,12 +622,17 @@ K-Startup 공식 URL 표시 허용은 원문 수집·RAG 지원과 별개입니�
 일반 공고 검색 컬렉션과 다른 Qdrant 컬렉션만 사용하고, 요청 공고의 청크 집합으로 검색 범위를 제한합니다.
 답변이 충분한 근거를 찾지 못하면 `INSUFFICIENT_EVIDENCE`와 인용 없는 안내를 반환합니다. `ANSWERED`에는
 검색된 청크의 인용이 하나 이상 있어야 하며 Core는 인용이 전달한 청크 밖을 가리키면 응답을 거부합니다.
-인용 발췌문은 선택한 청크 전체를 반환해 청크 뒤쪽의 답변 근거도 화면에서 확인할 수 있습니다.
+공개 응답의 `excerpt`는 청크 전체가 아니라 그 청크 원문에서 글자 그대로 옮긴 200 code point 이하의 인용입니다.
+AI Service는 인용한 청크 text에 그대로 없는 인용을 버리고, 근거 답변에 남는 인용이 없으면 503
+`EVIDENCE_QUOTE_MISMATCH`로 실패합니다. Core도 `citationQuotes[i]`가 `citationChunkIds[i]` 청크의 부분 문자열인지
+다시 확인하고 어긋나면 계약 오류로 거부합니다. 답변은 결론 한 문장과 필요할 때만 짧은 항목 최대 3개(500자 이내)로
+쓰게 하며, 인사·칭찬·마무리·면책 문구·과정 설명을 넣지 않도록 지시합니다. 근거 부족은 한 문장으로 알립니다.
 
 모델에는 64자리 해시를 복사시키지 않습니다. Agent가 이번 요청 배열에 `index`(0~4)를 붙여 전달하고
-`SupportProgramEvidenceAnswerSelection.citationChunkIndexes`를 검증한 뒤 원래 `citationChunkIds`로 변환합니다.
-`index`는 원문의 `order`와 다르며 요청마다 새로 부여합니다. 범위 초과·중복·상태 모순을 보정하거나 무시하지
-않고 기존 오류로 반환합니다. Core와 공개 HTTP의 인용 계약은 변경하지 않습니다.
+`SupportProgramEvidenceAnswerSelection.citations[{chunkIndex, quote}]`를 검증한 뒤 원래 `citationChunkIds`와
+같은 순서의 `citationQuotes`로 변환합니다. `index`는 원문의 `order`와 다르며 요청마다 새로 부여합니다.
+범위 초과·중복·상태 모순을 보정하거나 무시하지 않고 기존 오류로 반환합니다. 공개 HTTP 응답 모양
+(`excerpt`·`sourceUrl`·`chunkOrder`)은 유지하고 `excerpt`의 의미만 짧은 원문 인용으로 바뀌었습니다.
 
 첨부파일·PDF·OCR·다른 제공처 원문 수집은 이 흐름에 포함하지 않습니다. 공고 목록 검색의 의미·키워드 후보 선정·AI
 점수화와도 별도 사용 사례이므로, 원문 질문을 하지 않으면 기업마당 상세 HTML을 수집하거나 evidence 컬렉션을

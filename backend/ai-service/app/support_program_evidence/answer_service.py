@@ -12,7 +12,7 @@ from app.support_program_evidence.models import (
 
 
 class SupportProgramEvidenceAnswerService:
-    """Agent 인용이 요청한 근거 청크 집합을 벗어나지 않도록 검증한다."""
+    """Agent 인용이 요청한 근거 청크 집합과 그 청크의 원문 문자열을 벗어나지 않도록 검증한다."""
 
     def __init__(self, agent: SupportProgramEvidenceAnswerAgent, tracing: LLMTracing | None = None) -> None:
         self._agent = agent
@@ -47,7 +47,13 @@ class SupportProgramEvidenceAnswerService:
                 )
             except ValidationError as error:
                 raise SupportProgramEvidenceError() from error
-            eligible_chunk_ids = {chunk.id for chunk in request.chunks}
-            if not set(answer.citation_chunk_ids).issubset(eligible_chunk_ids):
+            chunk_texts = {chunk.id: chunk.text for chunk in request.chunks}
+            if not set(answer.citation_chunk_ids).issubset(chunk_texts):
                 raise SupportProgramEvidenceError()
+            # Core에 보내는 인용문은 모두 인용한 청크 text의 부분 문자열이어야 한다.
+            if answer.citation_quotes is None or any(
+                quote not in chunk_texts[chunk_id]
+                for chunk_id, quote in zip(answer.citation_chunk_ids, answer.citation_quotes, strict=True)
+            ):
+                raise SupportProgramEvidenceError("EVIDENCE_QUOTE_MISMATCH")
             return answer

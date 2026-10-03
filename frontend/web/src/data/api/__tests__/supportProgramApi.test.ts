@@ -384,15 +384,20 @@ describe('answerSupportProgramEvidenceQuestionApi', () => {
     await expect(answerSupportProgramEvidenceQuestionApi(command)).rejects.toThrow()
   })
 
-  it('keeps the full cited chunk when the answer evidence appears after the first 500 characters', async () => {
-    const excerpt = `${'가'.repeat(1_450)}\n신청 마감일은 2026년 9월 30일입니다.`
-    const answer = {
+  it('근거 인용은 청크 전체가 아닌 코드 포인트 기준 200자 이하의 짧은 원문 인용만 받는다', async () => {
+    const quoteAtMaximumLength = `${'가'.repeat(199)}😀`
+    const withExcerpt = (excerpt: string) => ({
       ...answeredEvidenceResponse(),
       citations: [{ ...answeredEvidenceResponse().citations[0], excerpt }],
-    }
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(answer)))
+    })
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse(withExcerpt(quoteAtMaximumLength)))
+      .mockResolvedValueOnce(jsonResponse(withExcerpt(`${'가'.repeat(200)}😀`)))
+      .mockResolvedValueOnce(jsonResponse(withExcerpt(`${'가'.repeat(1_450)}\n신청 마감일은 2026년 9월 30일입니다.`))))
 
-    await expect(answerSupportProgramEvidenceQuestionApi(command)).resolves.toEqual(answer)
+    await expect(answerSupportProgramEvidenceQuestionApi(command)).resolves.toEqual(withExcerpt(quoteAtMaximumLength))
+    await expect(answerSupportProgramEvidenceQuestionApi(command)).rejects.toThrow()
+    await expect(answerSupportProgramEvidenceQuestionApi(command)).rejects.toThrow()
   })
 
   it('AI 응답 길이를 UTF-16 길이가 아닌 유니코드 코드 포인트 기준으로 검증한다', async () => {

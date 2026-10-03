@@ -68,6 +68,7 @@ def client():
                 answer="접수 기간은 2026년 3월입니다.",
                 answerStatus=SupportProgramEvidenceAnswerStatus.ANSWERED,
                 citationChunkIds=[chunk_id],
+                citationQuotes=["접수 기간은 2026년 3월"],
             )
         ),
     )
@@ -162,7 +163,7 @@ def test_invalid_answer_contract_is_rejected_before_calling_the_agent(
     method.assert_not_called()
 
 
-def test_answers_with_only_the_agent_cited_chunk_ids(client):
+def test_answers_with_only_the_agent_cited_chunk_ids_and_exact_quotes(client):
     response = client.post(
         "/internal/v1/support-program-evidence/answers",
         json=valid_answer_body(),
@@ -173,6 +174,7 @@ def test_answers_with_only_the_agent_cited_chunk_ids(client):
         "answer": "접수 기간은 2026년 3월입니다.",
         "answerStatus": "ANSWERED",
         "citationChunkIds": [valid_chunk()["id"]],
+        "citationQuotes": ["접수 기간은 2026년 3월"],
     }
 
 
@@ -184,6 +186,7 @@ def test_returns_insufficient_evidence_without_citations():
                 answer="제공된 근거만으로는 확인하기 어렵습니다.",
                 answerStatus=SupportProgramEvidenceAnswerStatus.INSUFFICIENT_EVIDENCE,
                 citationChunkIds=[],
+                citationQuotes=[],
             )
         ),
     )
@@ -196,6 +199,7 @@ def test_returns_insufficient_evidence_without_citations():
     assert response.status_code == 200
     assert response.json()["answerStatus"] == "INSUFFICIENT_EVIDENCE"
     assert response.json()["citationChunkIds"] == []
+    assert response.json()["citationQuotes"] == []
 
 
 def test_rejects_an_agent_citation_that_was_not_in_the_request():
@@ -207,6 +211,7 @@ def test_rejects_an_agent_citation_that_was_not_in_the_request():
                 answer="외부 근거를 인용했습니다.",
                 answerStatus="ANSWERED",
                 citationChunkIds=[outsider_id],
+                citationQuotes=["접수 기간은 2026년 3월"],
             )
         ),
     )
@@ -218,6 +223,25 @@ def test_rejects_an_agent_citation_that_was_not_in_the_request():
 
     assert response.status_code == 503
     assert response.json() == {"detail": {"code": "EVIDENCE_UNAVAILABLE"}}
+
+
+@pytest.mark.parametrize("quotes", [None, ["접수 기간은 2026년 4월"]])
+def test_rejects_an_agent_answer_whose_quote_is_missing_or_not_in_the_cited_chunk(quotes):
+    output = {"answer": "접수 기간은 2026년 3월입니다.", "answerStatus": "ANSWERED", "citationChunkIds": [valid_chunk()["id"]]}
+    application = create_app(
+        settings=TEST_SETTINGS,
+        support_program_evidence_answer_agent=FixedAnswerAgent(SupportProgramEvidenceAnswerOutput.model_validate(
+            output if quotes is None else {**output, "citationQuotes": quotes},
+        )),
+    )
+    with TestClient(application) as client:
+        response = client.post(
+            "/internal/v1/support-program-evidence/answers",
+            json=valid_answer_body(),
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": {"code": "EVIDENCE_QUOTE_MISMATCH"}}
 
 
 def test_revalidates_answer_status_and_citation_invariants_after_agent_execution():

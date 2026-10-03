@@ -1,4 +1,4 @@
-/** 공고 원문에서 찾은 문장과 원문 위치를 함께 보여 주는 답변 근거입니다. */
+/** 공고 원문에서 글자 그대로 옮긴 짧은 인용(200자 이내)과 원문 위치를 함께 보여 주는 답변 근거입니다. */
 export type SupportProgramEvidenceCitation = {
   excerpt: string
   sourceUrl: string

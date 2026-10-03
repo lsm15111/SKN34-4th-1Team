@@ -191,6 +191,8 @@ export function ProgramScreen({ identity, onLogin, resumeAction, onResumed }: {
         {answerError && <Notice error>{answerError}</Notice>}
         {answer && <><Text style={styles.badge}>{answer.answerStatus === 'ANSWERED' ? 'AI 답변 · 원문 근거 포함' : '원문 근거 부족'}</Text>
           <Text selectable style={styles.body}>{answer.answer}</Text>
+          {/* 청크 전체가 아니라 Core가 원문과 글자 그대로 대조한 200자 이내 인용입니다. */}
+          {answer.citations.length > 0 && <Text style={styles.heading}>원문 인용</Text>}
           {answer.citations.map((citation, index) => <Card key={`${citation.chunkOrder}-${index}`}>
             <Text selectable style={styles.body}>“{citation.excerpt}”</Text>
             <Button variant="ghost" label={`근거 ${index + 1} 원문 열기`} onPress={() => void openSource(citation.sourceUrl)} />

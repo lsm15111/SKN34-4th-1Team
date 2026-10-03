@@ -322,6 +322,8 @@ def test_real_ai_routes_sdk_qdrant_cache_and_faults(trace_environment, monkeypat
                 else:
                     assert scenario in {"ok", "hit"}
                     assert response.json()["citationChunkIds"] == [item.id]
+                    # The fixture source is shorter than the quote limit, so the verbatim quote is the whole text.
+                    assert response.json()["citationQuotes"] == [trace.SOURCE_TEXT]
                 assert stub.TRACE_COUNTS[question] == {
                     "embedding": 1,
                     "answer": 0 if scenario == "search-fail" else 2 if scenario == "hit" else 1,

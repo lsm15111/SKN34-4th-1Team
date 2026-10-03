@@ -84,7 +84,8 @@ class SupportProgramEvidenceTracingTest {
             return
         }
         expect("answers").andRespond(withSuccess("""{
-            "answer":"PRIVATE answer","answerStatus":"ANSWERED","citationChunkIds":["${if (fault == "validate") "f".repeat(64) else chunk.id}"]
+            "answer":"PRIVATE answer","answerStatus":"ANSWERED","citationChunkIds":["${if (fault == "validate") "f".repeat(64) else chunk.id}"],
+            "citationQuotes":["원문"]
         }""", MediaType.APPLICATION_JSON))
     }
 

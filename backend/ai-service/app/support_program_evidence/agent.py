@@ -18,6 +18,7 @@ from app.support_program_evidence.models import (
     SupportProgramEvidenceAnswerOutput,
     SupportProgramEvidenceAnswerRequest,
     SupportProgramEvidenceAnswerSelection,
+    SupportProgramEvidenceAnswerStatus,
 )
 from app.support_program_evidence.prompt import (
     SUPPORT_PROGRAM_EVIDENCE_ANSWER_INSTRUCTIONS,
@@ -55,6 +56,7 @@ class SupportProgramEvidenceAnswerAgent:
         started_at = perf_counter()
         model_finished_at = None
         usage = None
+        unverified_quotes = None
         outcome = "failed"
         payload = {
             "question": request.question,
@@ -84,12 +86,22 @@ class SupportProgramEvidenceAnswerAgent:
             usage = result.usage_metadata
             with self._tracing.observation("evidence.validate_selection"):
                 selection = validate_support_program_output(result, SupportProgramEvidenceAnswerSelection)
-                if any(index >= len(request.chunks) for index in selection.citation_chunk_indexes):
+                if any(citation.chunk_index >= len(request.chunks) for citation in selection.citations):
                     raise SupportProgramEvidenceError()
+                # 고른 청크 text에 글자 그대로 없는 인용은 그 인용만 버린다. 근거 답변에 남는 인용이 없으면 실패다.
+                verified = [
+                    (request.chunks[citation.chunk_index].id, citation.quote)
+                    for citation in selection.citations
+                    if citation.quote in request.chunks[citation.chunk_index].text
+                ]
+                unverified_quotes = len(selection.citations) - len(verified)
+                if selection.answer_status is SupportProgramEvidenceAnswerStatus.ANSWERED and not verified:
+                    raise SupportProgramEvidenceError("EVIDENCE_QUOTE_MISMATCH")
                 answer = SupportProgramEvidenceAnswerOutput(
                     answer=selection.answer,
                     answerStatus=selection.answer_status,
-                    citationChunkIds=[request.chunks[index].id for index in selection.citation_chunk_indexes],
+                    citationChunkIds=[chunk_id for chunk_id, _ in verified],
+                    citationQuotes=[quote for _, quote in verified],
                 )
             outcome = "completed"
             return answer
@@ -104,7 +116,8 @@ class SupportProgramEvidenceAnswerAgent:
             cached_input_tokens, reasoning_tokens = get_support_program_usage_details(usage)
             logger.info(
                 "support_program_evidence_answer_run outcome=%s model_ms=%d validation_ms=%d elapsed_ms=%d "
-                "usage_reported=%s input_tokens=%s output_tokens=%s cached_input_tokens=%s reasoning_tokens=%s",
+                "usage_reported=%s input_tokens=%s output_tokens=%s cached_input_tokens=%s reasoning_tokens=%s "
+                "unverified_quotes=%s",
                 outcome, round(((model_finished_at or finished_at) - started_at) * 1000),
                 round((finished_at - model_finished_at) * 1000) if model_finished_at is not None else 0,
                 round((finished_at - started_at) * 1000), usage_reported,
@@ -112,4 +125,5 @@ class SupportProgramEvidenceAnswerAgent:
                 usage.get("output_tokens") if usage_reported else None,
                 cached_input_tokens,
                 reasoning_tokens,
+                unverified_quotes,
             )

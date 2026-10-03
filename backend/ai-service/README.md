@@ -404,16 +404,21 @@ Core가 제공하는 기업마당 상세 공고를 대상으로 하지만, AI Se
 |---|---|---|
 | `PUT .../chunks` | `chunks: [{id, contentHash, documentId, order, text}]`, 1~50개. `id`·`contentHash`는 소문자 SHA-256, text는 UTF-8 SHA-256과 일치하며 최대 12,000자 | `{indexedCount}` |
 | `POST .../search` | `question`: 앞뒤 공백 제거 후 1~500자, `eligibleChunks: [{id, contentHash, documentId, order}]` 1~50개, `limit`: 1~5 | `{question, matches: [{id, contentHash, documentId, order, score}]}` |
-| `POST .../answers` | `question`, `chunks: [{id, documentId, order, text}]` 1~5개 | `{answer, answerStatus, citationChunkIds}` |
+| `POST .../answers` | `question`, `chunks: [{id, documentId, order, text}]` 1~5개 | `{answer, answerStatus, citationChunkIds, citationQuotes}` |
 
 `documentId`는 최대 320자의 정규 `sourceCode:sourceProgramId`입니다. 첫 번째 콜론만 제공처 코드와 원본
 공고 ID를 나누므로 원본 ID에 추가 콜론이 있어도 됩니다. `order`는 0 이상의 정수이고, 같은 요청 안의
 청크 ID는 중복될 수 없습니다.
 
 LLM이 긴 해시를 잘못 복사하는 오류를 막기 위해, Agent는 이번 요청 배열의 짧은 `index`만 선택하게 합니다.
-모델 전용 결과는 `SupportProgramEvidenceAnswerSelection`의 `citationChunkIndexes`이며, 범위·중복·상태를
+모델 전용 결과는 `SupportProgramEvidenceAnswerSelection`의 `citations: [{chunkIndex, quote}]`이며, 범위·중복·상태를
 검증한 뒤 요청의 원래 64자리 ID로 복원합니다. 원문 `order`와 요청 배열 `index`는 다릅니다.
-공개/내부 HTTP 응답은 기존 `citationChunkIds`를 유지하고, 잘못된 선택을 자동 보정하지 않습니다.
+`quote`는 고른 청크 text에서 글자 그대로 옮긴 200 code point 이하의 연속 구절입니다. 앞뒤 공백만 떼고,
+청크 text의 부분 문자열이 아닌 인용은 그 인용만 버립니다. `ANSWERED`인데 남는 인용이 없으면 다른 근거로
+바꾸거나 근거 부족으로 숨기지 않고 503 `EVIDENCE_QUOTE_MISMATCH`로 실패합니다. 내부 HTTP 응답은
+`citationChunkIds`와 같은 순서·길이의 `citationQuotes`를 함께 보내며 Service가 부분 문자열 여부를 다시 확인합니다.
+이 필드가 없는 응답은 이전에 저장된 평가 캡처뿐이고, Core는 `citationQuotes`가 없으면 계약 오류로 거부합니다.
+답변은 결론 한 문장과 필요할 때만 `- ` 항목 최대 3개(500자 이내)로 쓰며 근거 부족은 한 문장으로 알립니다.
 
 ```text
 Core의 상세 공고 준비
@@ -429,8 +434,9 @@ Core의 상세 공고 준비
 → 최대 5개의 match 반환
 → Core가 match의 공식 text만 포함해 POST /support-program-evidence/answers 호출
 → SupportProgramEvidenceAnswerAgent → LangChain (LLM 1회)
-→ OpenAI가 이번 요청의 citationChunkIndexes 선택 → 번호 검증 후 원래 ID 복원
-→ 출력 상태·중복 인용·입력 밖 citationChunkIds 재검증 → 한국어 답변 반환
+→ OpenAI가 이번 요청의 citations(chunkIndex·원문 그대로의 quote) 선택 → 번호 검증 후 원래 ID 복원
+→ 청크 text에 그대로 없는 quote 제거(남는 인용이 없으면 EVIDENCE_QUOTE_MISMATCH)
+→ 출력 상태·중복 인용·입력 밖 citationChunkIds·quote 부분 문자열 재검증 → 한국어 답변 반환
 ```
 
 상세 근거 collection은 공고 단위 검색 collection과 이름·point ID가 다릅니다. point ID는 청크 ID와
@@ -452,7 +458,7 @@ payload 불일치, 검증 실패는 `EVIDENCE_UNAVAILABLE`입니다. 부분 검�
 대체하지 않습니다.
 
 답변 Agent는 청크 원문의 지시를 따르지 않고 데이터로만 취급합니다. 제공된 text에서 직접 확인 가능한
-내용만 한국어로 답하며, 충분한 근거가 있으면 `ANSWERED`와 하나 이상의 `citationChunkIds`를 반환합니다.
+내용만 한국어로 답하며, 충분한 근거가 있으면 `ANSWERED`와 하나 이상의 `citationChunkIds`·`citationQuotes`를 반환합니다.
 근거가 부족하면 `INSUFFICIENT_EVIDENCE`와 빈 인용 배열을 반환합니다. AI Service는 인용 ID가 요청에
 전달된 청크 집합의 부분집합인지도 다시 확인합니다.
 
@@ -702,6 +708,10 @@ OpenAI 거부·기타 SDK 오류·structured output 오류
 
 상세 답변의 입력 밖 인용 ID·중복 인용·상태와 인용 배열 불일치
 → SupportProgramEvidenceError(EVIDENCE_UNAVAILABLE)
+→ 상세정보 없는 내부 HTTP 503
+
+근거 답변의 인용문이 모두 인용 청크 원문에 글자 그대로 없음
+→ SupportProgramEvidenceError(EVIDENCE_QUOTE_MISMATCH)
 → 상세정보 없는 내부 HTTP 503
 ```
 

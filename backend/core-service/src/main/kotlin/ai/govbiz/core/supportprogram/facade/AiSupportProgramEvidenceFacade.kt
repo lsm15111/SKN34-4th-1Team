@@ -59,7 +59,9 @@ class AiSupportProgramEvidenceFacade(
             ))
         }
         return tracing.observe("core.validate") {
-            validateAnswer(answered.answer, answered.answerStatus, answered.citationChunkIds, retrieved, sourceUrl)
+            validateAnswer(
+                answered.answer, answered.answerStatus, answered.citationChunkIds, answered.citationQuotes, retrieved, sourceUrl,
+            )
         }
     }
 
@@ -117,6 +119,7 @@ class AiSupportProgramEvidenceFacade(
         rawAnswer: String?,
         rawStatus: String?,
         rawCitationIds: List<String?>?,
+        rawCitationQuotes: List<String?>?,
         retrieved: List<SupportProgramEvidenceChunk>,
         sourceUrl: String,
     ): SupportProgramEvidenceAnswerResult {
@@ -149,15 +152,24 @@ class AiSupportProgramEvidenceFacade(
         ) {
             throw AiServiceCallException.invalidResponse("AI evidence answer and citations did not agree", null)
         }
+        val quotes = rawCitationQuotes
+            ?: throw AiServiceCallException.invalidResponse("AI evidence omitted citation quotes", null)
+        if (quotes.size != nonNullCitationIds.size) {
+            throw AiServiceCallException.invalidResponse("AI evidence quotes did not match its citations", null)
+        }
 
         return SupportProgramEvidenceAnswerResult(
             answer = answer,
             answerStatus = status,
             citations = java.util.List.copyOf(
-                nonNullCitationIds.map { citationId ->
+                nonNullCitationIds.zip(quotes).map { (citationId, rawQuote) ->
                     val chunk = checkNotNull(chunksById[citationId])
+                    // 이번 답변 요청에 보낸 그 청크 원문에 글자 그대로 있는 짧은 인용만 공개 발췌로 내보냅니다.
+                    val quote = rawQuote?.takeIf {
+                        it.isNotBlank() && it.codePointCount(0, it.length) <= MAX_QUOTE_CODE_POINTS && chunk.text.contains(it)
+                    } ?: throw AiServiceCallException.invalidResponse("AI evidence quote is not in the cited chunk", null)
                     SupportProgramEvidenceCitationResult(
-                        excerpt = chunk.text,
+                        excerpt = quote,
                         sourceUrl = sourceUrl,
                         chunkOrder = chunk.order,
                     )
@@ -179,5 +191,6 @@ class AiSupportProgramEvidenceFacade(
         const val MAX_CHUNKS = 50
         const val MAX_RETRIEVED_CHUNKS = 5
         const val MAX_ANSWER_CODE_POINTS = 1_200
+        const val MAX_QUOTE_CODE_POINTS = 200
     }
 }

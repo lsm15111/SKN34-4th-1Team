@@ -51,8 +51,10 @@ def test_real_app_with_mock_http_enforces_budget_and_records_only_safe_data(tmp_
         assert calls[-1]["store"] is False
         if mode == "rate-limit":
             return httpx2.Response(429, json={"error": {"message": "PRIVATE-ERROR-DETAIL"}})
+        user = next(item["content"] for item in calls[-1]["input"] if item.get("role") == "user")
+        first_chunk = json.loads(user if isinstance(user, str) else user[0]["text"])["chunks"][0]["text"]
         answer = {"answer": "서울 소프트웨어 개발업 법인이 대상입니다. 🔎", "answerStatus": "ANSWERED",
-                  "citationChunkIndexes": [0 if mode == "success" else 4]}
+                  "citations": [{"chunkIndex": 0 if mode == "success" else 4, "quote": first_chunk[:200].strip()}]}
         return httpx2.Response(200, json={
             "id": "resp_mock", "created_at": 0, "model": evaluate.DEFAULT_OPENAI_MODEL,
             "object": "response", "status": "completed", "error": None, "incomplete_details": None,

@@ -21,11 +21,12 @@ export function EvidenceQuestionFeedback({ state, compact = false }: { state: Su
       <article className={compact ? s.evidenceAnswerCompact : s.evidenceAnswer} aria-live="polite">
         <p className={s.evidenceAnswerEyebrow}>원문 근거 답변</p>
         <p className={s.evidenceAnswerText}>{state.answer.answer}</p>
-        <h2 className={s.evidenceCitationTitle}>답변 근거</h2>
+        <h2 className={s.evidenceCitationTitle}>원문 인용</h2>
         <ol className={s.evidenceCitationList}>
           {state.answer.citations.map((citation, index) => (
             <li key={`${citation.chunkOrder}:${citation.sourceUrl}:${citation.excerpt}`} className={s.evidenceCitation}>
-              <blockquote className={s.evidenceExcerpt}>{citation.excerpt}</blockquote>
+              {/* 청크 전체가 아니라 Core가 원문과 글자 그대로 대조한 200자 이내 인용입니다. */}
+              <blockquote className={s.evidenceExcerpt} cite={citation.sourceUrl}>{citation.excerpt}</blockquote>
               <a className={s.evidenceSourceLink} href={citation.sourceUrl} target="_blank" rel="noreferrer">
                 근거 {index + 1} 원문 보기 ↗
               </a>

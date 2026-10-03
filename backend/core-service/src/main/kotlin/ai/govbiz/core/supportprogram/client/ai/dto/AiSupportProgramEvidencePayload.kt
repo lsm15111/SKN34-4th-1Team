@@ -15,8 +15,10 @@ data class AiSupportProgramEvidenceMatchPayload(
     val score: Double?,
 )
 
+/** `citationQuotes[i]`는 `citationChunkIds[i]` 청크 원문에 그대로 들어 있는 짧은 인용입니다. */
 data class AiSupportProgramEvidenceAnswerPayload(
     val answer: String?,
     val answerStatus: String?,
     val citationChunkIds: List<String?>?,
+    val citationQuotes: List<String?>?,
 )

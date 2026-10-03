@@ -4,7 +4,7 @@ from hashlib import sha256
 from typing import Annotated
 from unicodedata import category
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
 from app.support_program_identity import (
     MAX_CANONICAL_SOURCE_PROGRAM_ID_LENGTH,
@@ -13,8 +13,21 @@ from app.support_program_identity import (
 
 MAX_DOCUMENT_ID_LENGTH = MAX_CANONICAL_SOURCE_PROGRAM_ID_LENGTH
 MAX_CHUNK_TEXT_LENGTH = 12_000
-MAX_ANSWER_LENGTH = 1_200
+# 결론 한 문장과 짧은 항목 최대 3개를 담는 답변 상한이다. Core·화면은 이전 계약의 1,200자 상한을 유지한다.
+MAX_ANSWER_LENGTH = 500
+MAX_CITATIONS = 5
+MAX_CITATION_QUOTE_LENGTH = 200
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _strip_text(value: object) -> object:
+    return value.strip() if isinstance(value, str) else value
+
+
+# 인용한 청크 text에서 그대로 옮긴 연속 구절이다. 앞뒤 공백만 떼므로 뗀 뒤에도 원문의 부분 문자열이다.
+CitationQuote = Annotated[
+    str, BeforeValidator(_strip_text), Field(min_length=1, max_length=MAX_CITATION_QUOTE_LENGTH),
+]
 
 
 class EvidenceChunkLocator(BaseModel):
@@ -171,12 +184,17 @@ class SupportProgramEvidenceAnswerOutput(BaseModel):
 
     answer: str = Field(min_length=1, max_length=MAX_ANSWER_LENGTH)
     answer_status: SupportProgramEvidenceAnswerStatus = Field(alias="answerStatus")
-    citation_chunk_ids: list[str] = Field(alias="citationChunkIds", max_length=5)
+    citation_chunk_ids: list[str] = Field(alias="citationChunkIds", max_length=MAX_CITATIONS)
+    # citationChunkIds와 같은 순서로, 각 청크 text에 그대로 들어 있는 짧은 인용이다.
+    # Service는 이 값을 항상 채워 보낸다. 값이 없는 것은 이 필드 이전에 저장된 평가 캡처뿐이다.
+    citation_quotes: list[CitationQuote] | None = Field(
+        default=None, alias="citationQuotes", max_length=MAX_CITATIONS, exclude_if=lambda value: value is None,
+    )
 
     @field_validator("answer", mode="before")
     @classmethod
     def strip_answer(cls, value: object) -> object:
-        return value.strip() if isinstance(value, str) else value
+        return _strip_text(value)
 
     @field_validator("citation_chunk_ids")
     @classmethod
@@ -196,6 +214,8 @@ class SupportProgramEvidenceAnswerOutput(BaseModel):
             and self.citation_chunk_ids
         ):
             raise ValueError("INSUFFICIENT_EVIDENCE must not include citations")
+        if self.citation_quotes is not None and len(self.citation_quotes) != len(self.citation_chunk_ids):
+            raise ValueError("citationQuotes must align with citationChunkIds")
         return self
 
 
@@ -203,32 +223,37 @@ class SupportProgramEvidenceAnswerResponse(SupportProgramEvidenceAnswerOutput):
     """Core에 반환하는 검증 완료 상세 공고 근거 답변."""
 
 
+class SupportProgramEvidenceCitationSelection(BaseModel):
+    """LLM이 고른 근거 청크의 요청 배열 위치와 그 청크 text에서 그대로 옮긴 인용."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    chunk_index: int = Field(alias="chunkIndex", strict=True, ge=0, le=MAX_CITATIONS - 1)
+    quote: CitationQuote
+
+
 class SupportProgramEvidenceAnswerSelection(BaseModel):
-    """LLM은 요청 배열의 짧은 위치만 선택하고, 실제 청크 ID는 Agent가 복원한다."""
+    """LLM은 요청 배열의 짧은 위치와 원문 인용만 고르고, 실제 청크 ID는 Agent가 복원한다."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
     answer: str = Field(min_length=1, max_length=MAX_ANSWER_LENGTH)
     answer_status: SupportProgramEvidenceAnswerStatus = Field(alias="answerStatus")
-    citation_chunk_indexes: list[Annotated[int, Field(strict=True, ge=0, le=4)]] = Field(
-        alias="citationChunkIndexes", max_length=5,
-    )
+    citations: list[SupportProgramEvidenceCitationSelection] = Field(max_length=MAX_CITATIONS)
 
     @field_validator("answer", mode="before")
     @classmethod
     def strip_answer(cls, value: object) -> object:
-        return value.strip() if isinstance(value, str) else value
+        return _strip_text(value)
 
     @model_validator(mode="after")
     def require_status_consistent_citations(self) -> "SupportProgramEvidenceAnswerSelection":
-        if len(self.citation_chunk_indexes) != len(set(self.citation_chunk_indexes)):
+        indexes = [citation.chunk_index for citation in self.citations]
+        if len(indexes) != len(set(indexes)):
             raise ValueError("citation chunk indexes must be unique")
-        if self.answer_status is SupportProgramEvidenceAnswerStatus.ANSWERED and not self.citation_chunk_indexes:
+        if self.answer_status is SupportProgramEvidenceAnswerStatus.ANSWERED and not indexes:
             raise ValueError("ANSWERED requires at least one citation")
-        if (
-            self.answer_status is SupportProgramEvidenceAnswerStatus.INSUFFICIENT_EVIDENCE
-            and self.citation_chunk_indexes
-        ):
+        if self.answer_status is SupportProgramEvidenceAnswerStatus.INSUFFICIENT_EVIDENCE and indexes:
             raise ValueError("INSUFFICIENT_EVIDENCE must not include citations")
         return self
 
