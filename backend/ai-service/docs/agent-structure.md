@@ -60,7 +60,7 @@ HTTP router
 → SupportProgramEvidenceAnswerAgent
 → LangChain ChatPromptTemplate → ChatOpenAI → OpenAI Responses API (1회)
 → SupportProgramEvidenceAnswerOutput
-→ citationChunkIds가 입력 청크 ID의 부분집합인지 재검증
+→ citationChunkIds가 입력 청크 ID의 부분집합이고 citationQuotes가 각 청크 text의 부분 문자열인지 재검증
 → ANSWERED 또는 INSUFFICIENT_EVIDENCE 응답
 ```
 

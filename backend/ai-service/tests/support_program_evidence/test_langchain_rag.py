@@ -33,7 +33,8 @@ async def test_only_retrieved_current_document_text_reaches_langchain_and_citati
         catalog[match.id].model_dump(by_alias=True, exclude={"content_hash"}) for match in found.matches
     ]
     stub = ResponsesChatStub([[response_message(json.dumps({
-        "answer": "접수 기간은 2026년 9월입니다.", "answerStatus": "ANSWERED", "citationChunkIndexes": [0],
+        "answer": "접수 기간은 2026년 9월입니다.", "answerStatus": "ANSWERED",
+        "citations": [{"chunkIndex": 0, "quote": "접수 기간은 2026년 9월입니다."}],
     }, ensure_ascii=False))]])
     answers = SupportProgramEvidenceAnswerService(SupportProgramEvidenceAnswerAgent(
         model=stub.model, model_timeout_seconds=3, run_timeout_seconds=4,
@@ -45,5 +46,6 @@ async def test_only_retrieved_current_document_text_reaches_langchain_and_citati
     assert old.text not in json.dumps(sent, ensure_ascii=False)
     assert foreign.text not in json.dumps(sent, ensure_ascii=False)
     assert result.citation_chunk_ids == [current.id]
+    assert result.citation_quotes == ["접수 기간은 2026년 9월입니다."]
     assert len(stub.calls) == 1
     assert len(embedding_stub.requests) == 3

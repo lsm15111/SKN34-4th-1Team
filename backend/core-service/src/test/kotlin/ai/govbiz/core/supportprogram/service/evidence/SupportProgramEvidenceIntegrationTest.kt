@@ -141,7 +141,10 @@ class SupportProgramEvidenceIntegrationTest {
                         val chunks = SupportProgramEvidenceChunker.chunk(current)
                         body["citations"].forEach { citation ->
                             assertEquals(current.sourceUrl, citation["sourceUrl"].asString())
-                            assertEquals(chunks[citation["chunkOrder"].asInt()].text, citation["excerpt"].asString())
+                            // 공개 발췌는 청크 전체가 아니라 그 청크 원문에 그대로 있는 200자 이내 인용입니다.
+                            val excerpt = citation["excerpt"].asString()
+                            assertTrue(excerpt.isNotBlank() && excerpt.codePointCount(0, excerpt.length) <= 200)
+                            assertTrue(chunks[citation["chunkOrder"].asInt()].text.contains(excerpt))
                         }
                         if (liveUrl == null) {
                             assertEquals(case["expectedStatus"].asString(), body["answerStatus"].asString())
@@ -236,13 +239,15 @@ class SupportProgramEvidenceIntegrationTest {
         expectAiCall(HttpMethod.POST, "search", mapOf("question" to question, "eligibleChunks" to references,
             "limit" to minOf(5, chunks.size)), mapOf("question" to question, "matches" to matches))
         if (corruptDocument) return
-        val citationIds = if (case["expectedStatus"].asString() == "ANSWERED") {
+        val answered = case["expectedStatus"].asString() == "ANSWERED"
+        val citationIds = if (answered) {
             listOf(selected.first { it.text.contains(case["evidenceText"].asString()) }.id)
         } else emptyList()
+        val citationQuotes = if (answered) listOf(case["evidenceText"].asString()) else emptyList()
         expectAiCall(HttpMethod.POST, "answers", mapOf("question" to question,
             "chunks" to chunkInputs.take(5).map { it - "contentHash" }),
             mapOf("answer" to case["stubAnswer"].asString(), "answerStatus" to case["expectedStatus"].asString(),
-                "citationChunkIds" to citationIds))
+                "citationChunkIds" to citationIds, "citationQuotes" to citationQuotes))
     }
 
     private fun expectAiCall(method: HttpMethod, operation: String, request: Any, response: Any) {

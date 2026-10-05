@@ -5,6 +5,7 @@ enum class SupportProgramEvidenceAnswerStatus {
     INSUFFICIENT_EVIDENCE,
 }
 
+/** `excerpt`는 인용한 청크 원문에 글자 그대로 들어 있는 200 code point 이하의 짧은 인용입니다. */
 data class SupportProgramEvidenceCitationResult(
     val excerpt: String,
     val sourceUrl: String,

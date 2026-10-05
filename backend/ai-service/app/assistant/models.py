@@ -24,8 +24,12 @@ ShortText = Annotated[str, Field(min_length=1, max_length=160), AfterValidator(
 ParagraphText = Annotated[str, Field(min_length=1, max_length=600), AfterValidator(
     lambda value: validate_text(value, 600, allow_layout=True)
 )]
-AnswerText = Annotated[str, Field(min_length=1, max_length=600), AfterValidator(
-    lambda value: validate_text(value, 600, allow_layout=True)
+# 모델이 쓰는 답과 확인 질문이다. 결론 한 문장과 필요한 제한 한 문장, 짧은 질문 하나만 담는다.
+AnswerText = Annotated[str, Field(min_length=1, max_length=300), AfterValidator(
+    lambda value: validate_text(value, 300, allow_layout=True)
+)]
+ClarificationText = Annotated[str, Field(min_length=1, max_length=120), AfterValidator(
+    lambda value: validate_text(value, 120)
 )]
 HelpEntryId = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")]
 
@@ -122,7 +126,7 @@ class AssistantAnswerOutput(BaseModel):
     intent: AssistantIntent
     answer: AnswerText | None
     citations: list[HelpEntryId] = Field(max_length=MAX_CITATIONS)
-    clarification_question: ShortText | None = Field(alias="clarificationQuestion")
+    clarification_question: ClarificationText | None = Field(alias="clarificationQuestion")
     search_query: MessageText | None = Field(alias="searchQuery")
     account_topic: AccountTopic | None = Field(alias="accountTopic")
 
@@ -157,7 +161,7 @@ class AssistantAnswerResponse(BaseModel):
     intent: AssistantIntent
     answer: AnswerText | None
     citations: list[HelpEntryId] = Field(max_length=MAX_CITATIONS)
-    clarification_question: ShortText | None = Field(alias="clarificationQuestion")
+    clarification_question: ClarificationText | None = Field(alias="clarificationQuestion")
     search_query: MessageText | None = Field(alias="searchQuery")
     account_topic: AccountTopic | None = Field(alias="accountTopic")
 

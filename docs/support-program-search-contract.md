@@ -216,7 +216,7 @@ LLM은 입력 후보를 정확히 한 번씩 모두 평가합니다. 후보 문�
 프론트엔드도 서버 순서를 유지합니다. 접수 중 필터는 기존처럼 Core에서 접수 상태로 적용합니다.
 통과 공고가 없으면 `rankings`는 빈 배열입니다.
 
-각 대상·지역 판정에는 `explanation`(1~160 code point)과 `evidence`(0~1개)가 필수입니다. `MATCH`와
+각 대상·지역 판정에는 `explanation`(Core 검증 1~160 code point, AI 생성 1~90)과 `evidence`(0~1개)가 필수입니다. `MATCH`와
 `INCOMPATIBLE`에는 반드시 인용 1개가 있어야 하며, `UNKNOWN`은 정보 부족·사용자 확인 사항을 설명합니다.
 인용은 `{ "field": "SUMMARY" | "TARGET_DESCRIPTION", "quote": "…" }`이고 `quote`는 1~240 code point입니다.
 AI와 Core가 실제 전달한 해당 후보·해당 본문 필드의 정확한 부분 문자열인지 검사합니다. 다른 후보의 문장이나
@@ -260,7 +260,8 @@ Core는 다음 불변식을 다시 검사합니다.
 - 판정 설명·인용 개수·문자 상한과 실제 전달한 본문 내 인용의 정확한 존재 여부
 - 절단된 본문 후보는 대상·지역이 모두 `UNKNOWN`
 - 반환한 공고마다 `semanticRelevance >= 20`을 충족
-- 추천 이유가 1~3개이고 각 1~120 Unicode code point. Core와 AI가 같은 기준으로 검사하며 보조 평면 문자도 하나로 셈
+- 추천 이유가 1~3개이고 각 1~120 Unicode code point. AI는 더 짧게 1~2개·각 1~60자로 생성·검증하며 Core는 이전 응답과
+  호환되는 이 상한으로 검사합니다. 보조 평면 문자도 하나로 셈
 
 하나라도 위반하면 성공 결과를 만들지 않고 `AI_SERVICE_INVALID_RESPONSE`로 거부합니다.
 
@@ -452,7 +453,9 @@ Core만 아래 AI Service endpoint를 호출합니다. 브라우저에 공개하
 않도록 지시되며, Core도 `ANSWERED`의 인용 누락과 `INSUFFICIENT_EVIDENCE`의 인용 포함을 계약 위반으로 거부합니다.
 
 LLM 전용 입출력은 HTTP 계약과 다릅니다. Agent는 해시 ID 대신 요청 배열의 `index`와 텍스트를 전달하고,
-모델의 `citationChunkIndexes`를 범위·중복·상태 검증 후 원래 64자리 `citationChunkIds`로 복원합니다.
+모델의 `citations: [{chunkIndex, quote}]`를 범위·중복·상태 검증 후 원래 64자리 `citationChunkIds`와 같은 순서의
+`citationQuotes`로 복원합니다. `quote`는 해당 청크 text의 부분 문자열인 200 code point 이하 인용이어야 하며,
+AI Service와 Core가 각각 다시 대조합니다. 공개 응답의 `excerpt`는 이 짧은 인용입니다.
 클라이언트는 계속 위 HTTP 계약을 사용하며 `index`를 보내거나 받을 필요가 없습니다.
 
 ## 전체 카탈로그 후보 검색

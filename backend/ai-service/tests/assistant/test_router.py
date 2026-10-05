@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 
 import pytest
@@ -8,7 +9,7 @@ from agents.testing import ModelStep, ScriptedModel, assistant_message
 from fastapi.testclient import TestClient
 
 from app.assistant.agent import AssistantAgent
-from app.assistant.models import SCHEMA_VERSION
+from app.assistant.models import SCHEMA_VERSION, AssistantAnswerRequest
 from app.config import Settings
 from app.main import create_app
 
@@ -28,6 +29,23 @@ def test_http_to_service_to_agent_to_response(request_data, output_data):
     assert len(model.calls) == 1
     # The model receives the request as-is: help entries, session and screen context included.
     assert json.loads(model.first_call.input[0]["content"]) == request_data
+
+
+def test_static_help_entries_form_the_same_prompt_prefix_for_different_messages(request_data, output_data):
+    # OpenAI prompt cache reuses only an identical prefix, so the help entries must precede the user's words.
+    model = ScriptedModel([[assistant_message(json.dumps(output_data, ensure_ascii=False))] for _ in range(2)])
+    agent = AssistantAgent(model=model, model_timeout_seconds=1, run_timeout_seconds=2)
+    with TestClient(create_app(settings=SETTINGS, assistant_agent=agent)) as client:
+        for message in ("점수가 무슨 뜻이야?", "모집글은 왜 못 써요?"):
+            assert client.post(PATH, json={**request_data, "message": message}).status_code == 200
+    first, second = model.calls
+    assert first.system_instructions == second.system_instructions
+    first_input, second_input = first.input[0]["content"], second.input[0]["content"]
+    assert first_input != second_input
+    prefix = os.path.commonprefix([first_input, second_input])
+    help_entries = AssistantAnswerRequest.model_validate(request_data).model_dump(by_alias=True)["helpEntries"]
+    assert json.dumps(help_entries, ensure_ascii=False) in prefix
+    assert first_input.index('"helpEntries"') < first_input.index('"message"')
 
 
 @pytest.mark.parametrize("mutation", [{"message": " "}, {"schemaVersion": "v0"}, {"helpEntries": []}, {"turns": []}])

@@ -112,6 +112,11 @@ def test_prompt_distinguishes_requested_support_from_topic_similarity_without_re
     assert "현재 단계와 원하는 활동을 구분" in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS
     assert "최대 개수이지 채워야 할 개수가 아닙니다" in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS
     assert "UNKNOWN 규칙은 유지" in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS
+    # Short card text: conclusion first, no filler, and the generated limits match the output schema.
+    assert "결론을 첫 문장에 쓰고, 인사·칭찬·마무리·면책 문구·과정 설명 없이" in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS
+    assert "이유 1~2개이며 각 60자 이내" in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS
+    assert "모든 explanation은 1~90자" in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS
+    assert "1~3개" not in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS and "1~160자" not in SUPPORT_PROGRAM_RANKING_INSTRUCTIONS
 
 
 def test_prompt_keeps_requested_activity_and_industry_separate_from_unknown_eligibility() -> None:
@@ -532,11 +537,17 @@ async def test_preserves_incompatible_judgment_without_eligibility_score(dimensi
 
 def test_assessment_keeps_existing_reason_normalization() -> None:
     payload = valid_output().rankings[0].model_dump(by_alias=True)
-    payload["recommendationReasons"] = ["  원문 근거  ", "원문 근거", "가" * 120]
+    payload["recommendationReasons"] = ["  원문 근거  ", "원문 근거"]
 
     assessment = AssessedSupportProgram.model_validate(payload)
 
-    assert assessment.recommendation_reasons == ["원문 근거", "가" * 120]
+    assert assessment.recommendation_reasons == ["원문 근거"]
+    payload["recommendationReasons"] = ["가" * 60, "나"]
+    assert AssessedSupportProgram.model_validate(payload).recommendation_reasons == ["가" * 60, "나"]
+    for reasons in (["가" * 61], ["가", "나", "다"]):
+        payload["recommendationReasons"] = reasons
+        with pytest.raises(ValidationError):
+            AssessedSupportProgram.model_validate(payload)
 
 
 @pytest.mark.anyio
@@ -654,7 +665,8 @@ async def test_ranking_http_override_does_not_change_shared_client_for_other_age
     from app.support_program_evidence.models import SupportProgramEvidenceAnswerRequest
     captured_timeouts = []
     outputs = [llm_output_json(), json.dumps({"status": "READY", "updates": [], "answerKind": None, "clarificationKind": None}),
-               json.dumps({"answer": "제공된 공고 근거입니다.", "answerStatus": "ANSWERED", "citationChunkIndexes": [0]})]
+               json.dumps({"answer": "제공된 공고 근거입니다.", "answerStatus": "ANSWERED",
+                           "citations": [{"chunkIndex": 0, "quote": "중소기업 지원사업"}]}, ensure_ascii=False)]
     def handler(request):
         captured_timeouts.append(request.extensions["timeout"])
         return httpx2.Response(200, json=responses_body(outputs.pop(0)))
@@ -819,11 +831,12 @@ async def test_openai_request_uses_non_stored_strict_structured_output(candidate
             assert branch["properties"]["evidence"]["items"] == {
                 "type": "integer", "minimum": 0, "maximum": 1,
             }
-            assert branch["properties"]["explanation"]["maxLength"] == 160
+            assert branch["properties"]["explanation"]["maxLength"] == 90
         assert incompatible["properties"]["evidence"]["minItems"] == 1
     assert assessment_schema["properties"]["recommendationReasons"]["items"] == {
-        "type": "string", "minLength": 1, "maxLength": 120,
+        "type": "string", "minLength": 1, "maxLength": 60,
     }
+    assert assessment_schema["properties"]["recommendationReasons"]["maxItems"] == 2
     assert "SupportProgramEligibilityEvidence" not in schema["$defs"]
     payload = json.loads(user_payload(request_body))
     for candidate in payload["candidates"]:
@@ -978,7 +991,7 @@ def test_model_json_schema_enforces_known_eligibility_evidence_before_runtime_va
             output_type.model_validate_json(json.dumps(selection), strict=True)
 
 
-@pytest.mark.parametrize("reason,accepted", [("한", True), ("한" * 120, True), ("한" * 121, False), ("", False)])
+@pytest.mark.parametrize("reason,accepted", [("한", True), ("한" * 60, True), ("한" * 61, False), ("", False)])
 def test_model_json_schema_bounds_each_recommendation_reason(reason, accepted):
     from openai import pydantic_function_tool
     from jsonschema import Draft202012Validator

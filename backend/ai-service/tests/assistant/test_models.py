@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.assistant.models import AssistantAnswerOutput, AssistantAnswerRequest, AssistantAnswerResponse, SCHEMA_VERSION
+from app.assistant.prompt import ASSISTANT_INSTRUCTIONS
 
 
 def base_output(**overrides):
@@ -46,6 +47,27 @@ def test_each_intent_accepts_exactly_its_own_fields(data):
 def test_rejects_fields_that_do_not_belong_to_the_intent(data):
     with pytest.raises(ValidationError):
         AssistantAnswerOutput.model_validate(data)
+
+
+@pytest.mark.parametrize("field,limit,data", [
+    ("answer", 300, {"intent": "OUT_OF_SCOPE"}),
+    ("clarificationQuestion", 120, {"intent": "UNCLEAR"}),
+])
+def test_model_written_text_stays_within_the_short_answer_contract(field, limit, data):
+    assert AssistantAnswerOutput.model_validate(base_output(**data, **{field: "가" * limit})).model_dump(by_alias=True)[field]
+    with pytest.raises(ValidationError):
+        AssistantAnswerOutput.model_validate(base_output(**data, **{field: "가" * (limit + 1)}))
+
+
+def test_prompt_asks_for_conclusion_first_short_answers_and_keeps_help_notices():
+    # Checks the instruction contract, not whether a live model actually follows it.
+    assert "결론을 첫 문장에" in ASSISTANT_INSTRUCTIONS
+    assert "인사·칭찬·마무리·면책 문구·과정 설명 없이" in ASSISTANT_INSTRUCTIONS
+    assert "최대 두 문장" in ASSISTANT_INSTRUCTIONS and "두세 문장" not in ASSISTANT_INSTRUCTIONS
+    assert "answer 300, clarificationQuestion 120" in ASSISTANT_INSTRUCTIONS
+    assert "고를 대상이 갈릴 때만 보기를 최대 세 개" in ASSISTANT_INSTRUCTIONS
+    for notice in ("limitation", "planned·demo", "member·company", "OUT_OF_SCOPE로 보냅니다"):
+        assert notice in ASSISTANT_INSTRUCTIONS
 
 
 def test_response_revalidates_the_output_contract(output_data):

@@ -56,6 +56,13 @@ def record_evidence_trace_call(text: str, kind: str) -> str | None:
     return match[1]
 
 
+def evidence_citation(chunks: list[dict], index: int) -> dict:
+    # Like the answer contract, quote the cited chunk text verbatim (its first 200 characters).
+    # An out-of-range index keeps a placeholder quote; the AI Service rejects the index first.
+    text = chunks[index]["text"] if index < len(chunks) else "PRIVATE-MISSING-CHUNK"
+    return {"chunkIndex": index, "quote": text[:200].strip()}
+
+
 def embedding_vector(text: str, dimensions: int) -> list[float]:
     vector = [0.0] * dimensions
     if os.environ.get("CORE_TRACE_FIXTURE") == "true" and dimensions >= 3:
@@ -362,17 +369,19 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 if scenario == "timeout":
                     time.sleep(5)
+                chunks = payload["chunks"]
                 if RAG_QUERY.fullmatch(payload["question"]):
+                    indexes = ([] if scenario == "insufficient" else
+                               [len(chunks)] if scenario == "invalid-citation" else
+                               [0] if scenario in {"citation-miss", "miss"} else [0, 1])
                     self.respond_model_output(request, {
                         "answer": "PRIVATE-RAG-ANSWER", "answerStatus": "INSUFFICIENT_EVIDENCE" if scenario == "insufficient" else "ANSWERED",
-                        "citationChunkIndexes": ([] if scenario == "insufficient" else
-                                                [len(payload["chunks"])] if scenario == "invalid-citation" else
-                                                [0] if scenario in {"citation-miss", "miss"} else [0, 1]),
+                        "citations": [evidence_citation(chunks, index) for index in indexes],
                     })
                     return
                 self.respond_model_output(request, {
                     "answer": "PRIVATE-EVIDENCE-ANSWER", "answerStatus": "ANSWERED",
-                    "citationChunkIndexes": [len(payload["chunks"]) if scenario == "invalid-citation" else 0],
+                    "citations": [evidence_citation(chunks, len(chunks) if scenario == "invalid-citation" else 0)],
                 })
                 return
             # Match the Agent's keyed assessment contract. The production Service

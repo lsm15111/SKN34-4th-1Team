@@ -42,7 +42,8 @@ export const supportProgramEvidenceQuestionStyles = {
   evidenceCitationTitle: 'mt-5 mb-3 text-[0.86rem] font-extrabold text-app-ink',
   evidenceCitationList: 'm-0 grid list-decimal gap-3 pl-5',
   evidenceCitation: 'pl-1 text-app-ink',
-  evidenceExcerpt: 'm-0 whitespace-pre-wrap rounded-[1rem] bg-white px-4 py-3 text-[0.82rem] leading-[1.6] text-sample-muted',
+  // 원문에서 그대로 옮긴 짧은 인용이라 큰 상자 대신 왼쪽 선 인용으로 보여 줍니다.
+  evidenceExcerpt: 'm-0 whitespace-pre-line border-l-[3px] border-brand-primary py-0.5 pl-3 text-[0.84rem] leading-[1.6] text-app-ink',
   evidenceSourceLink: 'mt-2 inline-block rounded-full text-[0.75rem] font-extrabold text-brand-primary no-underline hover:text-[#066538] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
   // 공고 상세 안 질문 패널입니다. 답·안내는 패널 폭에 맞춘 촘촘한 판을 씁니다.
   evidenceFeedbackCompact: 'm-0 rounded-[0.85rem] bg-surface-muted px-3.5 py-2.5 text-[0.8125rem] leading-[1.55] text-app-ink',

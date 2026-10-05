@@ -542,7 +542,7 @@ describe('App navigation', () => {
       answer: '서울 소재 창업 7년 이내 중소기업이 신청 대상입니다.',
       answerStatus: 'ANSWERED',
       citations: [{
-        excerpt: `${'공고 안내입니다. '.repeat(70)}\n지원 대상은 서울 소재 창업 7년 이내 중소기업입니다.`,
+        excerpt: '지원 대상은 서울 소재 창업 7년 이내 중소기업입니다.',
         sourceUrl: detail.sourceUrl,
         chunkOrder: 0,
       }],

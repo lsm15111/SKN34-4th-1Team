@@ -13,46 +13,46 @@
     "code_sha256": "b2715707819f120f677aba684790f3f68d6c27c17c1613db455d162d89823b84"
   },
   "evaluation": {
-    "sha256": "efdd5f45689dada97ce581ccaa2b1e8215fcbb3a75e490b578834f5203523ab0",
+    "sha256": "da3c88218a98371cef347de8e61a94d756c214ae50b5eba5aa3bea8946ba4bcd",
     "files": {
-      "evaluation/support-program-evidence/evaluate.py": "0430f08ad1f51c9a8fd22119e0b4d0badac9f89ab8e254e963a4944bd79ed514",
+      "evaluation/support-program-evidence/evaluate.py": "dc82db7cb15541ed94dd28f362afcb3091015d774f6e49a8a1424c8ccd551016",
       "evaluation/support-program-evidence/official_snapshot.py": "1b97e2d2aa15ca02b50e2a999203c7f685de08afc735bb8456b880041c37abf4",
-      "evaluation/support-program-evidence/verify_flow.py": "828ff0faa4c2871dd6a880742184e5700a754a5d5307f7fc95a3c45212ade0ed",
+      "evaluation/support-program-evidence/verify_flow.py": "58c7e311bf388f6b01eb54bb762477ec5df5649b7f9e6c8b95b669744f9f4284",
       "evaluation/support-program-evidence/llmops.py": "b3aa0bb235b4aaaa1dc17a1dbd69e315d3bdbf40cd423b0f43722f5374b60839",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_identity.py": "aa706697f294fd4846263e73cd281c4a9d660a7939feb7e2e4e3d60fd5393fb1",
       "backend/ai-service/pyproject.toml": "50ef0fc8c53c9af3e1bb31fafed5200732725ea43691be538d90840d2168037c",
       "backend/ai-service/uv.lock": "349ecdd9152eb2f5479a3db41d39e9d1bf7a8f5a16103426c2cd78207add1fe3"
     },
-    "version": "efdd5f45689dada97ce581ccaa2b1e8215fcbb3a75e490b578834f5203523ab0",
+    "version": "da3c88218a98371cef347de8e61a94d756c214ae50b5eba5aa3bea8946ba4bcd",
     "scope": "fixed-answer-context-only"
   },
   "rag_evaluation": {
-    "sha256": "4d0a385a3e925738ddc61276fd60611f2a73c1295df71854421230ef5f0759ac",
+    "sha256": "3e24dd6e729d751a960a46ffb2562f797cb1c9ab561c16161ee0f3ebca27afa3",
     "files": {
       "evaluation/support-program-evidence/rag_evaluate.py": "6774edcd19cae16db10e1f68eadf3475aed9d123da3e304ee0d21ff44f205dd4",
       "evaluation/support-program-evidence/rag_replay_flow.py": "d09db8d76e89bdb25af684128618b968fa70150e76d8b5899c808551593dffd9",
       "evaluation/support-program-evidence/llmops.py": "b3aa0bb235b4aaaa1dc17a1dbd69e315d3bdbf40cd423b0f43722f5374b60839",
       "backend/ops-service/apps/evaluations/rag_replay.py": "fd662693568d6ff2713ef38b77ab68733ec1711486b72c5d6bc80faaa6012c37",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_identity.py": "aa706697f294fd4846263e73cd281c4a9d660a7939feb7e2e4e3d60fd5393fb1",
       "backend/ai-service/pyproject.toml": "50ef0fc8c53c9af3e1bb31fafed5200732725ea43691be538d90840d2168037c",
       "backend/ai-service/uv.lock": "349ecdd9152eb2f5479a3db41d39e9d1bf7a8f5a16103426c2cd78207add1fe3"
     },
-    "version": "4d0a385a3e925738ddc61276fd60611f2a73c1295df71854421230ef5f0759ac",
+    "version": "3e24dd6e729d751a960a46ffb2562f797cb1c9ab561c16161ee0f3ebca27afa3",
     "scope": "source-chunks-retrieval-answer"
   },
   "generation": {
-    "sha256": "e32e765da7d6caf6ec2287c4faacf7fecfa132b3010b58e5a434da1505b53c11",
+    "sha256": "3be895873968e37ffce5ac361de58eb381d0df6e9da11fc863220bb651181526",
     "files": {
-      "evaluation/support-program-evidence/evaluate.py": "0430f08ad1f51c9a8fd22119e0b4d0badac9f89ab8e254e963a4944bd79ed514",
+      "evaluation/support-program-evidence/evaluate.py": "dc82db7cb15541ed94dd28f362afcb3091015d774f6e49a8a1424c8ccd551016",
       "evaluation/support-program-evidence/official_snapshot.py": "1b97e2d2aa15ca02b50e2a999203c7f685de08afc735bb8456b880041c37abf4",
-      "evaluation/support-program-evidence/verify_flow.py": "828ff0faa4c2871dd6a880742184e5700a754a5d5307f7fc95a3c45212ade0ed",
+      "evaluation/support-program-evidence/verify_flow.py": "58c7e311bf388f6b01eb54bb762477ec5df5649b7f9e6c8b95b669744f9f4284",
       "backend/ai-service/app/config.py": "7fc38debcdfb14249e64a195373072d14fc124406f0753d421118f197b16918d",
-      "backend/ai-service/app/support_program_evidence/prompt.py": "d914596549f49037b9dd56e2c38c83e62e409732a25c4599db759a13d7f8c3ec",
-      "backend/ai-service/app/support_program_evidence/agent.py": "4b33489593b9af37a5f2bc27cc54f4545726b22c8c4a1d0d8b40f2322690e582",
-      "backend/ai-service/app/support_program_evidence/answer_service.py": "b223ad63c6f9d97e7e3f80b16a4cecf95b3b8c90fc8a2ba7642261b1fbc9aad5",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/prompt.py": "4619d14f2bbab179b1f11859095e0530aaa3850880524c38bd56be3397538ec0",
+      "backend/ai-service/app/support_program_evidence/agent.py": "0eeba356226d751f7ae2f0e114371cfb5c095757c5c6099a19258b6b5e44aff6",
+      "backend/ai-service/app/support_program_evidence/answer_service.py": "e137a1f1ce055b38efa33ed80daa95db3d8ec938abf3bf530a04013ff1c214e1",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_evidence/errors.py": "1297c9c6e5b964bad22c7badff4697a0703bc7f45b5490b158f0dd0294054b67",
       "backend/ai-service/app/tracing.py": "1a0495c2a9aead3ee219bab87767edc8d10371be350440440ad7534b1e1d74f1",
       "backend/ai-service/app/support_program_llm.py": "4cb756fba7473a7d13b91c620dc3652b355fa41300c7260e8e55e71d6329d79d",
@@ -60,7 +60,7 @@
       "backend/ai-service/pyproject.toml": "50ef0fc8c53c9af3e1bb31fafed5200732725ea43691be538d90840d2168037c",
       "backend/ai-service/uv.lock": "349ecdd9152eb2f5479a3db41d39e9d1bf7a8f5a16103426c2cd78207add1fe3"
     },
-    "prompt_sha256": "d1da6572a30b3e63a65d5820e07f29088276cd6eae23db55661349d388c0b626",
+    "prompt_sha256": "9138b9919e2b44ca1a59528ff17d41acf1e1d84d430c8db7819e6c114dc0b815",
     "settings": {
       "max_input_tokens": 32768,
       "max_output_tokens": 2000,
@@ -75,16 +75,16 @@
     }
   },
   "rag_generation": {
-    "sha256": "c95db6909b274c945fc90bb6217fce0cb7cf8ff4fba6cc93ffa0928a17605393",
+    "sha256": "39523245ce93b8c4ace0191a7012e6a83617ffd337eacac3a875a5ad5390e302",
     "files": {
-      "evaluation/support-program-evidence/evaluate.py": "0430f08ad1f51c9a8fd22119e0b4d0badac9f89ab8e254e963a4944bd79ed514",
+      "evaluation/support-program-evidence/evaluate.py": "dc82db7cb15541ed94dd28f362afcb3091015d774f6e49a8a1424c8ccd551016",
       "evaluation/support-program-evidence/official_snapshot.py": "1b97e2d2aa15ca02b50e2a999203c7f685de08afc735bb8456b880041c37abf4",
-      "evaluation/support-program-evidence/verify_flow.py": "828ff0faa4c2871dd6a880742184e5700a754a5d5307f7fc95a3c45212ade0ed",
+      "evaluation/support-program-evidence/verify_flow.py": "58c7e311bf388f6b01eb54bb762477ec5df5649b7f9e6c8b95b669744f9f4284",
       "backend/ai-service/app/config.py": "7fc38debcdfb14249e64a195373072d14fc124406f0753d421118f197b16918d",
-      "backend/ai-service/app/support_program_evidence/prompt.py": "d914596549f49037b9dd56e2c38c83e62e409732a25c4599db759a13d7f8c3ec",
-      "backend/ai-service/app/support_program_evidence/agent.py": "4b33489593b9af37a5f2bc27cc54f4545726b22c8c4a1d0d8b40f2322690e582",
-      "backend/ai-service/app/support_program_evidence/answer_service.py": "b223ad63c6f9d97e7e3f80b16a4cecf95b3b8c90fc8a2ba7642261b1fbc9aad5",
-      "backend/ai-service/app/support_program_evidence/models.py": "01e8da480d9ede6a976220a1a3bb6607ec8329783455d6c25c84a245a64b29b6",
+      "backend/ai-service/app/support_program_evidence/prompt.py": "4619d14f2bbab179b1f11859095e0530aaa3850880524c38bd56be3397538ec0",
+      "backend/ai-service/app/support_program_evidence/agent.py": "0eeba356226d751f7ae2f0e114371cfb5c095757c5c6099a19258b6b5e44aff6",
+      "backend/ai-service/app/support_program_evidence/answer_service.py": "e137a1f1ce055b38efa33ed80daa95db3d8ec938abf3bf530a04013ff1c214e1",
+      "backend/ai-service/app/support_program_evidence/models.py": "22f6906709cbac978668a67942b1ecdb229f3eb1f36b45f09b6f5ef42c9873c6",
       "backend/ai-service/app/support_program_evidence/errors.py": "1297c9c6e5b964bad22c7badff4697a0703bc7f45b5490b158f0dd0294054b67",
       "backend/ai-service/app/tracing.py": "1a0495c2a9aead3ee219bab87767edc8d10371be350440440ad7534b1e1d74f1",
       "backend/ai-service/app/support_program_llm.py": "4cb756fba7473a7d13b91c620dc3652b355fa41300c7260e8e55e71d6329d79d",
@@ -102,7 +102,7 @@
       "backend/ai-service/app/support_program_evidence/service.py": "3206ead966556d3cf2f73e4ab278afd1fbbaaea563054faec4d3318726539fdf",
       "backend/ai-service/app/support_program_evidence/router.py": "4ff043f5d8b25c236c24ea74e5a26ed2ae5829661834ae4ffc80d98ced3e4f72"
     },
-    "prompt_sha256": "d1da6572a30b3e63a65d5820e07f29088276cd6eae23db55661349d388c0b626",
+    "prompt_sha256": "9138b9919e2b44ca1a59528ff17d41acf1e1d84d430c8db7819e6c114dc0b815",
     "settings": {
       "max_input_tokens": 32768,
       "max_output_tokens": 2000,

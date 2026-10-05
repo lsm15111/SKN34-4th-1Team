@@ -364,8 +364,10 @@ def test_evidence_and_explanation_preserve_raw_text_and_count_code_points():
     evidence = SupportProgramEligibilityEvidence(field="SUMMARY", quote=" " + "😀" * 238 + " ")
     assert evidence.quote == " " + "😀" * 238 + " "
     value = assessment(regionAssessment={"eligibility": "UNKNOWN", "evidence": [],
-                                         "explanation": " " + "😀" * 158 + " "})
-    assert len(value.region_assessment.explanation) == 160
+                                         "explanation": " " + "😀" * 88 + " "})
+    assert len(value.region_assessment.explanation) == 90
+    with pytest.raises(ValidationError):
+        assessment(regionAssessment={"eligibility": "UNKNOWN", "evidence": [], "explanation": "가" * 91})
 
 
 def test_assessment_allows_at_most_one_quote():

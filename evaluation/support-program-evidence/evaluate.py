@@ -222,9 +222,13 @@ def diagnose_response(response: dict, request: SupportProgramEvidenceAnswerReque
     except ValueError:
         return "invalid_json"
     try:
-        if isinstance(payload, dict) and "citationChunkIndexes" in payload:
+        if isinstance(payload, dict) and "citations" in payload:
             selection = SupportProgramEvidenceAnswerSelection.model_validate(payload)
-            return "unknown_citation" if any(index >= len(request.chunks) for index in selection.citation_chunk_indexes) else "unknown"
+            if any(citation.chunk_index >= len(request.chunks) for citation in selection.citations):
+                return "unknown_citation"
+            if any(citation.quote not in request.chunks[citation.chunk_index].text for citation in selection.citations):
+                return "unverified_quote"
+            return "unknown"
         answer = SupportProgramEvidenceAnswerResponse.model_validate(payload)
     except ValueError:
         return "invalid_answer_contract"

@@ -178,6 +178,12 @@ ANSWERED는 비어 있지 않은 answer와 빈 updates, null 질문을 반환합
 | `OUT_OF_SCOPE` | `answer` | 할 수 없는 일임을 알리고 가장 가까운 기능 안내 |
 | `UNCLEAR` | `clarificationQuestion` | 종류를 정할 수 없어 한 번 되묻기 |
 
+`answer`는 결론을 첫 문장에 두는 최대 두 문장(UTF-16 300자 이내)이고, 근거 항목의 제한·준비 중·로그인 조건은
+둘째 문장 하나에 모읍니다. `clarificationQuestion`은 120자 이내 질문 하나이며 보기는 꼭 필요할 때만 넣습니다.
+인사·칭찬·마무리·면책 문구·과정 설명은 쓰지 않게 하고 AI 답변 안내는 화면이 따로 표시합니다.
+이 경로와 도구 에이전트 분류 단계의 모델 입력 JSON은 `schemaVersion`·`helpEntries`를 사용자 `message`·`history`·
+`session`·`context`보다 앞에 둡니다.
+OpenAI prompt cache는 앞부분이 같은 요청만 재사용하므로, 지시문 뒤의 고정 도움말까지 요청마다 같은 접두가 됩니다.
 Service는 의도별 필드 조합과 인용 id가 요청의 도움말 항목에 있는지 검증하고 위반이면 503으로 거절합니다.
 `HTTP API → AssistantService → AssistantAgent → OpenAI → Response`로 한 번의 typed structured 호출만 실행하며
 C02와 같은 모델·HTTP 25초/전체 실행 30초 제한, 최대 출력 1,200 tokens, store=false, tracing 비활성을 씁니다.
@@ -404,16 +410,23 @@ Core가 제공하는 기업마당 상세 공고를 대상으로 하지만, AI Se
 |---|---|---|
 | `PUT .../chunks` | `chunks: [{id, contentHash, documentId, order, text}]`, 1~50개. `id`·`contentHash`는 소문자 SHA-256, text는 UTF-8 SHA-256과 일치하며 최대 12,000자 | `{indexedCount}` |
 | `POST .../search` | `question`: 앞뒤 공백 제거 후 1~500자, `eligibleChunks: [{id, contentHash, documentId, order}]` 1~50개, `limit`: 1~5 | `{question, matches: [{id, contentHash, documentId, order, score}]}` |
-| `POST .../answers` | `question`, `chunks: [{id, documentId, order, text}]` 1~5개 | `{answer, answerStatus, citationChunkIds}` |
+| `POST .../answers` | `question`, `chunks: [{id, documentId, order, text}]` 1~5개 | `{answer, answerStatus, citationChunkIds, citationQuotes}` |
 
 `documentId`는 최대 320자의 정규 `sourceCode:sourceProgramId`입니다. 첫 번째 콜론만 제공처 코드와 원본
 공고 ID를 나누므로 원본 ID에 추가 콜론이 있어도 됩니다. `order`는 0 이상의 정수이고, 같은 요청 안의
 청크 ID는 중복될 수 없습니다.
 
 LLM이 긴 해시를 잘못 복사하는 오류를 막기 위해, Agent는 이번 요청 배열의 짧은 `index`만 선택하게 합니다.
-모델 전용 결과는 `SupportProgramEvidenceAnswerSelection`의 `citationChunkIndexes`이며, 범위·중복·상태를
+모델 전용 결과는 `SupportProgramEvidenceAnswerSelection`의 `citations: [{chunkIndex, quote}]`이며, 범위·중복·상태를
 검증한 뒤 요청의 원래 64자리 ID로 복원합니다. 원문 `order`와 요청 배열 `index`는 다릅니다.
-공개/내부 HTTP 응답은 기존 `citationChunkIds`를 유지하고, 잘못된 선택을 자동 보정하지 않습니다.
+`quote`는 고른 청크 text에서 글자 그대로 옮긴 200 code point 이하의 연속 구절입니다. Agent는 공백 차이와
+같은 모양의 문장부호(가운뎃점 `·`/`ㆍ`, 둥근·곧은 따옴표, 물결표) 차이만 허용해 청크 text에서 그 구간을 찾고,
+모델이 쓴 문자열 대신 찾은 원문 구간을 인용으로 돌려줍니다. 찾지 못했거나 원문 구간이 200 code point를 넘는
+인용은 그 인용만 버립니다. `ANSWERED`인데 남는 인용이 없으면 다른 근거로
+바꾸거나 근거 부족으로 숨기지 않고 503 `EVIDENCE_QUOTE_MISMATCH`로 실패합니다. 내부 HTTP 응답은
+`citationChunkIds`와 같은 순서·길이의 `citationQuotes`를 함께 보내며 Service가 부분 문자열 여부를 다시 확인합니다.
+이 필드가 없는 응답은 이전에 저장된 평가 캡처뿐이고, Core는 `citationQuotes`가 없으면 계약 오류로 거부합니다.
+답변은 결론 한 문장과 필요할 때만 `- ` 항목 최대 3개(500자 이내)로 쓰며 근거 부족은 한 문장으로 알립니다.
 
 ```text
 Core의 상세 공고 준비
@@ -429,8 +442,9 @@ Core의 상세 공고 준비
 → 최대 5개의 match 반환
 → Core가 match의 공식 text만 포함해 POST /support-program-evidence/answers 호출
 → SupportProgramEvidenceAnswerAgent → LangChain (LLM 1회)
-→ OpenAI가 이번 요청의 citationChunkIndexes 선택 → 번호 검증 후 원래 ID 복원
-→ 출력 상태·중복 인용·입력 밖 citationChunkIds 재검증 → 한국어 답변 반환
+→ OpenAI가 이번 요청의 citations(chunkIndex·원문 그대로의 quote) 선택 → 번호 검증 후 원래 ID 복원
+→ quote를 청크 text의 원문 구간으로 바꾸고 찾지 못한 quote 제거(남는 인용이 없으면 EVIDENCE_QUOTE_MISMATCH)
+→ 출력 상태·중복 인용·입력 밖 citationChunkIds·quote 부분 문자열 재검증 → 한국어 답변 반환
 ```
 
 상세 근거 collection은 공고 단위 검색 collection과 이름·point ID가 다릅니다. point ID는 청크 ID와
@@ -452,7 +466,7 @@ payload 불일치, 검증 실패는 `EVIDENCE_UNAVAILABLE`입니다. 부분 검�
 대체하지 않습니다.
 
 답변 Agent는 청크 원문의 지시를 따르지 않고 데이터로만 취급합니다. 제공된 text에서 직접 확인 가능한
-내용만 한국어로 답하며, 충분한 근거가 있으면 `ANSWERED`와 하나 이상의 `citationChunkIds`를 반환합니다.
+내용만 한국어로 답하며, 충분한 근거가 있으면 `ANSWERED`와 하나 이상의 `citationChunkIds`·`citationQuotes`를 반환합니다.
 근거가 부족하면 `INSUFFICIENT_EVIDENCE`와 빈 인용 배열을 반환합니다. AI Service는 인용 ID가 요청에
 전달된 청크 집합의 부분집합인지도 다시 확인합니다.
 
@@ -504,7 +518,7 @@ Agent는 후보를 빠짐없이 점수화하고 각 후보의 `targetAssessment`
 Service는 이를 HTTP의 `targetEligibility`, `regionEligibility`, `targetEvidence`, `targetExplanation`,
 `regionEvidence`, `regionExplanation`으로 옮깁니다.
 각 evidence는 `[{field: "SUMMARY" | "TARGET_DESCRIPTION", quote: "..."}]` 형태로 최대 1개이며,
-quote는 원문 그대로 1~240 Unicode code point, explanation은 1~160자입니다. 둘 다 원본 길이를 검사하고
+quote는 원문 그대로 1~240 Unicode code point, explanation은 1~90자입니다. 둘 다 원본 길이를 검사하고
 공백뿐인 값과 Unicode 제어·형식 문자를 거부하며 trim 등으로 변형하지 않습니다. MATCH·INCOMPATIBLE에는
 인용 1개가 필수이고 UNKNOWN은 0~1개와 확인할 조건을 적은 설명이 필요합니다.
 Service는 제외·점수 미달 후보까지 모두 해당 후보의 지정 본문 필드에 exact substring 인용이 존재하는지 검사합니다.
@@ -542,8 +556,10 @@ Agent가 전체 `summary`·`targetDescription`을 그대로 전달하면서 두 
 번호 배열이며 최대 1개입니다. 후보별 동적 스키마가 `0..선택지 수-1`의 정수만 허용하고 Agent가 다시
 범위를 검증한 뒤 해당 후보의 원래 field/quote를 복원합니다. 이 원문 복원 방식은 v5에서도 유지합니다.
 출력 스키마도 MATCH·UNKNOWN·INCOMPATIBLE을 각각 나눠 MATCH·INCOMPATIBLE의 근거 번호 1개를
-필수로 하고 UNKNOWN만 0~1개를 허용합니다. 추천 이유의 각 항목에도 1~120자 제한을 선언하여
+필수로 하고 UNKNOWN만 0~1개를 허용합니다. 추천 이유는 1~2개, 각 항목 1~60자 제한을 선언하여
 생성 형식은 통과했지만 서버 검증에서 거부되는 간극을 줄입니다. 원문 인용·자격 검증은 그대로 유지합니다.
+추천 이유와 설명은 결론을 첫 문장에 두고 인사·칭찬·마무리·면책 문구·과정 설명 없이 쓰도록 지시합니다.
+Core는 이전 응답과 호환되도록 기존 상한(이유 3개·120자, 설명 160자)으로 검증하므로 점수 계약 버전은 그대로입니다.
 사용하는 중첩 `anyOf`와 배열 길이 제약은 [OpenAI Structured Outputs 문서](https://developers.openai.com/api/docs/guides/structured-outputs)를 따릅니다.
 원본 식별자를 분해하지 않으며 서로 다른 후보의 같은 번호는 각자의 원문에만 대응합니다.
 
@@ -702,6 +718,10 @@ OpenAI 거부·기타 SDK 오류·structured output 오류
 
 상세 답변의 입력 밖 인용 ID·중복 인용·상태와 인용 배열 불일치
 → SupportProgramEvidenceError(EVIDENCE_UNAVAILABLE)
+→ 상세정보 없는 내부 HTTP 503
+
+근거 답변의 인용문이 모두 인용 청크 원문에 글자 그대로 없음
+→ SupportProgramEvidenceError(EVIDENCE_QUOTE_MISMATCH)
 → 상세정보 없는 내부 HTTP 503
 ```
 

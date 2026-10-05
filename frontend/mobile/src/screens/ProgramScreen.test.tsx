@@ -121,6 +121,21 @@ test('question entry preserves the existing explicit AI request and visible prog
   fireEvent.press(screen.getByText('원문에서 답변 찾기'))
   await screen.findByText('공고 원문 답변')
   expect(answer).toHaveBeenCalledWith({ ...identity, question: '신청 서류는?' }, expect.anything())
+  expect(screen.queryByText('원문 인용')).toBeNull()
+})
+test('an answered question shows each short verbatim quote with its source button', async () => {
+  answer.mockResolvedValue({ answerStatus: 'ANSWERED', answer: '사업계획서를 내야 합니다.', citations: [
+    { excerpt: '제출 서류: 사업계획서 1부', sourceUrl: 'https://www.bizinfo.go.kr/view.do?pblancId=P', chunkOrder: 2 },
+  ] })
+  render(<ProgramScreen identity={identity} onLogin={jest.fn()} />)
+  await screen.findByText('테스트 지원사업')
+  fireEvent.press(screen.getByText('원문에 질문하기'))
+  fireEvent.changeText(screen.getByLabelText('공고에 대해 궁금한 점'), '신청 서류는?')
+  fireEvent.press(screen.getByText('원문에서 답변 찾기'))
+  await screen.findByText('사업계획서를 내야 합니다.')
+  expect(screen.getByText('원문 인용')).toBeTruthy()
+  expect(screen.getByText('“제출 서류: 사업계획서 1부”')).toBeTruthy()
+  expect(screen.getByText('근거 1 원문 열기')).toBeTruthy()
 })
 test('details show the official application route and split K-Startup exclusions without a placeholder support amount', async () => {
   jest.mocked(programClient).mockReturnValue({ getDetail: jest.fn().mockResolvedValue({

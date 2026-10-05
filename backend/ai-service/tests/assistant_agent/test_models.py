@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from app.assistant_agent.models import (
     SCHEMA_VERSION, AssistantAgentAnswer, AssistantAgentRequest, AssistantAgentResponse, AssistantClassification,
 )
+from app.assistant_agent.prompts import ANSWER_INSTRUCTIONS, CLASSIFY_INSTRUCTIONS, REDUCE_INSTRUCTIONS
 
 
 def test_request_accepts_a_principal_bound_to_the_session(request_data):
@@ -129,3 +130,15 @@ def test_saved_program_documents_reject_noncanonical_source_ids(source_program_i
             "sourceCode": "BIZINFO", "sourceProgramId": source_program_id, "documentId": f"BIZINFO:{source_program_id}",
             "title": "지원사업", "applicationEndDate": None, "chunks": [],
         })
+
+
+def test_agent_prompts_ask_for_conclusion_first_two_sentence_answers():
+    # Checks the instruction contract, not whether a live model actually follows it.
+    for instructions in (CLASSIFY_INSTRUCTIONS, ANSWER_INSTRUCTIONS, REDUCE_INSTRUCTIONS):
+        assert "인사·칭찬·마무리·면책 문구·과정 설명 없이" in instructions
+        assert "두세 문장" not in instructions and "600자" not in instructions
+    assert "결론을 첫 문장에 쓰는 최대 두 문장, UTF-16 기준 300자 이내" in ANSWER_INSTRUCTIONS
+    assert "첫 문장에 지금은 맞는 모집글이 없다고" in ANSWER_INSTRUCTIONS
+    assert "최대 두 문장, UTF-16 기준 300자 이내" in REDUCE_INSTRUCTIONS
+    assert "원문을 확인하지 못했다" in REDUCE_INSTRUCTIONS and "해석임을 밝힙니다" in REDUCE_INSTRUCTIONS
+    assert "선정 가능성·합격률·자격 판정을 말하지 않습니다" in ANSWER_INSTRUCTIONS

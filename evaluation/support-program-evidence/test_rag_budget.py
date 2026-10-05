@@ -149,10 +149,19 @@ def session(tmp_path, monkeypatch, request):
         assert request.url.path == "/v1/responses"
         if fault["kind"] == "timeout":
             raise httpx2.ReadTimeout("PRIVATE", request=request)
+        user = next(item["content"] for item in body["input"] if item.get("role") == "user")
+        first_chunk = json.loads(user if isinstance(user, str) else user[0]["text"])[
+            "chunks"
+        ][0]["text"]
         answer = {
             "answer": "서울 법인 지원입니다.",
             "answerStatus": "ANSWERED",
-            "citationChunkIndexes": [999 if fault["kind"] == "citation" else 0],
+            "citations": [
+                {
+                    "chunkIndex": 999 if fault["kind"] == "citation" else 0,
+                    "quote": first_chunk[:200].strip(),
+                }
+            ],
         }
         usage = {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}
         if fault["kind"] == "usage-over":

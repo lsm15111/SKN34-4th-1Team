@@ -6,8 +6,12 @@ import type {
 } from '../../domain/entities/SupportProgramEvidenceAnswer'
 import { isOfficialSupportProgramSourceUrl } from './SupportProgramDto'
 
+// excerpt는 Core가 청크 원문과 대조한 짧은 인용입니다. 청크 전체가 아니므로 200 code point를 넘을 수 없습니다.
 const citationDtoSchema = z.object({
-  excerpt: z.string().trim().min(1).max(1_500),
+  excerpt: z.string().trim().min(1).refine(
+    (value) => Array.from(value).length <= 200,
+    '근거 인용은 유니코드 코드 포인트 기준 200자 이하여야 합니다.',
+  ),
   sourceUrl: z.string().url(),
   chunkOrder: z.number().int().min(0),
 })

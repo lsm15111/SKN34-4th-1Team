@@ -145,17 +145,25 @@ def observation(
             "Core public answer differs from recorded AI answer",
         )
         by_id = {chunk["id"]: chunk for chunk in chunks}
+        cited = list(
+            zip(response["citationChunkIds"], response["citationQuotes"], strict=True)
+        )
+        require(
+            all(quote in by_id[chunk_id]["text"] for chunk_id, quote in cited),
+            "Recorded AI quote is not in its cited chunk",
+        )
+        # Core publishes the verified short quote, not the whole cited chunk.
         expected = [
             {
-                "excerpt": by_id[chunk_id]["text"],
+                "excerpt": quote,
                 "sourceUrl": public_response["citations"][0]["sourceUrl"],
                 "chunkOrder": by_id[chunk_id]["order"],
             }
-            for chunk_id in response["citationChunkIds"]
+            for chunk_id, quote in cited
         ]
         require(
             public_response.get("citations") == expected,
-            "Core citations differ from recorded originals",
+            "Core citations differ from recorded quotes",
         )
     return result
 

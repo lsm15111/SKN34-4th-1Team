@@ -654,7 +654,8 @@ v1을 사용하던 환경은 **새 v2 인덱스 이름으로 전환하고 재색
   제공처 원문은 지원하지 않습니다. 공식 원문 수집 실패는 503, 지원하지 않는 현재 제공처는 422입니다.
   상세 URL의 리디렉션은 매번 공식 HTTPS 호스트와 같은 `pblancId`인지 검증하며 최대 3회 따릅니다.
   HTML은 jsoup `1.23.2`로 파싱하고 `.support_project_detail`의 제목이 요청한 공고와 일치할 때
-  `.view_cont` 본문만 추출합니다. 인용에는 검색된 청크 전체를 반환하며 청크당 최대 1,500 UTF-16 코드 단위입니다.
+  `.view_cont` 본문만 추출합니다. 청크는 최대 1,500 UTF-16 코드 단위이고, 인용 `excerpt`는 청크 전체가 아니라
+  AI가 고른 청크 원문에 글자 그대로 있는지 Core가 다시 대조한 200 code point 이하의 짧은 인용입니다.
 - 수집기는 `BIZINFO`·`KSTARTUP`·`MSIT`·`CNTRADE_NOTICE`이며 기업마당 외 수집기는 명시적으로 켜야 합니다. 자연어 검색·평가 fixture/capture는
   `findSearchablePresent`의 제공처 상태 JOIN으로 `index_ready=true`인 공고만 읽고, 색인 복구는
   미준비 공고도 제공처별로 처리합니다. 최신 목록은 `findPublishedPresent`로 공개된 스냅샷만 읽되

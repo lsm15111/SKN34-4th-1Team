@@ -66,7 +66,7 @@ class AiSupportProgramEvidenceClientTest {
         answerServer.expect(requestTo("http://answer.test/internal/v1/support-program-evidence/answers"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(content().json("""{"question":"신청 방법","chunks":[{"id":"$chunkId","documentId":"BIZINFO:PBLN_TEST","order":0,"text":"공식 원문 청크"}]}"""))
-            .andRespond(withSuccess("""{"answer":"온라인입니다.","answerStatus":"ANSWERED","citationChunkIds":["$chunkId"]}""", MediaType.APPLICATION_JSON))
+            .andRespond(withSuccess("""{"answer":"온라인입니다.","answerStatus":"ANSWERED","citationChunkIds":["$chunkId"],"citationQuotes":["원문 청크"]}""", MediaType.APPLICATION_JSON))
 
         assertEquals(1, client.indexChunks(AiSupportProgramEvidenceIndexRequest(listOf(chunk))).indexedCount)
         assertEquals(
@@ -79,15 +79,15 @@ class AiSupportProgramEvidenceClientTest {
                 ),
             ).matches?.single()?.score,
         )
-        assertEquals(
-            "ANSWERED",
-            client.answer(
-                AiSupportProgramEvidenceAnswerRequest(
-                    "신청 방법",
-                    listOf(AiSupportProgramEvidenceAnswerChunkRequest(chunkId, "BIZINFO:PBLN_TEST", 0, "공식 원문 청크")),
-                ),
-            ).answerStatus,
+        val answer = client.answer(
+            AiSupportProgramEvidenceAnswerRequest(
+                "신청 방법",
+                listOf(AiSupportProgramEvidenceAnswerChunkRequest(chunkId, "BIZINFO:PBLN_TEST", 0, "공식 원문 청크")),
+            ),
         )
+        assertEquals("ANSWERED", answer.answerStatus)
+        assertEquals(listOf(chunkId), answer.citationChunkIds)
+        assertEquals(listOf("원문 청크"), answer.citationQuotes)
     }
 
     @Test

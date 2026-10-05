@@ -386,6 +386,8 @@ Core 내부 전용 소비자가 기존 검색·근거 답변을 재사용하며 
 `POST /api/v1/assistant/messages`는 화면 오른쪽 아래 도우미 위젯의 자유 질문을 받습니다. 주제·질문 알약(C1)은 네트워크 없이
 프런트 도움말 데이터로 답하고, 프런트 스위치 `VITE_ASSISTANT_AI_ENABLED=true`일 때만 자유 입력이 이 경로로 옵니다(기본 꺼짐, 꺼지면 알약 안내로만 답함). Core는 길이 상한·개인 정보 마스킹·공유 요청 한도를 거친 뒤
 AI Service의 `/internal/v1/assistant/answers`를 한 번 호출해 의도 하나와 그 의도의 필드(인용·검색어·계정 영역·확인 질문)를 받습니다.
+답은 결론을 첫 문장에 두는 최대 두 문장이고, AI Service는 요청마다 같은 도움말을 사용자 말보다 앞에 넣어 OpenAI prompt cache가
+지시문과 도움말을 같은 접두로 재사용하게 합니다.
 AI Service는 DB를 보지 않고 도구도 없습니다. 상태 답(`ACCOUNT_STATE`)은 Core가 세션 계정으로 관심 공고함·받은 제안함·기업 등록을
 읽어 문장을 만들고, 검색(`SEARCH`)·원문 질문(`PROGRAM_QUESTION`)은 실행하지 않고 기존 화면으로 이동 버튼만 붙입니다.
 인용 id는 요청에 실린 도움말 안에서만, 이동 경로는 Core 상수와 도움말 행동 경로 안에서만 인정하며 어긋나면 502로 버립니다.
@@ -489,7 +491,8 @@ Web의 POST 검색은 `query`와 선택적인 `companyConditions`를 따로 보�
    요청별 strict schema의 `rankings`는 후보 ID 자체를 필수 키로 선언한 객체이며 다른 키는 금지합니다.
    Agent가 후보별 원문 조각 선택지를 제공하고, LLM은 인용문을 재작성하지 않고 근거 번호만 선택합니다.
    출력 스키마는 자격별 분기를 나눠 MATCH·INCOMPATIBLE에 근거 번호 1개를 필수로 하며,
-   UNKNOWN만 0~1개를 허용합니다. 추천 이유도 항목별 1~120자 제한을 생성 형식에 선언합니다.
+   UNKNOWN만 0~1개를 허용합니다. 추천 이유는 1~2개·항목별 1~60자, 판정 설명은 1~90자를 생성 형식에 선언하고
+   결론을 첫 문장에 두며 인사·칭찬·마무리·면책 문구·과정 설명 없이 쓰게 합니다. Core는 기존 상한으로 검증합니다.
    번호를 해당 후보의 원래 필드·문구로 복원한 뒤 검증된 키를 ID로 붙여 `AssessedSupportProgram` 목록으로 변환합니다.
    AI Service가 `2 × (semanticRelevance + supportTypeFit)`으로 관련도를 계산해 `ScoredSupportProgram`으로 변환한 뒤
    원문 인용과 자격·추천 기준을 검증하고 관련도 내림차순으로 정렬합니다. 자격 미확인은 별도로 표시합니다.
@@ -603,9 +606,9 @@ POST /api/v1/support-programs/detail/answers
   → AiSupportProgramEvidenceFacade → AI Service
       → 별도 Qdrant evidence 컬렉션에 청크 색인
       → 질문과 가까운 청크 최대 5개 검색 (동일 질문 임베딩은 최대 256개/300초 재사용)
-      → 단일 typed Agent → OpenAI 근거 답변·짧은 인용 번호 선택
-      → Agent가 검증한 번호를 요청의 원래 청크 ID로 복원
-  → Core가 청크·인용을 검증 → 답변과 원문 발췌·URL 반환
+      → 단일 typed Agent → OpenAI 근거 답변·인용 청크 번호·원문 그대로의 짧은 인용 선택
+      → Agent가 번호를 원래 청크 ID로 복원하고 인용을 청크 원문 구간으로 바꾸며 찾지 못한 인용은 버림
+  → Core가 청크·인용문을 다시 대조 → 답변과 200자 이내 원문 인용·URL 반환
 ```
 
 이 경로는 `BIZINFO` 현재 공고에만 제공됩니다. 기업마당 공식 `https://bizinfo.go.kr` 및 그 하위 도메인의
@@ -629,12 +632,18 @@ K-Startup 공식 URL 표시 허용은 원문 수집·RAG 지원과 별개입니�
 일반 공고 검색 컬렉션과 다른 Qdrant 컬렉션만 사용하고, 요청 공고의 청크 집합으로 검색 범위를 제한합니다.
 답변이 충분한 근거를 찾지 못하면 `INSUFFICIENT_EVIDENCE`와 인용 없는 안내를 반환합니다. `ANSWERED`에는
 검색된 청크의 인용이 하나 이상 있어야 하며 Core는 인용이 전달한 청크 밖을 가리키면 응답을 거부합니다.
-인용 발췌문은 선택한 청크 전체를 반환해 청크 뒤쪽의 답변 근거도 화면에서 확인할 수 있습니다.
+공개 응답의 `excerpt`는 청크 전체가 아니라 그 청크 원문에서 글자 그대로 옮긴 200 code point 이하의 인용입니다.
+AI Service는 공백·같은 모양의 문장부호 차이만 허용해 인용을 청크 text의 원문 구간으로 바꾸고, 찾지 못한 인용은
+버립니다. 근거 답변에 남는 인용이 없으면 503
+`EVIDENCE_QUOTE_MISMATCH`로 실패합니다. Core도 `citationQuotes[i]`가 `citationChunkIds[i]` 청크의 부분 문자열인지
+다시 확인하고 어긋나면 계약 오류로 거부합니다. 답변은 결론 한 문장과 필요할 때만 짧은 항목 최대 3개(500자 이내)로
+쓰게 하며, 인사·칭찬·마무리·면책 문구·과정 설명을 넣지 않도록 지시합니다. 근거 부족은 한 문장으로 알립니다.
 
 모델에는 64자리 해시를 복사시키지 않습니다. Agent가 이번 요청 배열에 `index`(0~4)를 붙여 전달하고
-`SupportProgramEvidenceAnswerSelection.citationChunkIndexes`를 검증한 뒤 원래 `citationChunkIds`로 변환합니다.
-`index`는 원문의 `order`와 다르며 요청마다 새로 부여합니다. 범위 초과·중복·상태 모순을 보정하거나 무시하지
-않고 기존 오류로 반환합니다. Core와 공개 HTTP의 인용 계약은 변경하지 않습니다.
+`SupportProgramEvidenceAnswerSelection.citations[{chunkIndex, quote}]`를 검증한 뒤 원래 `citationChunkIds`와
+같은 순서의 `citationQuotes`로 변환합니다. `index`는 원문의 `order`와 다르며 요청마다 새로 부여합니다.
+범위 초과·중복·상태 모순을 보정하거나 무시하지 않고 기존 오류로 반환합니다. 공개 HTTP 응답 모양
+(`excerpt`·`sourceUrl`·`chunkOrder`)은 유지하고 `excerpt`의 의미만 짧은 원문 인용으로 바뀌었습니다.
 
 첨부파일·PDF·OCR·다른 제공처 원문 수집은 이 흐름에 포함하지 않습니다. 공고 목록 검색의 의미·키워드 후보 선정·AI
 점수화와도 별도 사용 사례이므로, 원문 질문을 하지 않으면 기업마당 상세 HTML을 수집하거나 evidence 컬렉션을

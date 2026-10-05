@@ -78,7 +78,11 @@ async def test_three_http_routes_share_remote_trace_and_preserve_cache_hits(evid
     settings, exporter = trace_environment
     answer_service, tracing, model = make_service(settings)
     service._tracing = tracing
-    model.outputs.append([response_message(valid_selection().model_dump_json(by_alias=True))])
+    # Both answers quote the indexed chunk below verbatim.
+    selection = valid_selection().model_copy(update={"citations": [
+        valid_selection().citations[0].model_copy(update={"quote": "접수 원문"}),
+    ]})
+    model.outputs = [[response_message(selection.model_dump_json(by_alias=True))] for _ in range(2)]
     item = chunk("BIZINFO:PRIVATE-DOCUMENT", 0, "PRIVATE 접수 원문")
     app = FastAPI()
     app.include_router(router)

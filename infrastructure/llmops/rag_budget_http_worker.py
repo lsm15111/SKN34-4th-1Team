@@ -100,6 +100,10 @@ def run_session(config):
         counts["answer"] += 1
         if scenario == "model-timeout":
             raise httpx2.ReadTimeout("synthetic response loss", request=request)
+        # The answer contract quotes the cited chunk verbatim; reuse the first sent chunk text.
+        user = next(item["content"] for item in body["input"] if item.get("role") == "user")
+        sent = json.loads(user if isinstance(user, str) else user[0]["text"])
+        first_chunk = sent["chunks"][0]["text"]
         return httpx2.Response(
             200,
             json={
@@ -127,8 +131,13 @@ def run_session(config):
                                     {
                                         "answer": "서울 법인이 대상입니다.",
                                         "answerStatus": "ANSWERED",
-                                        "citationChunkIndexes": [
-                                            999 if scenario == "invalid-citation" else 0
+                                        "citations": [
+                                            {
+                                                "chunkIndex": 999
+                                                if scenario == "invalid-citation"
+                                                else 0,
+                                                "quote": first_chunk[:200].strip(),
+                                            }
                                         ],
                                     }
                                 ),

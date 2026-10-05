@@ -33,7 +33,7 @@ class AiSupportProgramEvidenceFacadeTest {
     private lateinit var client: AiSupportProgramEvidenceClient
 
     @Test
-    fun indexesRetrievesAnswersAndMapsOnlyCitedOfficialChunks() {
+    fun indexesRetrievesAnswersAndExposesOnlyTheCitedVerbatimQuote() {
         val citedText = "공고 안내입니다. ".repeat(60) + "\n신청 방법: 온라인 접수입니다."
         val chunks = listOf(chunk(0, "첫 번째 근거"), chunk(1, citedText))
         val indexRequest = indexRequest(chunks)
@@ -49,6 +49,7 @@ class AiSupportProgramEvidenceFacadeTest {
                 "신청 방법은 온라인 접수입니다.",
                 "ANSWERED",
                 listOf(chunks[1].id),
+                listOf("신청 방법: 온라인 접수입니다."),
             ),
         ).`when`(client).answer(answerRequest(QUESTION, listOf(chunks[1], chunks[0])))
 
@@ -58,7 +59,46 @@ class AiSupportProgramEvidenceFacadeTest {
         assertEquals("신청 방법은 온라인 접수입니다.", result.answer)
         assertEquals(listOf(chunks[1].order), result.citations.map { it.chunkOrder })
         assertEquals(SOURCE_URL, result.citations.single().sourceUrl)
-        assertEquals(citedText, result.citations.single().excerpt)
+        // 청크 전체(1,500자 가까이)가 아니라 원문에 그대로 있는 짧은 인용만 공개합니다.
+        assertEquals("신청 방법: 온라인 접수입니다.", result.citations.single().excerpt)
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["missing", "count", "null", "blank", "other-chunk", "paraphrase", "too-long"])
+    fun rejectsQuotesThatAreMissingMisalignedOrNotVerbatimInTheCitedChunk(quoteCase: String) {
+        val longText = "가".repeat(250)
+        val chunks = listOf(chunk(0, if (quoteCase == "too-long") longText else "첫 번째 근거"), chunk(1, "두 번째 근거"))
+        stubRetrieval(chunks)
+        val quotes: List<String?>? = when (quoteCase) {
+            "missing" -> null
+            "count" -> listOf("첫 번째 근거", "두 번째 근거")
+            "null" -> listOf(null)
+            "blank" -> listOf(" ")
+            "other-chunk" -> listOf("두 번째 근거")
+            "paraphrase" -> listOf("첫 근거")
+            "too-long" -> listOf("가".repeat(201))
+            else -> error("unexpected quote case")
+        }
+        doReturn(
+            AiSupportProgramEvidenceAnswerPayload("첫 번째 근거입니다.", "ANSWERED", listOf(chunks[0].id), quotes),
+        ).`when`(client).answer(answerRequest(QUESTION, chunks))
+
+        assertInvalid(chunks)
+    }
+
+    @Test
+    fun acceptsAQuoteAtTheUnicodeCodePointLimit() {
+        val quote = "가".repeat(199) + "😀"
+        assertEquals(200, quote.codePointCount(0, quote.length))
+        val chunks = listOf(chunk(0, "앞 문장 $quote 뒤 문장"), chunk(1, "두 번째 근거"))
+        stubRetrieval(chunks)
+        doReturn(
+            AiSupportProgramEvidenceAnswerPayload("근거 답변입니다.", "ANSWERED", listOf(chunks[0].id), listOf(quote)),
+        ).`when`(client).answer(answerRequest(QUESTION, chunks))
+
+        val result = AiSupportProgramEvidenceFacade(client).answer(QUESTION, chunks, SOURCE_URL)
+
+        assertEquals(listOf(quote), result.citations.map { it.excerpt })
     }
 
     @Test
@@ -79,7 +119,7 @@ class AiSupportProgramEvidenceFacadeTest {
             ),
         ).`when`(client).searchChunks(searchRequest(indexRequest))
         doReturn(
-            AiSupportProgramEvidenceAnswerPayload("근거 없는 답변", "ANSWERED", emptyList()),
+            AiSupportProgramEvidenceAnswerPayload("근거 없는 답변", "ANSWERED", emptyList(), emptyList()),
         ).`when`(client).answer(answerRequest(QUESTION, chunks))
 
         assertInvalid(chunks)
@@ -101,7 +141,7 @@ class AiSupportProgramEvidenceFacadeTest {
             ),
         ).`when`(client).searchChunks(searchRequest(indexRequest))
         doReturn(
-            AiSupportProgramEvidenceAnswerPayload(answer, "ANSWERED", listOf(chunks[0].id)),
+            AiSupportProgramEvidenceAnswerPayload(answer, "ANSWERED", listOf(chunks[0].id), listOf("첫 번째 근거")),
         ).`when`(client).answer(answerRequest(QUESTION, chunks))
 
         val result = AiSupportProgramEvidenceFacade(client).answer(QUESTION, chunks, SOURCE_URL)
@@ -124,7 +164,7 @@ class AiSupportProgramEvidenceFacadeTest {
             ),
         ).`when`(client).searchChunks(searchRequest(indexRequest))
         doReturn(
-            AiSupportProgramEvidenceAnswerPayload(answer, "ANSWERED", listOf(chunks[0].id)),
+            AiSupportProgramEvidenceAnswerPayload(answer, "ANSWERED", listOf(chunks[0].id), listOf("첫 번째 근거")),
         ).`when`(client).answer(answerRequest(QUESTION, chunks))
 
         assertInvalid(chunks)
@@ -157,7 +197,7 @@ class AiSupportProgramEvidenceFacadeTest {
     }
 
     @Test
-    fun sendsOnlyTheFiveRetrievedChunksToTheAnswerAndPreservesTheCitedOriginalText() {
+    fun sendsOnlyTheFiveRetrievedChunksToTheAnswerAndKeepsEachQuoteWithItsCitedChunk() {
         val chunks = (0..5).map { chunk(it, "공식 문단 $it: 사업계획서와 사업자등록증을 제출합니다.") }
         val retrieved = chunks.drop(1).reversed()
         stubRetrieval(chunks, retrieved)
@@ -166,12 +206,13 @@ class AiSupportProgramEvidenceFacadeTest {
                 "사업계획서와 사업자등록증을 제출합니다.",
                 "ANSWERED",
                 listOf(retrieved.last().id, retrieved.first().id),
+                listOf("공식 문단 1: 사업계획서", "공식 문단 5: 사업계획서와 사업자등록증"),
             ),
         ).`when`(client).answer(answerRequest(QUESTION, retrieved))
 
         val result = AiSupportProgramEvidenceFacade(client).answer(QUESTION, chunks, SOURCE_URL)
 
-        assertEquals(listOf(retrieved.last().text, retrieved.first().text), result.citations.map { it.excerpt })
+        assertEquals(listOf("공식 문단 1: 사업계획서", "공식 문단 5: 사업계획서와 사업자등록증"), result.citations.map { it.excerpt })
         assertEquals(listOf(retrieved.last().order, retrieved.first().order), result.citations.map { it.chunkOrder })
         assertEquals(listOf(SOURCE_URL, SOURCE_URL), result.citations.map { it.sourceUrl })
         verify(client).indexChunks(indexRequest(chunks))
@@ -186,7 +227,9 @@ class AiSupportProgramEvidenceFacadeTest {
         val retrieved = chunks.take(5)
         stubRetrieval(chunks, retrieved)
         doReturn(
-            AiSupportProgramEvidenceAnswerPayload("제출 서류 안내입니다.", "ANSWERED", listOf(chunks.last().id)),
+            AiSupportProgramEvidenceAnswerPayload(
+                "제출 서류 안내입니다.", "ANSWERED", listOf(chunks.last().id), listOf(chunks.last().text),
+            ),
         ).`when`(client).answer(answerRequest(QUESTION, retrieved))
 
         assertInvalid(chunks)
@@ -198,7 +241,7 @@ class AiSupportProgramEvidenceFacadeTest {
         stubRetrieval(chunks)
         val answer = "공식 원문에 제출 서류가 명시되어 있지 않아 확인할 수 없습니다."
         doReturn(
-            AiSupportProgramEvidenceAnswerPayload(answer, "INSUFFICIENT_EVIDENCE", emptyList()),
+            AiSupportProgramEvidenceAnswerPayload(answer, "INSUFFICIENT_EVIDENCE", emptyList(), emptyList()),
         ).`when`(client).answer(answerRequest(QUESTION, chunks))
 
         val result = AiSupportProgramEvidenceFacade(client).answer(QUESTION, chunks, SOURCE_URL)
@@ -213,7 +256,9 @@ class AiSupportProgramEvidenceFacadeTest {
         val chunks = chunks()
         stubRetrieval(chunks)
         doReturn(
-            AiSupportProgramEvidenceAnswerPayload("원문에서 확인할 수 없습니다.", "INSUFFICIENT_EVIDENCE", listOf(chunks[0].id)),
+            AiSupportProgramEvidenceAnswerPayload(
+                "원문에서 확인할 수 없습니다.", "INSUFFICIENT_EVIDENCE", listOf(chunks[0].id), listOf("첫 번째 근거"),
+            ),
         ).`when`(client).answer(answerRequest(QUESTION, chunks))
 
         assertInvalid(chunks)
@@ -231,7 +276,7 @@ class AiSupportProgramEvidenceFacadeTest {
             else -> error("unexpected citation case")
         }
         doReturn(
-            AiSupportProgramEvidenceAnswerPayload("제출 서류 안내입니다.", "ANSWERED", citations),
+            AiSupportProgramEvidenceAnswerPayload("제출 서류 안내입니다.", "ANSWERED", citations, citations.map { "첫 번째 근거" }),
         ).`when`(client).answer(answerRequest(QUESTION, chunks))
 
         assertInvalid(chunks)

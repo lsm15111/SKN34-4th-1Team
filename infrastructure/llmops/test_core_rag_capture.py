@@ -261,11 +261,15 @@ def test_real_ai_capture_separates_retrieval_citations_failures_and_new_source_i
                                 "answerStatus": result["answerStatus"],
                                 "citations": [
                                     {
-                                        "excerpt": by_id[cid]["text"],
+                                        "excerpt": quote,
                                         "sourceUrl": "https://example.invalid/fixture",
                                         "chunkOrder": by_id[cid]["order"],
                                     }
-                                    for cid in result["citationChunkIds"]
+                                    for cid, quote in zip(
+                                        result["citationChunkIds"],
+                                        result["citationQuotes"],
+                                        strict=True,
+                                    )
                                 ],
                             }
                     wire = [json.loads(line) for line in path.read_text().splitlines()][

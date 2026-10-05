@@ -59,7 +59,11 @@ def runner(tmp_path, monkeypatch):
         assert path == "/v1/responses"
         if fault["kind"] == "timeout":
             raise httpx2.ReadTimeout("private", request=request)
-        answer = {"answer": "무료 테스트 답변", "answerStatus": "ANSWERED", "citationChunkIndexes": [0]}
+        # The answer contract quotes the first sent chunk verbatim.
+        user = next(item["content"] for item in body["input"] if item.get("role") == "user")
+        first_chunk = json.loads(user if isinstance(user, str) else user[0]["text"])["chunks"][0]["text"]
+        answer = {"answer": "무료 테스트 답변", "answerStatus": "ANSWERED",
+                  "citations": [{"chunkIndex": 0, "quote": first_chunk[:200].strip()}]}
         return httpx2.Response(200, json={
             "id": f"resp_{len(calls)}", "object": "response", "created_at": 0, "model": body["model"],
             "status": "completed", "error": None, "incomplete_details": None, "parallel_tool_calls": False,

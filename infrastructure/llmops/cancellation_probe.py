@@ -75,7 +75,7 @@ def model_response(model):
     answer = {
         "answer": "테스트 자료만으로는 확인할 수 없습니다.",
         "answerStatus": "INSUFFICIENT_EVIDENCE",
-        "citationChunkIndexes": [],
+        "citations": [],
     }
     return {
         "id": "resp_offline_" + uuid4().hex,
