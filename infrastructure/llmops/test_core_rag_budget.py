@@ -45,7 +45,8 @@ def completed_capture(tmp_path):
         chunks = {c["id"]: c for c in doc["chunks"]}
         answer = observed["answer"]["response"]
         # The current answer contract carries one verbatim quote per cited chunk.
-        answer["citationQuotes"] = [chunks[c]["text"][:200].strip() for c in answer["citationChunkIds"]]
+        cited = answer["citationChunkIds"]
+        answer["citationQuotes"] = [chunks[c]["text"][:200].strip() for c in cited]
         calls = [
             {
                 "operation": "chunks",
@@ -73,7 +74,7 @@ def completed_capture(tmp_path):
                             "chunkOrder": chunks[c]["order"],
                             "sourceUrl": doc["sourceUrl"],
                         }
-                        for c, quote in zip(answer["citationChunkIds"], answer["citationQuotes"], strict=True)
+                        for c, quote in zip(cited, answer["citationQuotes"], strict=True)
                     ],
                 },
                 "aiCalls": calls,
