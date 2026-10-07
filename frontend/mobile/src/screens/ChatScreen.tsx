@@ -13,6 +13,7 @@ import type { LoginRequest } from '../auth/loginFlow'
 import { useAuth } from '../auth/session'
 import { SearchProgramCard } from '../components/SearchProgramCard'
 import { SearchConditionCard } from '../components/SearchConditionCard'
+import { SearchProgress } from '../components/SearchProgress'
 import { AppIcon } from '../components/AppIcon'
 import { Button, Notice, colors, styles } from '../ui'
 
@@ -24,7 +25,9 @@ const emptyContext: SupportProgramConversationContext = {
 type TimelineTarget = 'message' | 'waiting' | 'answer' | 'proposal' | 'results' | 'notice'
 
 export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active = true }: {
-  onOpenProgram: (identity: SupportProgramIdentity) => void; onLogin: (request?: LoginRequest) => void; keyboardOffset?: number; active?: boolean
+  /** `ask`이면 공고 화면에서 원문 질문 시트를 엽니다. */
+  onOpenProgram: (identity: SupportProgramIdentity, options?: { ask?: boolean }) => void
+  onLogin: (request?: LoginRequest) => void; keyboardOffset?: number; active?: boolean
 }) {
   const { session, status, invalidateSession } = useAuth()
   const composerInput = useRef<TextInput>(null)
@@ -44,6 +47,8 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
   const [result, setResult] = useState<SupportProgramSearchResult | null>(null)
   const [history, setHistory] = useState<{ role: 'user' | 'assistant'; text: string }[]>([])
   const [busy, setBusy] = useState<'interpret' | 'search' | 'restore' | null>(null)
+  // 검색을 보낸 시각입니다. 대기 화면이 지난 시간과 보통 걸리는 시간 안내를 이 시각부터 셉니다.
+  const [searchStartedAt, setSearchStartedAt] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
   const request = useRef<AbortController | null>(null)
@@ -175,7 +180,7 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
     const controller = new AbortController(); request.current = controller
     const revision = ++generation.current
     const nextContext = proposal.proposedContext
-    setBusy('search'); setError(null)
+    setBusy('search'); setSearchStartedAt(Date.now()); setError(null)
     requestTimelineScroll('waiting')
     try {
       const readiness = await client.getSearchReadiness(controller.signal)
@@ -240,9 +245,10 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
       </View>}
       {busy === 'interpret' && <View key={`message-${timelineVersions.message}`} testID="ai-search-pending-message" style={local.userBubble}
         onLayout={event => recordTimelineTarget('message', timelineVersions.message, event)}><Text style={styles.body}>{message}</Text></View>}
-      {busy && <View key={`waiting-${timelineVersions.waiting}`} testID="ai-search-waiting" accessibilityLiveRegion="polite" style={local.waiting}
-        onLayout={event => recordTimelineTarget('waiting', timelineVersions.waiting, event)}><ActivityIndicator color={colors.primary} />
-        <Text style={styles.body}>{busy === 'interpret' ? '검색 조건을 정리하는 중이에요.' : busy === 'restore' ? '로그인 전 검색 결과를 불러오는 중이에요.' : '공고를 찾는 중이에요.'}</Text></View>}
+      {busy && <View key={`waiting-${timelineVersions.waiting}`} testID="ai-search-waiting" style={busy === 'search' ? undefined : local.waiting}
+        onLayout={event => recordTimelineTarget('waiting', timelineVersions.waiting, event)}>
+        {busy === 'search' ? <SearchProgress startedAt={searchStartedAt} /> : <><ActivityIndicator color={colors.primary} />
+          <Text accessibilityLiveRegion="polite" style={styles.body}>{busy === 'interpret' ? '검색 조건을 정리하는 중이에요.' : '로그인 전 검색 결과를 불러오는 중이에요.'}</Text></>}</View>}
       {proposal?.status === 'READY' && <View key={`proposal-${timelineVersions.proposal}`} testID="ai-search-proposal" style={local.contentGroup}
         onLayout={event => recordTimelineTarget('proposal', timelineVersions.proposal, event)}>
         {message.trim() && <Notice>입력한 내용을 먼저 AI에게 보내 조건을 갱신해 주세요.</Notice>}
@@ -267,7 +273,8 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
         onLayout={event => recordTimelineTarget('results', timelineVersions.results, event)}>
         <View style={styles.row}><Text style={styles.heading}>추천 공고</Text><Text style={styles.muted}>{result.totalCount}건</Text></View>
         {result.totalCount === 0 && <Notice>조건에 맞는 공고가 없습니다. 필요한 지원이나 회사 조건을 바꿔 보세요.</Notice>}
-        {result.programs.map(program => <SearchProgramCard key={JSON.stringify([program.sourceCode, program.id])} program={program} onOpen={onOpenProgram} />)}
+        {result.programs.map(program => <SearchProgramCard key={JSON.stringify([program.sourceCode, program.id])} program={program}
+          onOpen={onOpenProgram} onAsk={(identity) => onOpenProgram(identity, { ask: true })} signedIn={Boolean(token)} />)}
         {!token && result.resultToken && result.totalCount > result.programs.length && <View style={local.locked}>
           <Text style={styles.heading}>추가 지원사업 {result.totalCount - result.programs.length}건이 있어요</Text>
           <Text style={styles.body}>로그인하면 이번 추천 결과를 최대 5건까지 확인할 수 있어요.</Text>

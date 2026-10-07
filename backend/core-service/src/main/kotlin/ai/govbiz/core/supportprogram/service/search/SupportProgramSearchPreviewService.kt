@@ -50,6 +50,7 @@ class SupportProgramSearchPreviewService(
         categories = java.util.List.copyOf(program.categories),
         regions = java.util.List.copyOf(program.regions),
         matchedReasons = java.util.List.copyOf(program.matchedReasons),
+        alsoPostedBy = java.util.List.copyOf(program.alsoPostedBy),
         eligibilityReview = program.eligibilityReview?.let { review ->
             review.copy(
                 target = review.target.copy(evidence = java.util.List.copyOf(review.target.evidence)),

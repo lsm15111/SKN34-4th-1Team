@@ -6,7 +6,8 @@ import { Notice, Page } from '../src/ui'
 import { useLoginFlow } from '../src/auth/loginFlow'
 
 export default function ProgramRoute() {
-  const { sourceCode, sourceProgramId } = useLocalSearchParams<{ sourceCode: string; sourceProgramId: string }>()
+  // ask=1은 검색 결과의 "이 공고에 질문하기"로 들어와 원문 질문 시트를 바로 여는 요청입니다.
+  const { sourceCode, sourceProgramId, ask } = useLocalSearchParams<{ sourceCode: string; sourceProgramId: string; ask?: string }>()
   const requestLogin = useLoginFlow()
   const { session } = useAuth()
   const [resume, setResume] = useState<{ action: 'save' | 'question'; token: string; sourceCode: string; sourceProgramId: string }>()
@@ -15,6 +16,7 @@ export default function ProgramRoute() {
     return <Page><Notice error>공고 링크가 올바르지 않습니다.</Notice></Page>
   }
   return <ProgramScreen key={`${session?.account.email ?? 'guest'}:${sourceCode}:${sourceProgramId}`} identity={{ sourceCode, sourceProgramId }}
+    openQuestion={ask === '1'}
     resumeAction={resume?.sourceCode === sourceCode && resume.sourceProgramId === sourceProgramId ? resume : undefined}
     onResumed={() => setResume(undefined)} onLogin={(action) => requestLogin({
       message: action === 'save' ? '관심 공고를 저장하면 웹과 앱에서 이어서 볼 수 있어요.' : '로그인하면 이 공고의 원문에 질문할 수 있어요.',

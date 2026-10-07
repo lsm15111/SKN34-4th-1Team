@@ -182,6 +182,7 @@ export function useChatPageViewModel() {
     conversationCount: chat.conversationCount,
     draft: chat.draft,
     isSearching: chat.isSearching,
+    searchStartedAt: chat.searchStartedAt,
     messages: chat.messages,
     searchError: chat.searchError,
     inputError: chat.inputError,

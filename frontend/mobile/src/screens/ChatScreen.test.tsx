@@ -33,6 +33,31 @@ describe('mobile AI search', () => {
     await screen.findByText('조건에 맞는 공고가 없습니다. 필요한 지원이나 회사 조건을 바꿔 보세요.')
   })
 
+  it('shows the search steps while searching and opens a result with its question sheet from the question action', async () => {
+    let finish!: (value: unknown) => void
+    const program = { ...programDetail, matchedReasons: [], recommendationScore: 90, eligibilityReview: null }
+    const client = { interpretConversation: jest.fn().mockResolvedValue({ status: 'READY', proposedContext: context, clarificationQuestion: null, changedFields: [] }),
+      getSearchReadiness: jest.fn().mockResolvedValue({ indexReady: true, searchState: 'SEARCHABLE' }),
+      search: jest.fn(() => new Promise((resolve) => { finish = resolve })) }
+    jest.mocked(programClient).mockReturnValue(client as unknown as ReturnType<typeof programClient>)
+    const open = jest.fn()
+    render(<ChatScreen onOpenProgram={open} onLogin={jest.fn()} />)
+    fireEvent.changeText(screen.getByLabelText('회사 상황이나 궁금한 점'), '사업화 지원')
+    fireEvent.press(screen.getByLabelText('AI에게 보내기'))
+    await screen.findByText('이 조건으로 검색할까요?')
+    fireEvent.press(screen.getByText('이 조건으로 검색'))
+    await screen.findByTestId('ai-search-progress')
+    expect(screen.getByText('✓ 조건 정리')).toBeTruthy()
+    expect(screen.getByText('○ 자격 확인')).toBeTruthy()
+    await act(async () => { finish({ query: context.query, totalCount: 1, programs: [program], resultToken: null, expiresAt: null }) })
+    await waitFor(() => expect(screen.queryByTestId('ai-search-progress')).toBeNull())
+
+    fireEvent.press(screen.getByLabelText(`${program.title}, 로그인하고 질문하기`))
+    expect(open).toHaveBeenCalledWith({ sourceCode: program.sourceCode, sourceProgramId: program.id }, { ask: true })
+    fireEvent.press(screen.getByLabelText(`${program.title}, 상세 보기`))
+    expect(open).toHaveBeenLastCalledWith({ sourceCode: program.sourceCode, sourceProgramId: program.id })
+  })
+
   it('names request limits and search timeouts like the web instead of a generic connection failure', async () => {
     const client = { interpretConversation: jest.fn()
       .mockRejectedValueOnce(new SupportProgramRequestApiError('SUPPORT_PROGRAM_RATE_LIMITED', 12))

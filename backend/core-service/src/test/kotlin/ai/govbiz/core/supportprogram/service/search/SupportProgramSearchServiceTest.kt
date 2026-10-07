@@ -282,8 +282,9 @@ class SupportProgramSearchServiceTest {
     @Test
     fun keepsSameRawIdsFromDifferentSourcesDistinctInSearchTrace() {
         val query = "서울 AI 지원"
-        val bizInfo = catalogProgram(id = "SHARED", sourceCode = "BIZINFO")
-        val other = catalogProgram(id = "SHARED", sourceCode = "OTHER")
+        // 제목까지 같으면 같은 공고로 묶이므로 원본 ID만 같은 서로 다른 공고로 둡니다.
+        val bizInfo = catalogProgram(id = "SHARED", title = "기업마당 AI 공고", sourceCode = "BIZINFO")
+        val other = catalogProgram(id = "SHARED", title = "다른 제공처 AI 공고", sourceCode = "OTHER")
         val candidates = listOf(other, bizInfo)
         Mockito.doReturn(candidates).`when`(supportProgramRepository).findSearchablePresent()
         Mockito.doReturn(candidates).`when`(retrieval).retrieve(query, candidates)
@@ -343,6 +344,31 @@ class SupportProgramSearchServiceTest {
         assertEquals(listOf("seoul", "nationwide", "body-match", "gyeongbuk", "jeonnam"), result.programs.map(SupportProgram::id))
         assertEquals(listOf(false, false, false, true, true), result.programs.map(SupportProgram::regionTagMismatch))
         assertEquals(listOf(89, 87, 86, 90, 88), result.programs.map(SupportProgram::recommendationScore))
+    }
+
+    @Test
+    fun groupsTheSameProgramFromAnotherSourceAfterRankingWithoutChangingTheRankingInput() {
+        val query = "AI 창업지원"
+        val end = LocalDate.of(2026, 9, 30)
+        val bizInfo = catalogProgram("PBLN_1", title = "[서울] AI 창업 지원사업", applicationEndDate = end)
+        val other = catalogProgram("PBLN_2", title = "부산 수출 지원", applicationEndDate = end)
+        val kStartup = catalogProgram("179197", title = "AI 창업지원사업", applicationEndDate = end, sourceCode = "KSTARTUP")
+        // 후보에 오르지 못한 같은 공고도 검색 대상에서 찾아 함께 게시로 붙입니다.
+        val notRetrieved = catalogProgram("M1", title = "부산 수출 지원", applicationEndDate = end, sourceCode = "MSIT")
+        val programs = listOf(bizInfo, other, kStartup, notRetrieved)
+        val candidates = listOf(bizInfo, other, kStartup)
+        Mockito.doReturn(programs).`when`(supportProgramRepository).findSearchablePresent()
+        Mockito.doReturn(candidates).`when`(retrieval).retrieve(query, programs)
+        ranking.response = { ranked -> ranked.mapIndexed { index, candidate -> candidate.program.copy(recommendationScore = 90 - index) } }
+
+        val trace = service().searchWithTrace(query, acceptingOnly = true)
+
+        assertEquals(candidates, ranking.calls.single().candidates)
+        assertEquals(listOf("BIZINFO:PBLN_1", "BIZINFO:PBLN_2", "KSTARTUP:179197"), trace.candidateIds)
+        assertEquals(listOf("BIZINFO:PBLN_1", "BIZINFO:PBLN_2"), trace.finalProgramIds)
+        assertEquals(listOf(listOf("KSTARTUP:179197"), listOf("MSIT:M1")),
+            trace.result.programs.map { program -> program.alsoPostedBy.map { "${it.sourceCode}:${it.id}" } })
+        assertEquals(listOf(90, 89), trace.result.programs.map(SupportProgram::recommendationScore))
     }
 
     @Test

@@ -1,19 +1,29 @@
 import { useState } from 'react'
 import { Linking, StyleSheet, Text, View } from 'react-native'
-import type { SupportProgram } from '@govbiz/shared/domain/entities/SupportProgram'
+import { supportProgramPostedTogetherLabel, supportProgramQuestionTarget, type SupportProgram } from '@govbiz/shared/domain/entities/SupportProgram'
 import { daysUntil, formatDday, programStatusLabels } from '@govbiz/shared/domain/labels'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
 import { Button, Notice, badgeColors, colors, ddayBadgeTone } from '../ui'
 
-export function SearchProgramCard({ program, onOpen }: { program: SupportProgram; onOpen?(identity: SupportProgramIdentity): void }) {
+/**
+ * AI 검색 결과 카드입니다. `onOpen`이 있으면 자세한 카드로 원문·상세·원문 질문 동작을 두고, 없으면 소개용 작은 카드입니다.
+ * 원문 질문(`onAsk`)은 서버가 질문을 받는다고 알린 공고(또는 함께 묶인 같은 공고)에만 둡니다.
+ */
+export function SearchProgramCard({ program, onOpen, onAsk, signedIn = false }: {
+  program: SupportProgram; onOpen?(identity: SupportProgramIdentity): void; onAsk?(identity: SupportProgramIdentity): void; signedIn?: boolean
+}) {
   const [linkError, setLinkError] = useState<string | null>(null)
   const review = program.eligibilityReview
   const deadline = daysUntil(program.applicationEndDate)
   const statusColor = program.status === 'OPEN' ? colors.primaryText : program.status === 'UPCOMING' ? colors.info : colors.muted
   const quotes = [...new Set([...(review?.target.evidence ?? []), ...(review?.region.evidence ?? [])].map(item => item.quote))]
-  async function openSource() {
+  const postedTogether = supportProgramPostedTogetherLabel(program)
+  const questionTarget = supportProgramQuestionTarget(program)
+  const askLabel = signedIn ? '이 공고에 질문하기' : '로그인하고 질문하기'
+  const sourceLabel = program.sourceCode === 'CNTRADE_NOTICE' ? '공식 공지 목록' : postedTogether ? `${program.sourceName} 원문 보기` : '원문 보기'
+  async function openSource(url: string) {
     setLinkError(null)
-    try { await Linking.openURL(program.sourceUrl) }
+    try { await Linking.openURL(url) }
     catch { setLinkError('공식 원문을 열지 못했습니다. 다시 시도해 주세요.') }
   }
   return <View style={[local.card, !onOpen && { padding: 12, gap: 7 }]}>
@@ -25,6 +35,7 @@ export function SearchProgramCard({ program, onOpen }: { program: SupportProgram
     <Text style={[local.title, !onOpen && { fontSize: 14, lineHeight: 21 }]}>{program.title}</Text>
     {onOpen && <Text style={local.description}>{[program.organization, ...program.regions].filter(Boolean).join(' · ')}</Text>}
     {onOpen && <Text style={local.description}>{program.applicationPeriod}</Text>}
+    {onOpen && postedTogether && <Text style={local.description}>{postedTogether}</Text>}
     <View style={[local.quote, !onOpen && { padding: 8, gap: 6 }]}>
       <View style={local.badges}>
         <Text style={[local.badge, review && review.status !== 'MATCH' ? { backgroundColor: colors.warningSoft, color: colors.warning }
@@ -39,9 +50,13 @@ export function SearchProgramCard({ program, onOpen }: { program: SupportProgram
         : <Text style={local.evidence}>확인 가능한 본문 인용이 제공되지 않았습니다.</Text>}
     </View>
     {onOpen && <>
-      <View style={local.actions}><View style={{ flex: 1 }}><Button label={program.sourceCode === 'CNTRADE_NOTICE' ? '공식 공지 목록' : '원문 보기'} variant="ghost" onPress={() => void openSource()} /></View>
+      {onAsk && questionTarget && <Button label={askLabel} accessibilityLabel={`${program.title}, ${askLabel}`} variant="secondary"
+        onPress={() => onAsk(questionTarget)} />}
+      <View style={local.actions}><View style={{ flex: 1 }}><Button label={sourceLabel} variant="ghost" onPress={() => void openSource(program.sourceUrl)} /></View>
         <Button label="상세 보기" accessibilityLabel={`${program.title}, 상세 보기`} variant="secondary"
           onPress={() => onOpen({ sourceCode: program.sourceCode, sourceProgramId: program.id })} /></View>
+      {program.alsoPostedBy?.map(posting => <Button key={posting.sourceCode} label={`${posting.sourceName} 원문 보기`} variant="ghost"
+        onPress={() => void openSource(posting.sourceUrl)} />)}
       {linkError && <Notice error>{linkError}</Notice>}
       <Text style={local.disclaimer}>관련도는 추천 순서용 점수예요. 최종 신청 조건은 원문에서 확인하세요.</Text>
     </>}

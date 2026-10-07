@@ -12,7 +12,7 @@ const modes = [{ value: 'ai', label: 'AI 검색' }, { value: 'filter', label: '�
 
 export function SearchScreen({ mode, headerHeight = 0, onModeChange, onOpenProgram, onLogin }: {
   mode: SearchMode; headerHeight?: number; onModeChange(mode: SearchMode): void
-  onOpenProgram(identity: SupportProgramIdentity): void; onLogin(request?: LoginRequest): void
+  onOpenProgram(identity: SupportProgramIdentity, options?: { ask?: boolean }): void; onLogin(request?: LoginRequest): void
 }) {
   const [visited, setVisited] = useState<Record<SearchMode, boolean>>({ ai: mode === 'ai', filter: mode === 'filter' })
   const [controlHeight, setControlHeight] = useState(0)

@@ -4,6 +4,7 @@ import ai.govbiz.core._common.exception.AiServiceCallException
 import ai.govbiz.core.supportprogram.domain.CatalogSupportProgram
 import ai.govbiz.core.supportprogram.domain.SupportProgram
 import ai.govbiz.core.supportprogram.domain.SupportProgramCompanyConditions
+import ai.govbiz.core.supportprogram.domain.SupportProgramDuplicatePostings
 import ai.govbiz.core.supportprogram.domain.SupportProgramEligibilityStatus
 import ai.govbiz.core.supportprogram.domain.SupportProgramRegionDictionary
 import ai.govbiz.core.supportprogram.domain.SupportProgramStatus
@@ -129,7 +130,10 @@ class SupportProgramSearchService(
                     companyConditions,
                     searchReferenceDate.takeIf { companyConditions != null },
                 )
-            }.let { ranked -> demoteOtherRegionPrograms(ranked, companyConditions?.region) }
+            }
+                // 랭킹 입력은 그대로 두고, 다른 제공처가 따로 올린 같은 공고를 순위가 높은 칸 하나에 묶습니다.
+                .let { ranked -> SupportProgramDuplicatePostings.group(ranked, eligiblePrograms.map(CatalogSupportProgram::program)) }
+                .let { grouped -> demoteOtherRegionPrograms(grouped, companyConditions?.region) }
         }
 
         tracing.recordSelection(candidates.map { it.program.sourceQualifiedId }, programs.map { it.sourceQualifiedId })

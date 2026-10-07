@@ -419,6 +419,7 @@ function createChatHook(overrides: Partial<ChatHook> = {}): ChatHook {
     draft: '',
     isReadyToSubmit: false,
     isSearching: false,
+    searchStartedAt: null,
     messages: [{ id: 'welcome', role: 'assistant', text: '안녕하세요.' }],
     searchError: null,
     inputError: null,

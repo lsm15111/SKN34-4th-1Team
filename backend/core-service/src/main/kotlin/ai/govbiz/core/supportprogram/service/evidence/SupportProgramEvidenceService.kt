@@ -126,8 +126,11 @@ class SupportProgramEvidenceService(
     companion object {
         private val logger = LoggerFactory.getLogger(SupportProgramEvidenceService::class.java)
         private const val MAX_CACHED_DOCUMENTS = 32
-        /** 공식 원문 근거 답변을 지원하는 유일한 제공처입니다. 상세 응답의 지원 여부도 이 값으로 정합니다. */
+        /** 공식 원문 근거 답변을 지원하는 유일한 제공처입니다. 상세·검색 결과 응답의 지원 여부도 이 값으로 정합니다. */
         const val BIZINFO_SOURCE_CODE = "BIZINFO"
+
+        /** 화면이 제공처를 직접 비교하지 않도록 응답에 싣는 원문 근거 질문 지원 여부입니다. */
+        fun supportsQuestions(sourceCode: String): Boolean = sourceCode == BIZINFO_SOURCE_CODE
         private val REFRESH_AFTER: Duration = Duration.ofHours(6)
     }
 }
