@@ -156,6 +156,10 @@ export function useChatPageViewModel() {
     composerInputRef.current?.focus()
   }
 
+  function handleQuickReply(reply: string) {
+    void chat.submitQuickReply(reply)
+  }
+
   function handleDraftChange(event: ChangeEvent<HTMLTextAreaElement>) {
     chat.updateDraft(event.target.value)
   }
@@ -201,6 +205,7 @@ export function useChatPageViewModel() {
     handleConfirmInterpretation,
     handleRetryInterpretation,
     handleClarificationInput,
+    handleQuickReply,
     searchOptions: chat.searchOptions,
     canSearch: readiness.canSearch,
     canRetrySearch: readiness.canSearch && chat.canRetrySearch && !searchLimitMessage,

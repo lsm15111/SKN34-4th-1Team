@@ -40,6 +40,7 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
     handleConfirmInterpretation,
     handleRetryInterpretation,
     handleClarificationInput,
+    handleQuickReply,
     canRetrySearch,
     cancelSearch,
     composerInputRef,
@@ -312,7 +313,8 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
       ) : null}
       {displayProposal ? (
         <ConversationProposal proposal={displayProposal}
-          onConfirm={handleConfirmInterpretation} onCancel={cancelInterpretation} onClarify={handleClarificationInput} />
+          onConfirm={handleConfirmInterpretation} onCancel={cancelInterpretation} onClarify={handleClarificationInput}
+          onQuickReply={handleQuickReply} />
       ) : null}
     </div>
   )
