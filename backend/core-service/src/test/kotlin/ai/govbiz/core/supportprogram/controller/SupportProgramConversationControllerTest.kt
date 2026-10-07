@@ -1,5 +1,6 @@
 package ai.govbiz.core.supportprogram.controller
 
+import ai.govbiz.core.planusage.PlanUsageTestHelper
 import ai.govbiz.core._common.config.JsonDeserializationConfig
 import ai.govbiz.core._common.exception.AiServiceCallException
 import ai.govbiz.core._common.exception.ApiExceptionHandler
@@ -65,7 +66,7 @@ class SupportProgramConversationControllerTest {
         val admission = SupportProgramRequestAdmissionService(SupportProgramRequestAdmissionProperties(perClient, global, concurrent)) { 0L }
         return MockMvcBuilders.standaloneSetup(
             SupportProgramConversationController(service, admission),
-            SupportProgramController(SupportProgramSearchPreviewService(search, Mockito.mock(SupportProgramSearchResultRepository::class.java)), readiness, detail, evidence, admission),
+            SupportProgramController(SupportProgramSearchPreviewService(search, Mockito.mock(SupportProgramSearchResultRepository::class.java)), readiness, detail, evidence, admission, PlanUsageTestHelper.allowAll()),
         ).setCustomArgumentResolvers(AuthenticatedAccountArgumentResolver { Mockito.mock(AccountSessionService::class.java) })
             .setControllerAdvice(ApiExceptionHandler()).setValidator(validator)
             .setMessageConverters(JacksonJsonHttpMessageConverter(mapper)).build()

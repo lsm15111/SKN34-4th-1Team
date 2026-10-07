@@ -54,14 +54,14 @@ describe('공개 요금제', () => {
     for (const name of ['무료', '플러스', '프리미엄']) {
       expect(screen.getByRole('heading', { name })).toBeTruthy()
     }
-    // 프리미엄만 출시 준비 중이고, 플러스는 정식 출시 전까지 무료로 열려 있어 로그인 뒤 관심 공고함으로 이어집니다.
+    // 지금은 모든 회원이 무료 요금제이고 플러스·프리미엄은 출시 예정이라 신청 버튼을 누를 수 없습니다.
     const pendingButtons = screen.getAllByRole('button', { name: '출시 준비 중' })
-    expect(pendingButtons).toHaveLength(1)
+    expect(pendingButtons).toHaveLength(2)
     for (const button of pendingButtons) {
       expect((button as HTMLButtonElement).disabled).toBe(true)
       fireEvent.click(button)
     }
-    expect(screen.getByRole('link', { name: '지금 무료로 이용하기' }).getAttribute('href')).toBe('/login?next=%2Fapp%2Fsaved-programs')
+    expect(screen.queryByRole('link', { name: '지금 무료로 이용하기' })).toBeNull()
     expect(screen.queryByText(/데모 화면/)).toBeNull()
     expect(fetch).not.toHaveBeenCalled()
 
@@ -92,7 +92,6 @@ describe('공개 요금제', () => {
     expect(within(sidebar).getByRole('link', { name: '요금제' }).getAttribute('aria-current')).toBe('page')
     expect(fetch).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: '무료로 지원사업 찾기' }).getAttribute('href')).toBe('/app/chat')
-    expect(screen.getByRole('link', { name: '지금 무료로 이용하기' }).getAttribute('href')).toBe('/app/saved-programs')
     fireEvent.click(screen.getByRole('link', { name: '무료로 지원사업 찾기' }))
     expect(screen.getByRole('textbox', { name: '지원사업 검색어' })).toBeTruthy()
     expect(screen.getByRole('complementary', { name: '작업 사이드바' })).toBeTruthy()

@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useId } from 'react'
 
 import type { ChatConversationProposal } from '../viewmodel/chatConversationProposal'
 import { chatPageStyles } from './ChatPage.styles'
@@ -10,6 +10,7 @@ export function ConversationProposal({ proposal, onConfirm, onCancel }: {
 }) {
   const ready = proposal.kind === 'ready'
   const canConfirm = ready && proposal.canConfirm
+  const blockedHintId = useId()
   return (
     <section className={chatPageStyles.proposalPanel} aria-label={ready ? '조건 변경 제안' : '조건 추가 확인'}>
       <div className={chatPageStyles.proposalHeader}>
@@ -58,13 +59,15 @@ export function ConversationProposal({ proposal, onConfirm, onCancel }: {
         <div className={chatPageStyles.conditionsActions}>
           <button type="button" className={chatPageStyles.proposalCancelButton} onClick={onCancel}>제안 취소</button>
           {ready ? <button type="button" className={chatPageStyles.conditionsButton} disabled={!canConfirm}
+            aria-describedby={canConfirm ? undefined : blockedHintId}
             onClick={onConfirm}>이 조건으로 검색 <span aria-hidden="true">→</span></button> : null}
         </div>
       </div>
-      {ready && !canConfirm ? <p className={chatPageStyles.conditionsHint}>
-        {proposal.hasUnsentMessage
+      {ready && !canConfirm ? <p className={chatPageStyles.conditionsHint} id={blockedHintId}>
+        {/* 한도를 다 썼으면 다른 이유보다 먼저 알립니다. 입력을 비우거나 준비를 기다려도 검색할 수 없기 때문입니다. */}
+        {proposal.searchLimitMessage ?? (proposal.hasUnsentMessage
           ? '기존 조건은 유지됩니다. 작성 중인 메시지를 전송해 조건을 변경하거나, 입력을 비우고 이 조건으로 검색해 주세요.'
-          : '공고 검색 준비가 완료되면 확인한 조건으로 검색할 수 있습니다.'}
+          : '공고 검색 준비가 완료되면 확인한 조건으로 검색할 수 있습니다.')}
       </p> : null}
     </section>
   )

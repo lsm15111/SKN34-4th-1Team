@@ -45,6 +45,14 @@ export const pricingPageStyles = {
   // 두 줄까지의 높이를 미리 확보해, 안내 문구 길이가 달라도 세 카드의 버튼 높이가 같은 선에 놓입니다.
   footerNote: 'm-0 min-h-[2.4rem] text-center text-[0.7rem] leading-[1.65]',
   releaseNote: 'm-0 break-keep text-center text-[0.78rem] leading-[1.75] text-ink-muted [text-wrap:pretty]',
+  limitsSection: 'flex min-w-0 flex-col gap-7',
+  // 좁은 화면에서는 표만 가로로 밀어 보고 페이지 전체가 가로로 넘치지 않게 합니다.
+  limitsTableWrap: 'min-w-0 overflow-x-auto rounded-[1.25rem] border border-line bg-white',
+  limitsTable: 'w-full min-w-[680px] border-collapse text-left text-[0.84rem] leading-[1.6]',
+  limitsHeadCell: 'border-b border-line bg-[#f6f7f8] px-4 py-3 text-[0.75rem] font-bold text-ink-muted',
+  limitsFeatureCell: 'border-b border-line px-4 py-3 align-top font-bold text-ink',
+  limitsNote: 'mt-0.5 block text-[0.72rem] font-normal text-ink-muted',
+  limitsCell: 'border-b border-line px-4 py-3 align-top text-ink',
   valueSection: 'flex flex-col gap-7 rounded-[1.75rem] border border-line bg-white p-[clamp(1.4rem,4vw,2.5rem)]',
   sectionHeading: 'm-0 break-keep text-[clamp(1.4rem,2.8vw,2rem)] font-extrabold leading-[1.4] tracking-[-0.045em]',
   sectionEyebrow: 'mt-0 mb-3 text-[0.72rem] font-extrabold tracking-[0.08em] text-brand-primary',

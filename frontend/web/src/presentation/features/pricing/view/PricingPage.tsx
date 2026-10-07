@@ -2,12 +2,11 @@ import { Fragment } from 'react'
 import { Link } from 'react-router'
 
 import { appPaths, publicPaths } from '../../../shared/routes/appPaths'
-import { loginPathFor } from '../../../shared/auth/returnPath'
 
 import { pricingPageStyles } from './PricingPage.styles'
 
-// 무료(지금 누구나)·플러스(우리 회사 하나를 관리, 정식 출시 전까지 회원 무료)·프리미엄(출시 준비 중) 세 단계입니다.
-// 가격은 출시 시 확정하며, 현재 결제·구독은 받지 않습니다.
+// 지금은 모든 회원이 무료 요금제이고, 플러스·프리미엄은 출시 예정입니다. 한도 숫자는 Core `PlanCode`와 같아야 합니다.
+// 가격은 부가세 포함 예정가이며, 결제·구독은 받지 않습니다.
 const plans = [
   {
     id: 'free',
@@ -16,38 +15,37 @@ const plans = [
     status: '지금 이용 가능',
     description: '우리 기업에 맞는 지원사업을 찾고, 공고의 조건부터 확인하고 싶다면.',
     price: '0원',
-    priceNote: '기본 기능 · 회원가입 없이 시작',
-    featureHeading: '지금 제공하는 기능',
+    priceNote: '회원가입 후 바로 이용 · 로그인 전에는 AI 대화 검색 하루 3회 체험',
+    featureHeading: '이용 한도',
     features: [
-      'AI 대화 검색과 필터 검색',
-      '입력한 기업 조건으로 자격 조건 확인',
-      '공고 원문 근거 질문과 답변',
-      '도우미 안내와 공개 파트너 모집글 열람',
+      'AI 대화 검색 하루 10회',
+      '공고 원문 질문 하루 10회',
+      '신청 문서 초안 월 1건 · 중복 검토 월 2회',
+      '필터 검색·공고 상세·첨부 받기는 횟수 제한 없음',
     ],
-    footerNote: '로그인 후 이용할 수 있습니다.',
+    footerNote: '하루 한도는 자정, 월 한도는 매월 1일 0시(서울 시간)에 다시 채워집니다.',
     action: 'search',
     isAvailable: true,
-    isFeatured: false,
+    isFeatured: true,
   },
   {
     id: 'plus',
     label: 'PLUS',
     name: '플러스',
-    status: '지금 이용 가능',
-    description: '공고를 모아 진행을 관리하고, 맞춤 리포트·중복 검토·신청 문서까지 이어가고 싶다면.',
+    status: '출시 예정',
+    description: '여러 공고를 동시에 준비하며 맞춤 리포트·중복 검토·신청 문서를 자주 쓰고 싶다면.',
     price: '월 9,900원',
-    priceNote: '정식 출시 전까지 회원 무료',
-    featureHeading: '제공 기능',
+    priceNote: '부가세 포함 · 공급가액 9,000원 · 연간 결제 시 연 99,000원(2개월 무료)',
+    featureHeading: '이용 한도(예정)',
     features: [
-      '기업 맞춤 리포트',
-      '신청 문서 작성',
-      '관심 공고 진행 관리',
-      '중복 지원·수혜 검토',
+      'AI 대화 검색 하루 40회',
+      '공고 원문 질문 하루 50회',
+      '신청 문서 초안 월 5건 · 중복 검토 월 20회',
     ],
-    footerNote: '정식 출시 전까지 회원에게 무료로 제공하며, 가격은 출시 시 확정합니다.',
-    action: 'pro',
-    isAvailable: true,
-    isFeatured: true,
+    footerNote: '결제는 아직 받지 않습니다. 출시 전에 가격과 결제 방법을 안내하고 동의를 받습니다.',
+    action: 'pending',
+    isAvailable: false,
+    isFeatured: false,
   },
   {
     id: 'premium',
@@ -56,17 +54,29 @@ const plans = [
     status: '출시 예정',
     description: '신청서 초안까지 AI가 먼저 채우고, 검색과 해석을 더 빠르게 받고 싶다면.',
     price: '월 29,000원',
-    priceNote: '출시 준비 중',
-    featureHeading: '출시 준비 방향',
+    priceNote: '부가세 포함 · 공급가액 26,364원 · 연간 결제 시 연 290,000원(2개월 무료)',
+    featureHeading: '이용 한도(예정)',
     features: [
-      '신청서 항목별 AI 초안 자동 채움과 원문 대조',
-      '검색·조건 해석 우선 처리와 넉넉한 요청 한도',
+      'AI 대화 검색 하루 150회',
+      '공고 원문 질문 하루 200회',
+      '신청 문서 초안 월 30건 · 중복 검토 월 100회',
+      '신청서 항목별 AI 초안 자동 채움과 검색·조건 해석 우선 처리(준비 중)',
     ],
-    footerNote: '가격과 제공 범위는 출시 시 안내합니다.',
+    footerNote: '가격과 제공 범위는 출시 시 다시 안내합니다.',
     action: 'pending',
     isAvailable: false,
     isFeatured: false,
   },
+] as const
+
+/** 요금제별 이용 한도 비교표입니다. 숫자는 서버가 실제로 세는 한도와 같고, 무제한 대신 숫자로 적습니다. */
+const limitRows = [
+  { feature: 'AI 대화 검색', note: '검색 실행 기준', guest: '하루 3회 · 결과 2건', free: '하루 10회', plus: '하루 40회', premium: '하루 150회' },
+  { feature: '공고 원문 질문', note: '', guest: '로그인 필요', free: '하루 10회', plus: '하루 50회', premium: '하루 200회' },
+  { feature: '신청 문서 초안', note: '공고 하나를 한 건으로', guest: '로그인 필요', free: '월 1건', plus: '월 5건', premium: '월 30건' },
+  { feature: '중복 지원·수혜 검토', note: '진행 중인 검토 포함', guest: '로그인 필요', free: '월 2회', plus: '월 20회', premium: '월 100회' },
+  { feature: '도우미에게 직접 질문', note: '', guest: '로그인 필요', free: '이용 가능', plus: '이용 가능', premium: '이용 가능' },
+  { feature: '필터 검색 · 공고 상세 · 첨부 받기', note: '', guest: '횟수 제한 없음', free: '횟수 제한 없음', plus: '횟수 제한 없음', premium: '횟수 제한 없음' },
 ] as const
 
 const searchSteps = [
@@ -90,11 +100,15 @@ const searchSteps = [
 const frequentlyAskedQuestions = [
   {
     question: '무료 요금제에서는 무엇을 할 수 있나요?',
-    answer: 'AI 대화 검색과 필터 검색, 입력한 기업 조건을 바탕으로 한 자격 조건 확인, 공고 원문 근거 질문, 도우미 안내, 공개 파트너 모집글 열람을 로그인 후 이용할 수 있습니다.',
+    answer: '로그인하면 AI 대화 검색 하루 10회, 공고 원문 질문 하루 10회, 신청 문서 초안 월 1건, 중복 지원·수혜 검토 월 2회를 이용할 수 있습니다. 필터 검색·공고 상세·첨부 받기는 횟수 제한이 없습니다. 로그인 전에는 AI 대화 검색을 하루 3회까지 체험할 수 있고 결과는 2건까지 보입니다. 원문 질문과 도우미 질문은 로그인 후 이용할 수 있습니다.',
+  },
+  {
+    question: '한도는 어떻게 세고 언제 다시 채워지나요?',
+    answer: '하루 한도는 매일 자정, 월 한도는 매월 1일 0시(서울 시간)에 다시 채워집니다. 실패한 검색·질문과 실패로 끝난 분석은 횟수에서 빠집니다. 신청 문서 초안은 공고 하나를 한 건으로 세므로 같은 공고의 양식 분석과 문서 생성을 다시 해도 늘지 않고, 중복 검토는 진행 중인 검토도 횟수에 들어갑니다. 남은 횟수는 내 정보 화면에서 확인할 수 있습니다.',
   },
   {
     question: '플러스와 프리미엄은 지금 신청할 수 있나요?',
-    answer: '플러스의 기업 맞춤 리포트, 신청 문서 작성, 관심 공고 진행 관리, 중복 지원·수혜 검토는 정식 출시 전까지 회원에게 무료로 열려 있어 별도 신청 없이 바로 이용할 수 있습니다. 프리미엄은 출시 준비 중이며, 표시한 가격은 예정가로 제공 범위와 이용 정책은 출시 시 확정합니다. 현재는 결제나 구독 신청을 받지 않습니다.',
+    answer: '아직 신청할 수 없습니다. 지금은 모든 회원이 무료 요금제로 이용하며 결제나 구독 신청을 받지 않습니다. 표시한 가격은 부가세를 포함한 예정가이고, 유료 요금제를 시작할 때는 가격과 결제 방법을 미리 알리고 따로 동의를 받습니다.',
   },
   {
     question: 'AI가 지원 자격이나 선정을 보장하나요?',
@@ -144,8 +158,6 @@ function PricingTitle() {
  */
 export function PricingPage({ layout = 'public' }: { layout?: PricingPageLayout }) {
   const searchPath = layout === 'workspace' ? appPaths.chat : publicPaths.landing
-  // 플러스 기능은 회원 전용이라 로그인 전에는 로그인 뒤 관심 공고함으로 돌아오게 하고, 로그인 뒤에는 바로 관심 공고함으로 갑니다.
-  const proPath = layout === 'workspace' ? appPaths.savedPrograms : loginPathFor(appPaths.savedPrograms)
   return (
     <main className={pricingPageStyles.page}>
       <section className={pricingPageStyles.hero} aria-labelledby="pricing-title">
@@ -231,10 +243,6 @@ export function PricingPage({ layout = 'public' }: { layout?: PricingPageLayout 
                     <Link className={`${pricingPageStyles.planButton} ${pricingPageStyles.availableButton}`} to={searchPath}>
                       무료로 지원사업 찾기
                     </Link>
-                  ) : plan.action === 'pro' ? (
-                    <Link className={`${pricingPageStyles.planButton} ${pricingPageStyles.availableButton}`} to={proPath}>
-                      지금 무료로 이용하기
-                    </Link>
                   ) : (
                     <button
                       className={`${pricingPageStyles.planButton} ${plan.isFeatured
@@ -253,8 +261,46 @@ export function PricingPage({ layout = 'public' }: { layout?: PricingPageLayout 
           })}
         </div>
         <p className={pricingPageStyles.releaseNote}>
-          표시한 가격은 예정가이며 출시 시 확정합니다. 플러스는 정식 출시 전까지 회원에게 무료로 제공하고, 프리미엄은 출시 예정이며, 현재 결제·구독은 제공하지 않습니다.
+          표시한 가격은 부가세를 포함한 예정가입니다. 지금은 모든 회원이 무료 요금제로 이용하며 결제·구독은 받지 않습니다.
+          유료 요금제를 시작할 때는 가격과 결제 방법을 미리 알리고 따로 동의를 받습니다.
         </p>
+      </section>
+
+      <section className={pricingPageStyles.limitsSection} aria-labelledby="pricing-limits-title">
+        <div className={pricingPageStyles.faqHeader}>
+          <h2 className={pricingPageStyles.sectionHeading} id="pricing-limits-title">요금제별 이용 한도</h2>
+          <p className={pricingPageStyles.faqDescription}>
+            AI를 쓰는 기능만 횟수를 셉니다. 실패한 요청과 분석은 횟수에서 빠집니다.
+          </p>
+        </div>
+        <div className={pricingPageStyles.limitsTableWrap}>
+          <table className={pricingPageStyles.limitsTable}>
+            <caption className="sr-only">로그인 전과 요금제별 기능 이용 한도</caption>
+            <thead>
+              <tr>
+                <th scope="col" className={pricingPageStyles.limitsHeadCell}>기능</th>
+                <th scope="col" className={pricingPageStyles.limitsHeadCell}>로그인 전</th>
+                <th scope="col" className={pricingPageStyles.limitsHeadCell}>무료</th>
+                <th scope="col" className={pricingPageStyles.limitsHeadCell}>플러스(예정)</th>
+                <th scope="col" className={pricingPageStyles.limitsHeadCell}>프리미엄(예정)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {limitRows.map((row) => (
+                <tr key={row.feature}>
+                  <th scope="row" className={pricingPageStyles.limitsFeatureCell}>
+                    {row.feature}
+                    {row.note ? <span className={pricingPageStyles.limitsNote}>{row.note}</span> : null}
+                  </th>
+                  <td className={pricingPageStyles.limitsCell}>{row.guest}</td>
+                  <td className={pricingPageStyles.limitsCell}>{row.free}</td>
+                  <td className={pricingPageStyles.limitsCell}>{row.plus}</td>
+                  <td className={pricingPageStyles.limitsCell}>{row.premium}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className={pricingPageStyles.valueSection} aria-labelledby="pricing-value-title">

@@ -22,6 +22,7 @@ import { WorkspaceModal } from '../../../shared/workspace/WorkspaceModal'
 import { WorkspaceToast, type WorkspaceToastNotice } from '../../../shared/workspace/WorkspaceToast'
 import { useDelayedFlag } from '../../../shared/workspace/useDelayedFlag'
 import { useFloatingPopover } from '../../../shared/workspace/useFloatingPopover'
+import { PlanUsageLine } from '../../../shared/plan-usage/PlanUsageLine'
 import { ReviewEditorSkeleton, ReviewListSkeleton, ReviewRunResultSkeleton } from './ReviewSkeletons'
 
 const listTitle = '중복 지원·수혜 검토'
@@ -308,7 +309,9 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
   // 주 버튼을 누를 수 없는 이유입니다. 버튼 옆에 적고 aria-describedby로 연결합니다.
   const selectionBlocked = !vm.draft.title.trim() ? '검토 제목을 입력하면 넘어갈 수 있어요'
     : invalidProgramCount ? `공고를 2개 고르면 넘어갈 수 있어요 · 지금 ${vm.draft.programs.length}개` : null
-  const runBlocked = activeRun ? '분석이 끝나면 다시 실행할 수 있어요'
+  // 이번 달 검토 횟수를 다 썼으면 그 사실을 먼저 알립니다. 다시 채워지는 때는 분석 실행 카드의 이용량 줄이 알립니다.
+  const runBlocked = vm.reviewUsage?.isLimitReached ? '이번 달 검토 횟수를 모두 썼어요'
+    : activeRun ? '분석이 끝나면 다시 실행할 수 있어요'
     : unknownRun ? '완료 여부를 확인하지 못한 실행이 있어 새 분석을 막았어요'
       : vm.dirty ? '바뀐 입력을 이전 단계에서 저장하면 실행할 수 있어요'
         : invalidProgramCount ? '공고를 2개로 줄이면 실행할 수 있어요'
@@ -372,6 +375,7 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
         <section className={`${s.card} space-y-3`} aria-label="분석 대상 공고"><h2 className="font-bold">분석 대상 공고</h2><ul className="space-y-2">{vm.draft.programs.map((program, index) => <li key={reviewProgramKey(program)} className="rounded-lg bg-slate-50 p-3"><strong>사업 {index + 1} · {vm.names[reviewProgramKey(program)] ?? '공고 정보 확인 중'}</strong></li>)}</ul></section>
         <section className={`${s.card} space-y-3`} aria-label="분석 실행"><h2 className="text-lg font-bold">공식 근거 분석</h2>
           <p className={s.muted}>PDF·HWP·HWPX 공식 첨부를 자동 수집하여 OpenAI로 분석합니다. [검토 실행]을 누르면 유료 API 호출이 발생할 수 있습니다. 원문 미확보·미지원 형식은 오류로 표시합니다.</p>
+          {vm.reviewUsage && <PlanUsageLine view={vm.reviewUsage} pricingPath={appPaths.pricing} className={s.usageLine} />}
           {vm.dirty && <p className={s.warning}>저장하지 않은 입력이 있습니다. 이전 단계에서 저장한 뒤 분석해 주세요.</p>}
           {invalidProgramCount && <p className={s.warning}>기존에 저장한 3개 공고의 결과는 조회할 수 있지만 새 분석은 공고를 2개로 줄인 뒤 실행할 수 있습니다.</p>}
           {unsupported && <p className={s.warning}>{unsupportedNotice}</p>}

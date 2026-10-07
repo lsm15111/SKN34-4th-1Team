@@ -6,11 +6,13 @@ import { splitSupportProgramTarget, supportProgramApplicationRouteLabel, support
 import { daysUntil, formatDday, programStatusLabels } from '@govbiz/shared/domain/labels'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
 import type { SupportProgramEvidenceAnswer } from '@govbiz/shared/domain/entities/SupportProgramEvidenceAnswer'
+import { findPlanUsageItem, isPlanLimitReached } from '@govbiz/shared/domain/entities/PlanUsage'
 import { ApiError, errorMessage, programClient, readProgramDetail } from '../api/client'
 import { getSavedProgramStatus, removeSavedProgram, saveProgram } from '../api/savedPrograms'
 import { useAuth } from '../auth/session'
 import { AppIcon } from '../components/AppIcon'
 import { PartnerSheet } from '../components/PartnerSheet'
+import { PlanUsageLine, usePlanUsage } from '../components/PlanUsage'
 import { ProgramPreparationSection } from '../components/PreparationRows'
 import { ProgramAttachments } from '../components/ProgramAttachments'
 import { Button, Card, Field, Notice, Page, StatusBadge, Subtitle, Title, colors, ddayBadgeTone, styles } from '../ui'
@@ -41,6 +43,10 @@ export function ProgramScreen({ identity, onLogin, resumeAction, onResumed }: {
   const [saveNotice, setSaveNotice] = useState<string | null>(null)
   const sourceCode = identity.sourceCode
   const sourceProgramId = identity.sourceProgramId
+  // 원문 질문은 로그인한 회원의 하루 한도로 셉니다. 질문 창을 열 때와 질문할 때마다 다시 읽습니다.
+  const { usage, reload: reloadUsage } = usePlanUsage(token, Boolean(token) && questionOpen && Boolean(program?.evidenceQuestionSupported))
+  const questionUsage = findPlanUsageItem(usage, 'EVIDENCE_QUESTION')
+  const questionLimitReached = questionUsage !== null && isPlanLimitReached(questionUsage)
 
   useEffect(() => {
     let active = true
@@ -98,7 +104,7 @@ export function ProgramScreen({ identity, onLogin, resumeAction, onResumed }: {
   async function ask() {
     if (!program?.evidenceQuestionSupported) return
     if (!token) { onLogin('question'); return }
-    if (!question.trim() || answering || work.current && !work.current.signal.aborted) return
+    if (!question.trim() || answering || questionLimitReached || work.current && !work.current.signal.aborted) return
     const asked = question.trim()
     const controller = new AbortController(); work.current = controller
     setAnswering(true); setAnswerError(null)
@@ -110,7 +116,10 @@ export function ProgramScreen({ identity, onLogin, resumeAction, onResumed }: {
         if (cause instanceof ApiError && cause.status === 401) void invalidateSession().catch(() => undefined)
         setAnswerError(errorMessage(cause))
       }
-    } finally { if (work.current === controller) { work.current = null; if (!controller.signal.aborted) setAnswering(false) } }
+    } finally {
+      if (work.current === controller) { work.current = null; if (!controller.signal.aborted) setAnswering(false) }
+      reloadUsage()
+    }
   }
 
   async function openSource(url: string) {
@@ -184,7 +193,7 @@ export function ProgramScreen({ identity, onLogin, resumeAction, onResumed }: {
     <PartnerSheet visible={questionOpen && Boolean(program?.evidenceQuestionSupported)} title="원문에 질문하기" dimBackdrop={false} onClose={closeQuestion}
       actions={token ? <><Button label="취소" variant="secondary" style={{ flex: 1 }} onPress={() => {
         if (answering) { work.current?.abort(); work.current = null; setAnswering(false) } else closeQuestion()
-      }} /><Button label={answering ? '답변 찾는 중…' : '질문 보내기'} style={{ flex: 2 }} busy={answering} disabled={!question.trim() || answering}
+      }} /><Button label={answering ? '답변 찾는 중…' : '질문 보내기'} style={{ flex: 2 }} busy={answering} disabled={!question.trim() || answering || questionLimitReached}
         onPress={() => void ask()} /></> : <Button label="로그인하고 질문하기" onPress={() => { closeQuestion(); onLogin('question') }} />}>
       {program && <>
         <Text style={styles.muted}>{program.title}</Text>
@@ -199,13 +208,15 @@ export function ProgramScreen({ identity, onLogin, resumeAction, onResumed }: {
           </Card>)}
         </View>)}
         {answering && <><View style={local.question}><Text style={styles.body}>{question.trim()}</Text></View><ActivityIndicator accessibilityLabel="원문에서 답변을 찾는 중" color={colors.primary} /></>}
-        {answerError && <Notice error>{answerError}</Notice>}
+        {/* 한도를 다 쓰면 입력을 막고 아래 이용량 줄의 안내만 남깁니다. */}
+        {answerError && !questionLimitReached && <Notice error>{answerError}</Notice>}
         {token && <>
-          {!turns.length && !question && !answering && <View><Text style={styles.muted}>예시 질문</Text><View style={styles.row}>
+          {!turns.length && !question && !answering && !questionLimitReached && <View><Text style={styles.muted}>예시 질문</Text><View style={styles.row}>
             {evidenceSuggestions.map(([label, value]) => <Button key={label} label={label} size="small" variant="secondary" onPress={() => setQuestion(value)} />)}
           </View></View>}
+          {usage && questionUsage && <PlanUsageLine item={questionUsage} plan={usage.plan} />}
           <Field label="공고에 대해 궁금한 점" value={question} onChangeText={setQuestion} multiline maxLength={500}
-            placeholder="공고에 대해 궁금한 점을 물어보세요" editable={!answering} />
+            placeholder="공고에 대해 궁금한 점을 물어보세요" editable={!answering && !questionLimitReached} />
           <Text style={[styles.muted, { textAlign: 'right' }]}>{Array.from(question).length} / 500자</Text>
         </>}
       </>}

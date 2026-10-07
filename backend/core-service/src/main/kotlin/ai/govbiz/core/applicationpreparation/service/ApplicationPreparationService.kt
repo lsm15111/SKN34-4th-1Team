@@ -34,7 +34,12 @@ import ai.govbiz.core.applicationpreparation.service.dto.ApplicationInterpretati
 import ai.govbiz.core.supportprogram.repository.SavedSupportProgramRepository
 import ai.govbiz.core.supportprogram.repository.SupportProgramRepository
 import ai.govbiz.core.supportprogram.domain.SupportProgramApplicationRouteType
+import ai.govbiz.core.planusage.domain.PlanUsageFeature
+import ai.govbiz.core.planusage.domain.PlanUsageJob
+import ai.govbiz.core.planusage.service.PlanUsageService
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import ai.govbiz.core.applicationpreparation.domain.ApplicationDraftInput
 import ai.govbiz.core.applicationpreparation.domain.ApplicationContentVersion
 import ai.govbiz.core.applicationpreparation.repository.ApplicationPreparationContentRepository
@@ -50,7 +55,11 @@ class ApplicationPreparationService(
     private val savedSupportPrograms: SavedSupportProgramRepository,
     private val onlineFormMcp: ApplicationOnlineFormMcpClient,
     private val supportPrograms: SupportProgramRepository,
+    private val planUsage: PlanUsageService,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val transactions = TransactionTemplate(transactionManager)
+
     /** 소유권 확인 후 고정 Manifest를 계산에만 사용한다. Fact·revision·snapshot은 변경하지 않는다. */
     fun reviewOnlineFormMapping(account: Account, preparationId: Long, source: ApplicationOnlineFormSource): ApplicationOnlineFormMappingReviewResult {
         val preparation = repository.findOwned(account.id, preparationId) ?: throw ApplicationPreparationNotFoundException()
@@ -164,8 +173,12 @@ class ApplicationPreparationService(
         return ApplicationPreparationPageResult(items, items.lastOrNull()?.preparation?.id?.takeIf { rows.size > size })
     }
 
+    /** 지운 신청 문서가 이번 달 초안 한도에서 쓴 공고는 같은 transaction에서 요금제 사용량에 남겨 삭제로 한도가 늘지 않게 한다. */
     fun deleteOwned(account: Account, preparationId: Long) {
-        if (!repository.deleteOwned(account.id, preparationId)) throw ApplicationPreparationNotFoundException()
+        val deleted = transactions.execute { _ ->
+            planUsage.keepMonthlyUsage(account.id, PlanUsageFeature.APPLICATION_DRAFT) { repository.deleteOwned(account.id, preparationId) }
+        }
+        if (deleted != true) throw ApplicationPreparationNotFoundException()
     }
 
     fun updateProgress(
@@ -201,6 +214,7 @@ class ApplicationPreparationService(
         val preparation = repository.findOwned(account.id, preparationId) ?: throw ApplicationPreparationNotFoundException()
         val form = forms.requireVersion(preparation.draft.formVersionId)
         requireSection(form, sectionKey)
+        requireDraftCapacity(account, preparation.draft)
         val currentFacts = inputs.listOwnedFacts(account.id, preparationId).filter { it.sectionKey == sectionKey }
         val snapshot = ApplicationInterpretationInputSnapshot(
             inputRevision = expectedRevision,
@@ -246,6 +260,11 @@ class ApplicationPreparationService(
         return findOwned(account, preparationId)
     }
 
+    /** 문항별 AI 해석·초안도 신청 문서 월 한도에 든다. 이 공고가 이번 달 처음이면 더한 사용량이 한도 안이어야 한다. */
+    private fun requireDraftCapacity(account: Account, draft: NewApplicationPreparation) {
+        planUsage.requireMonthlyCapacity(account.id, PlanUsageJob.DraftProgram(draft.sourceCode, draft.sourceProgramId))
+    }
+
     private fun requireSection(form: ai.govbiz.core.applicationpreparation.domain.ApplicationFormManifest, sectionKey: String) =
         form.sections.find { it.key == sectionKey } ?: throw ApplicationPreparationSectionNotFoundException()
 
@@ -261,6 +280,7 @@ class ApplicationPreparationService(
         if (detail.preparation.inputRevision == expectedRevision && section.fields.any { field -> field.required && facts.none { it.fieldKey == field.key } }) {
             throw InvalidApplicationPreparationInputException()
         }
+        requireDraftCapacity(account, detail.preparation.draft)
         val reservation = contents.reserve(account.id, input, expectedVersionId, requestKey)
         if (reservation.completed) {
             if (!reservation.applied) throw ApplicationPreparationRevisionConflictException()

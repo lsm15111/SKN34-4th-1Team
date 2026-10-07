@@ -1,4 +1,6 @@
 import { toSupportProgramDetail } from '@govbiz/shared/data/models/SupportProgramDto'
+import { readPlanQuotaProblem } from '@govbiz/shared/data/models/PlanUsageDto'
+import { PlanQuotaExceededError, QuotaUnavailableError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
 import { createSupportProgramClient } from '@govbiz/shared/data/api/supportProgramClient'
 
@@ -78,11 +80,17 @@ export async function apiRequest(path: string, options: ApiRequestOptions = {}):
   if (!response.ok) {
     const problem: unknown = await response.json().catch(() => null)
     const data = problem && typeof problem === 'object' ? problem as Record<string, unknown> : {}
+    const retryAfterSeconds = Number.isInteger(data.retryAfterSeconds) && Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : null
+    // 요금제 한도 문제 응답은 shared 안내 문구를 씁니다. 분당 요청 제한 같은 다른 429는 아래 일반 문구를 유지합니다.
+    const quota = readPlanQuotaProblem(response.status, problem)
+    if (quota) {
+      throw new ApiError(response.status, quota.message,
+        quota instanceof PlanQuotaExceededError ? 'PLAN_QUOTA_EXCEEDED' : 'QUOTA_UNAVAILABLE', retryAfterSeconds)
+    }
     const message = response.status === 401 ? '로그인이 만료되었습니다. 다시 로그인해 주세요.'
       : response.status === 429 ? '요청이 많습니다. 잠시 후 다시 시도해 주세요.'
         : '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-    throw new ApiError(response.status, message, typeof data.code === 'string' ? data.code : null,
-      Number.isInteger(data.retryAfterSeconds) && Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : null)
+    throw new ApiError(response.status, message, typeof data.code === 'string' ? data.code : null, retryAfterSeconds)
   }
   return response.status === 204 ? undefined : response.json()
 }
@@ -98,7 +106,8 @@ export async function readProgramDetail(client: ReturnType<typeof programClient>
 }
 
 export function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message
+  // 요금제 한도 오류는 shared 공고 클라이언트(검색·원문 질문)가 안내 문구를 담아 던집니다.
+  if (error instanceof ApiError || error instanceof PlanQuotaExceededError || error instanceof QuotaUnavailableError) return error.message
   if (error instanceof Error && error.name === 'AbortError') return '요청이 취소되었거나 시간이 초과되었습니다. 다시 시도해 주세요.'
   return '연결하지 못했거나 응답을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.'
 }

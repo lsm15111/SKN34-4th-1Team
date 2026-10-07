@@ -1,5 +1,6 @@
 package ai.govbiz.core.supportprogram.controller
 
+import ai.govbiz.core.planusage.PlanUsageTestHelper
 import ai.govbiz.core._common.config.JsonDeserializationConfig
 import ai.govbiz.core._common.test.RedisTestConnection
 import ai.govbiz.core._common.exception.ApiExceptionHandler
@@ -96,6 +97,7 @@ class SupportProgramSearchPreviewControllerTest {
             previewService, Mockito.mock(SupportProgramSearchReadinessService::class.java),
             Mockito.mock(SupportProgramDetailService::class.java), Mockito.mock(SupportProgramEvidenceService::class.java),
             SupportProgramRequestAdmissionService(SupportProgramRequestAdmissionProperties(perClient, 100, 4)) { 0L },
+            PlanUsageTestHelper.allowAll(),
         ),
     ).setCustomArgumentResolvers(AuthenticatedAccountArgumentResolver(sessions))
         .addInterceptors(SessionOriginInterceptor(listOf(ORIGIN)))

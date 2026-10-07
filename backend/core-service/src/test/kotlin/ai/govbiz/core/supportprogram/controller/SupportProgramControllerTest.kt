@@ -1,5 +1,11 @@
 package ai.govbiz.core.supportprogram.controller
 
+import ai.govbiz.core.account.service.exception.AuthenticationRequiredException
+import org.springframework.http.HttpHeaders
+import java.time.LocalDateTime
+import ai.govbiz.core.account.domain.AccountRole
+import ai.govbiz.core.account.domain.Account
+import ai.govbiz.core.planusage.PlanUsageTestHelper
 import ai.govbiz.core._common.exception.AiServiceCallException
 import ai.govbiz.core.supportprogram.client.elasticsearch.exception.ElasticsearchClientException
 import ai.govbiz.core._common.exception.ApiExceptionHandler
@@ -85,8 +91,13 @@ class SupportProgramControllerTest {
 
     private lateinit var mockMvc: MockMvc
 
+    private val sessions: AccountSessionService = Mockito.mock(AccountSessionService::class.java)
+
     @BeforeEach
     fun setUp() {
+        // 운영 세션 서비스처럼 토큰이 없으면 401, 회원 토큰이면 회원 계정을 돌려줍니다.
+        Mockito.lenient().doReturn(MEMBER).`when`(sessions).requireAccount(MEMBER_TOKEN)
+        Mockito.lenient().doThrow(AuthenticationRequiredException()).`when`(sessions).requireAccount(null)
         ranking = StubSupportProgramRankingFacade()
         val service = SupportProgramSearchService(
             supportProgramRepository,
@@ -102,9 +113,10 @@ class SupportProgramControllerTest {
                     detailService = SupportProgramDetailService(supportProgramRepository),
                     evidenceService = evidenceService,
                     requestAdmissionService = SupportProgramRequestAdmissionService(SupportProgramRequestAdmissionProperties()),
+                    planUsageService = PlanUsageTestHelper.allowAll(),
                 ),
             )
-            .setCustomArgumentResolvers(AuthenticatedAccountArgumentResolver { Mockito.mock(AccountSessionService::class.java) })
+            .setCustomArgumentResolvers(AuthenticatedAccountArgumentResolver { sessions })
             .setControllerAdvice(ApiExceptionHandler())
             .build()
     }
@@ -397,6 +409,7 @@ class SupportProgramControllerTest {
 
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """
@@ -412,9 +425,23 @@ class SupportProgramControllerTest {
     }
 
     @Test
+    fun evidenceAnswersRequireASignedInMemberBeforeAnyAiCall() {
+        mockMvc.perform(
+            post(EVIDENCE_ANSWER_PATH)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"sourceCode":"BIZINFO","sourceProgramId":"PBLN_TEST","question":"신청 방법은?"}"""),
+        )
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"))
+
+        Mockito.verifyNoInteractions(evidenceService)
+    }
+
+    @Test
     fun validatesEvidenceAnswerRequestAndMapsSupportedFailureCases() {
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"sourceCode":"BIZINFO","sourceProgramId":"PBLN_TEST","question":" "}"""),
         )
@@ -423,6 +450,7 @@ class SupportProgramControllerTest {
 
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"sourceCode":"BIZINFO","sourceProgramId":" PBLN_TEST ","question":"질문"}"""),
         )
@@ -431,6 +459,7 @@ class SupportProgramControllerTest {
 
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"sourceCode\":\"BIZINFO\",\"sourceProgramId\":\"PBLN_TEST\",\"question\":\"신청\\u0000방법\"}"),
         )
@@ -441,6 +470,7 @@ class SupportProgramControllerTest {
             .answer("OTHER", "PBLN_TEST", "질문")
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"sourceCode":"OTHER","sourceProgramId":"PBLN_TEST","question":"질문"}"""),
         )
@@ -452,6 +482,7 @@ class SupportProgramControllerTest {
             .answer("BIZINFO", "PBLN_TEST", "잠시 후")
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""{"sourceCode":"BIZINFO","sourceProgramId":"PBLN_TEST","question":"잠시 후"}"""),
         )
@@ -473,6 +504,7 @@ class SupportProgramControllerTest {
 
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """{"sourceCode":"BIZINFO","sourceProgramId":"$maximumSourceProgramId","question":"질문"}""",
@@ -483,6 +515,7 @@ class SupportProgramControllerTest {
         val overLimitSourceProgramId = "😀".repeat(256)
         mockMvc.perform(
             post(EVIDENCE_ANSWER_PATH)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $MEMBER_TOKEN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """{"sourceCode":"BIZINFO","sourceProgramId":"$overLimitSourceProgramId","question":"질문"}""",
@@ -696,6 +729,8 @@ class SupportProgramControllerTest {
         const val READINESS_PATH = "/api/v1/support-programs/readiness"
         const val DETAIL_PATH = "/api/v1/support-programs/detail"
         const val EVIDENCE_ANSWER_PATH = "/api/v1/support-programs/detail/answers"
+        const val MEMBER_TOKEN = "member-session-token"
+        val MEMBER = Account(7, "member@example.test", AccountRole.USER, null, null, LocalDateTime.of(2026, 9, 1, 9, 0))
         const val PRIVATE_DETAIL = "private upstream detail"
 
         @JvmStatic

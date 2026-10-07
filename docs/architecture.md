@@ -369,6 +369,16 @@ Core 내부 전용 소비자가 기존 검색·근거 답변을 재사용하며 
 발송 직전에 계정·설정·관심 공고·접수 상태·수신 주소·기기를 다시 확인하고 보낼 수 없으면 이유 코드와 함께 SKIPPED로 끝냅니다.
 [조건·상태·설정](deadline-reminders.md)을 참고하세요.
 
+## 요금제 사용량 한도
+
+결제 연동 전이라 모든 회원은 FREE 한도로 시작하고 `account_plan`에 배정된 계정만 다른 요금제를 씁니다(V53).
+하루 한도(AI 검색·원문 질문)는 위 검색 경로에서, 월 한도(신청 문서 초안·중복 검토)는 각 기능의 접수 transaction에서 셉니다.
+월 한도는 `기능 Service(TransactionTemplate) → 기능 Repository.reserve(계정 행 잠금·작업 생성) → PlanUsageService.requireMonthlyCapacity
+→ PlanUsageRepository → MyBatis → MySQL` 순서로 새 작업까지 센 사용량을 확인하고, 넘으면 작업을 남기지 않고 되돌립니다.
+사용량은 각 기능의 작업 표에서 실패하지 않은 작업으로 세므로 실패·만료는 별도 처리 없이 빠지고, 신청 문서·중복 검토 삭제는
+같은 transaction에서 그 달 사용분을 `plan_usage_counter`에 남깁니다. 화면은 `GET /api/v1/plan-usage`로 남은 횟수를 읽습니다.
+[한도·세는 규칙·판단 근거](plan-usage-limits.md)를 참고하세요.
+
 ## 검색·상세 조회·원문 근거 질문
 
 공개 대화 해석·검색·근거 질문은 입력 검증 뒤 Controller에서 `SupportProgramRequestAdmissionService`를 거쳐
@@ -378,6 +388,12 @@ Core 내부 전용 소비자가 기존 검색·근거 답변을 재사용하며 
 준비 상태·상세 GET·Health·백그라운드 동기화·비웹 평가는 이 공개 제한과 분리합니다.
 전달 헤더를 기본 신뢰하지 않으며 Compose 프록시/NAT 뒤에서는 주소별 한도를 공유할 수 있습니다.
 단일 프로세스 보호이며 분산 한도·전역 비용 상한은 아닙니다. [설정·경계·검증](support-program-request-limits.md)을 참고하세요.
+
+요청 제한을 통과한 AI 검색(검색어가 있을 때)과 원문 질문은 이어서 요금제 하루 한도를 씁니다.
+`Controller → PlanUsageService.consume → PlanUsageRepository → MyBatis → MySQL`(로그인 회원) 또는
+`GuestPlanUsageRepository → Redis`(로그인 전 AI 검색 체험)에서 AI 호출 전에 한 번을 먼저 빼고, 하위 Service가 실패하면
+되돌립니다. 원문 질문은 로그인한 회원만 씁니다. 한도 초과는 `429 PLAN_QUOTA_EXCEEDED`, 사용량을 확인할 수 없으면
+`503 QUOTA_UNAVAILABLE`이며 분당 제한과 다른 코드입니다. [요금제 사용량 한도](plan-usage-limits.md)를 참고하세요.
 
 ### 후속 대화의 조건 변경 해석
 
@@ -399,7 +415,7 @@ Core 내부 전용 소비자가 기존 검색·근거 답변을 재사용하며 
 
 ### 도우미 자유 질문
 
-`POST /api/v1/assistant/messages`는 화면 오른쪽 아래 도우미 위젯의 자유 질문을 받습니다. 주제·질문 알약(C1)은 네트워크 없이
+`POST /api/v1/assistant/messages`는 화면 오른쪽 아래 도우미 위젯의 자유 질문을 받으며 로그인한 회원만 씁니다(비로그인 401). 주제·질문 알약(C1)은 네트워크 없이
 프런트 도움말 데이터로 답하고, 프런트 스위치 `VITE_ASSISTANT_AI_ENABLED=true`일 때만 자유 입력이 이 경로로 옵니다(기본 꺼짐, 꺼지면 알약 안내로만 답함). Core는 길이 상한·개인 정보 마스킹·공유 요청 한도를 거친 뒤
 AI Service의 `/internal/v1/assistant/answers`를 한 번 호출해 의도 하나와 그 의도의 필드(인용·검색어·계정 영역·확인 질문)를 받습니다.
 AI Service는 DB를 보지 않고 도구도 없습니다. 상태 답(`ACCOUNT_STATE`)은 Core가 세션 계정으로 관심 공고함·받은 제안함·기업 등록을
