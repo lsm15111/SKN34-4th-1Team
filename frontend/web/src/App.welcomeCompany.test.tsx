@@ -50,7 +50,7 @@ function lookupNumber(value: string) {
   return form
 }
 
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('온보딩 2단계 기업 등록', () => {
   it('조회 전에는 폼이 없고 등록 버튼이 잠기며, 계속사업자를 조회하면 폼이 열려 등록한 뒤 검색 화면으로 간다', async () => {
@@ -172,6 +172,24 @@ describe('온보딩 2단계 기업 등록', () => {
     fireEvent.click(screen.getByRole('button', { name: '등록하고 시작' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('입력한 내용은 그대로 있어요'))
     expect(within(form).getByLabelText('소재지').textContent).toContain('서울특별시')
+  })
+
+  it('환영 화면이 이어 준 주소가 있으면 등록한 뒤 그 주소로 돌아간다', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    vi.spyOn(appContainer.resolve('lookupBusinessUseCase'), 'execute').mockResolvedValue({ outcome: 'found', business: activeBusiness })
+    vi.spyOn(appContainer.resolve('registerCompanyUseCase'), 'execute').mockResolvedValue({ outcome: 'registered', company: registeredCompany })
+    const target = '/app/support-programs/detail?sourceCode=BIZINFO&sourceProgramId=PBLN_000000000118979'
+    renderApp(`/app/welcome/company?next=${encodeURIComponent(target)}`, businessAccount)
+    await screen.findByRole('heading', { name: '기업 정보를 알려 주세요' })
+
+    const form = lookupNumber('1248100998')
+    await screen.findByRole('status', { name: '조회 결과' })
+    chooseOption(within(form).getByLabelText('소재지'), '서울특별시')
+    chooseOption(within(form).getByLabelText('업종'), '정보통신업')
+    chooseOption(within(form).getByLabelText('설립연도'), '2020')
+    fireEvent.click(screen.getByRole('button', { name: '등록하고 시작' }))
+
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(target))
   })
 
   it('나중에 하기는 저장 없이 검색 화면으로 가고 사이드바가 열린다', async () => {

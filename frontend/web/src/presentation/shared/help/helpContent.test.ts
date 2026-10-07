@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { appPaths, publicPaths } from '../routes/appPaths'
-import { findHelpEntry, helpActionHref, helpEntries, helpEntriesForRoute, helpEntriesForSurface } from './helpContent'
+import {
+  findHelpEntriesByKeyword, findHelpEntry, findOfferedHelpEntry, helpActionHref, helpEntries, helpEntriesForRoute, helpEntriesForSurface,
+  isHelpEntryOffered, offeredChatbotHelpEntries,
+} from './helpContent'
+import type { HelpFeature } from './helpTypes'
 
 const knownPaths = new Set<string>(Object.values(appPaths).filter((path) => !path.includes(':')))
 const pathOf = (to: string) => to.split('?')[0] ?? ''
@@ -79,6 +83,40 @@ describe('화면별 추천 질문', () => {
   it('챗봇 표면에 없는 항목은 추천하지 않는다', () => {
     const chatbotIds = new Set(helpEntriesForSurface('chatbot').map((entry) => entry.id))
     for (const entry of helpEntriesForRoute(appPaths.chat, 99)) expect(chatbotIds.has(entry.id)).toBe(true)
+  })
+})
+
+describe('시작하기 도움말', () => {
+  const offered: HelpFeature[] = ['getting-started']
+
+  it('기능 상태를 아는 도우미 표면에만 두고 시작하기가 제공될 때만 쓴다', () => {
+    const entry = findHelpEntry('getting-started')
+    expect(entry).toMatchObject({ surfaces: ['chatbot'], requires: 'getting-started', audience: 'member' })
+    for (const surface of ['guide', 'faq', 'manual'] as const) {
+      expect(helpEntriesForSurface(surface).map((item) => item.id), surface).not.toContain('getting-started')
+    }
+    // 시작하기가 제공되지 않으면(꺼짐·기간 지남·관리자·비로그인) 도우미가 쓸 항목에서도 빠집니다.
+    expect(offeredChatbotHelpEntries([]).map((item) => item.id)).not.toContain('getting-started')
+    expect(offeredChatbotHelpEntries(offered).map((item) => item.id)).toContain('getting-started')
+    expect(findOfferedHelpEntry('getting-started', [])).toBeUndefined()
+    expect(findOfferedHelpEntry('getting-started', offered)?.id).toBe('getting-started')
+    expect(isHelpEntryOffered(findHelpEntry('search-score-meaning')!, [])).toBe(true)
+    expect(helpEntriesForRoute(appPaths.profile, 5).map((item) => item.id)).not.toContain('getting-started')
+    expect(helpEntriesForRoute(appPaths.profile, 5, offered).map((item) => item.id)).toContain('getting-started')
+  })
+
+  it('AI가 꺼져도 제공되는 동안은 찾는 말로 찾고, 제공되지 않으면 찾지 않는다', () => {
+    expect(findHelpEntry('getting-started')?.keywords).toEqual(['처음', '시작', '뭐부터', '다음에뭘'])
+    for (const text of ['처음인데 뭐부터 해요?', '뭐부터 해요', '다음에 뭘 하면 되나요?', '시작은 어떻게 하나요']) {
+      expect(findHelpEntriesByKeyword(text, offered).map((item) => item.id), text).toEqual(['getting-started'])
+      expect(findHelpEntriesByKeyword(text, []), text).toEqual([])
+    }
+  })
+
+  it('찾는 말이 없는 항목은 입력으로 찾지 않는다', () => {
+    for (const text of ['점수가 뭐야?', '모집글은 어떻게 쓰나요?', '', '   ?']) {
+      expect(findHelpEntriesByKeyword(text, offered), text).toEqual([])
+    }
   })
 })
 

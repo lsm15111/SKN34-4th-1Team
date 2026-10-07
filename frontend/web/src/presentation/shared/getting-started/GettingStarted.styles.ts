@@ -1,0 +1,25 @@
+// 사이드바 "시작하기"입니다. 메뉴와 같은 44px 둥근 줄을 쓰고, 다음 할 일만 메뉴의 선택 바탕(브랜드 옅은 색)으로 강조합니다.
+// 끝낸 단계는 지운 줄과 흐린 글자, 체크 표시로 남기고 상태는 글자로도 붙입니다(색만으로 알리지 않음).
+export const gettingStartedStyles = {
+  section: 'mt-5 flex flex-col gap-1 rounded-2xl border border-line bg-white p-1.5',
+  header: 'flex min-w-0 items-center gap-2 pl-2',
+  title: 'rounded text-sm font-semibold text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary',
+  progress: 'text-xs font-medium tabular-nums text-brand-primary',
+  closeButton: 'ml-auto inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent px-2 text-xs font-medium text-ink-muted hover:bg-black/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary disabled:cursor-wait disabled:opacity-60',
+  list: 'm-0 flex list-none flex-col gap-0.5 p-0',
+  row: 'flex min-h-11 min-w-0 items-start gap-2.5 rounded-xl px-2 py-2 text-sm text-ink no-underline',
+  rowLink: 'hover:bg-canvas focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary',
+  rowNext: 'bg-brand-soft hover:bg-[#dcefe5]',
+  mark: 'mt-px grid size-[18px] shrink-0 place-items-center rounded-[5px] border-[1.5px] [&_svg]:size-3',
+  markDone: 'border-brand-primary bg-brand-primary text-white',
+  markTodo: 'border-line-strong bg-white',
+  markNext: 'border-brand-primary bg-white',
+  markLocked: 'border-surface-muted bg-surface-muted text-ink-muted',
+  body: 'flex min-w-0 flex-1 flex-col gap-0.5',
+  label: 'font-medium leading-5',
+  labelDone: 'leading-5 text-ink-muted line-through',
+  labelLocked: 'leading-5 text-ink-muted',
+  note: 'text-xs leading-4 text-ink-muted',
+  error: 'px-2 pb-1 text-xs text-red-700',
+  done: 'm-0 px-2 pb-1 text-xs text-ink-muted',
+} as const

@@ -6,8 +6,7 @@ import { appPaths, toAppPath } from '../routes/appPaths'
 import { useDelayedFlag } from '../workspace/useDelayedFlag'
 import { workspacePageStyles } from '../workspace/WorkspacePage.styles'
 import { authPageStyles } from './AuthPage.styles'
-import { loginPathFor } from './returnPath'
-import { readReturnPath } from './returnPath'
+import { loginPathFor, readReturnPath, welcomeStepPathFor } from './returnPath'
 import { selectAuthStatus, selectCurrentAccount } from './state/authSlice'
 
 /**
@@ -39,8 +38,11 @@ export function RequireAuth({ minimumTier = 'MEMBER' }: { minimumTier?: AccountT
     return <Navigate replace to={loginPathFor(`${location.pathname}${location.search}`)} />
   }
   if (!meetsTier(account, minimumTier)) return <Navigate replace to={appPaths.chat} />
-  // 환영 화면을 아직 마치지 않은 계정은 어떤 작업 화면을 열어도 먼저 환영 화면을 봅니다. 마치면 원래 가려던 곳으로 갑니다.
-  if (!account.onboarded && location.pathname !== appPaths.welcome) return <Navigate replace to={appPaths.welcome} />
+  // 환영 화면을 아직 마치지 않은 계정은 어떤 작업 화면을 열어도 먼저 환영 화면을 봅니다. 가려던 주소를 `next`에 담아
+  // 마치면(또는 기업 등록을 [나중에 하기]로 넘기면) 그곳으로 갑니다.
+  if (!account.onboarded && location.pathname !== appPaths.welcome) {
+    return <Navigate replace to={welcomeStepPathFor(appPaths.welcome, `${location.pathname}${location.search}`)} />
+  }
   return <Outlet />
 }
 

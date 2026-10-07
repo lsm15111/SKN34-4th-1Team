@@ -30,6 +30,15 @@ export const assistantMessages = {
   cardQuote: (quote: string) => `원문: “${quote}”`,
   openProgramQuestion: '원문 질문 열기',
   quickSavedPrograms: '관심 공고 마감 확인',
+  /** 시작하기가 보이는 동안 바로 확인 맨 앞에 둡니다. 답은 모델 없이 서버가 계산한 단계로 만듭니다. */
+  quickGettingStarted: '다음에 뭘 하면 되나요?',
+  gettingStartedNext: (step: string) => `다음은 ‘${step}’예요.`,
+  gettingStartedLimitation: (limitation: string) => `아직 안 돼요: ${limitation}`,
+  gettingStartedAllDone: '시작하기를 모두 마쳤어요.',
+  gettingStartedAllDoneNext: '관심 공고 마감은 ‘관심 공고 마감 확인’에서 볼 수 있어요.',
+  gettingStartedSource: (done: number, total: number) => `내 이용 현황 기준 · 시작하기 ${done}/${total}`,
+  /** AI가 꺼진 환경에서 입력한 말로 도움말을 여럿 찾았을 때입니다. */
+  helpSearchFound: '도움말에서 찾은 질문이에요.',
   quickReceivedProposals: '받은 제안 확인',
   quickLoginBenefits: '로그인하면 뭐가 되나요?',
   quickContact: '담당자에게 문의',

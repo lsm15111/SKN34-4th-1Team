@@ -22,6 +22,12 @@ export type HelpStatus = 'available' | 'demo' | 'planned'
 export type HelpCategory = 'blocker' | 'screen' | 'error' | 'policy'
 
 /**
+ * 계정마다 제공 여부가 달라지는 기능입니다. 이 기능을 설명하는 항목은 그 기능이 지금 제공될 때만 도우미가 씁니다.
+ * - `getting-started`: 사이드바 "시작하기". 서버가 보이게(`visible`) 했거나 회원이 닫아 둔(`closed`) 동안 제공됩니다.
+ */
+export type HelpFeature = 'getting-started'
+
+/**
  * 항목을 읽은 다음 갈 곳입니다. 설명만 하고 끝내지 않기 위해 둡니다.
  * `to`는 `/app` 아래 경로이며 파라미터 없이 열 수 있는 경로만 씁니다.
  * 공개 화면에서는 `helpActionHref`가 대응하는 공개 경로로 바꿉니다.
@@ -56,6 +62,17 @@ export type HelpEntry = {
   status: HelpStatus
   /** 함께 읽을 항목의 `id`입니다. 실제로 있는 항목만 적습니다. */
   related: readonly string[]
+  /**
+   * AI 자유 질문이 꺼진 환경에서 입력한 말로 이 항목을 찾을 때 비교하는 찾는 말입니다. 띄어쓰기 없이 비교하며,
+   * 입력에 이 말이 들어 있으면 이 항목으로 답합니다. 없으면 입력으로는 찾지 않고 주제·질문 알약으로만 엽니다.
+   */
+  keywords?: readonly string[]
+  /**
+   * 이 항목이 설명하는 기능이 계정마다 제공 여부가 다르면 그 기능입니다. 도우미는 지금 제공되는 기능의 항목만 주제·질문 알약·찾는 말·
+   * 관련 항목·AI 자유 질문에 쓰고, 기능 상태를 모르는 표면(guide·faq·manual)에는 두지 않습니다(`surfaces`는 `chatbot`만).
+   * 없으면 늘 씁니다.
+   */
+  requires?: HelpFeature
   /** 내용을 마지막으로 손본 날짜입니다. 화면에 표시해 오래된 안내를 드러냅니다. */
   updatedOn: string
 }

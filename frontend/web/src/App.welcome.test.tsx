@@ -14,6 +14,8 @@ const freshAccount: Account = {
   email: 'new@govbiz.local', role: 'USER', tier: 'MEMBER', emailVerified: true, hasPassword: true, company: null,
   accountType: null, onboarded: false,
 }
+/** 공개 공고 상세에서 가입·로그인하면 로그인 화면이 이 내부 주소로 돌려보냅니다. */
+const programDetail = '/app/support-programs/detail?sourceCode=BIZINFO&sourceProgramId=PBLN_000000000118979'
 
 function Location() {
   const location = useLocation()
@@ -27,15 +29,52 @@ function renderApp(path: string, account: Account) {
   return store
 }
 
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('최초 로그인 환영 화면', () => {
-  it('아직 답하지 않은 계정은 어떤 작업 화면을 열어도 환영 화면을 먼저 보고, 사이드바와 도우미는 없다', async () => {
+  it('아직 답하지 않은 계정은 어떤 작업 화면을 열어도 가려던 주소를 담은 환영 화면을 먼저 보고, 사이드바와 도우미는 없다', async () => {
     renderApp('/app/saved-programs', freshAccount)
     expect(await screen.findByRole('heading', { name: '어떤 회원으로 시작할까요?' })).toBeTruthy()
-    expect(screen.getByTestId('location').textContent).toBe('/app/welcome')
+    expect(screen.getByTestId('location').textContent).toBe('/app/welcome?next=%2Fapp%2Fsaved-programs')
     expect(screen.queryByRole('complementary', { name: '작업 사이드바' })).toBeNull()
     expect(screen.queryByRole('button', { name: /도우미/ })).toBeNull()
+  })
+
+  it('공고 상세에서 가입한 개인 회원은 시작하면 그 공고로 돌아간다', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    vi.spyOn(appContainer.resolve('completeOnboardingUseCase'), 'execute')
+      .mockResolvedValue({ ...freshAccount, accountType: 'INDIVIDUAL', onboarded: true })
+    renderApp(programDetail, freshAccount)
+    await screen.findByRole('heading', { name: '어떤 회원으로 시작할까요?' })
+    expect(screen.getByTestId('location').textContent).toBe(`/app/welcome?next=${encodeURIComponent(programDetail)}`)
+
+    fireEvent.click(screen.getByRole('button', { name: '시작하기' }))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(programDetail))
+    expect(await screen.findByRole('complementary', { name: '작업 사이드바' })).toBeTruthy()
+  })
+
+  it('기업 회원은 기업 등록 단계까지 가려던 주소를 이어 받고, 나중에 하기를 누르면 그 공고로 돌아간다', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    vi.spyOn(appContainer.resolve('completeOnboardingUseCase'), 'execute')
+      .mockResolvedValue({ ...freshAccount, accountType: 'BUSINESS', onboarded: true })
+    renderApp(programDetail, freshAccount)
+    await screen.findByRole('heading', { name: '어떤 회원으로 시작할까요?' })
+    fireEvent.click(screen.getByRole('radio', { name: /기업 회원/ }))
+    fireEvent.click(screen.getByRole('button', { name: '다음' }))
+
+    await waitFor(() => expect(screen.getByTestId('location').textContent)
+      .toBe(`/app/welcome/company?next=${encodeURIComponent(programDetail)}`))
+    fireEvent.click(await screen.findByRole('button', { name: '나중에 하기' }))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(programDetail))
+  })
+
+  it('밖으로 나가는 next는 따르지 않고 검색 화면으로 간다', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    vi.spyOn(appContainer.resolve('completeOnboardingUseCase'), 'execute')
+      .mockResolvedValue({ ...freshAccount, accountType: 'INDIVIDUAL', onboarded: true })
+    renderApp(`/app/welcome?next=${encodeURIComponent('//outside.example/phish')}`, freshAccount)
+    fireEvent.click(await screen.findByRole('button', { name: '시작하기' }))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/app/chat'))
   })
 
   it('기본은 개인 회원이고, 시작하면 저장한 뒤 검색 화면으로 가며 사이드바가 열린다', async () => {

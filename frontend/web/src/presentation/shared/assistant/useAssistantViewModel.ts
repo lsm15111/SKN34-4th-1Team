@@ -12,7 +12,8 @@ import { AssistantApiError } from '../../../data/api/assistantApi'
 import { draftChanged } from '../../features/chat/state/chatSlice'
 import { useAuthSession } from '../auth/hooks/useAuthSession'
 import { loginPathFor } from '../auth/returnPath'
-import { findHelpEntry, helpEntriesForSurface } from '../help/helpContent'
+import { useGettingStartedGuide, useRefreshGettingStarted } from '../getting-started/useGettingStarted'
+import { findHelpEntriesByKeyword, findOfferedHelpEntry, offeredChatbotHelpEntries } from '../help/helpContent'
 import { useReceivedProposals } from '../partner-proposal/useReceivedProposals'
 import {
   type AssistantCardButton,
@@ -25,11 +26,14 @@ import {
   freeTextFallback,
   freeTextLoginAnswer,
   freeTextSessionExpired,
+  gettingStartedAnswer,
   greetingMessages,
   helpAnswer,
+  helpSearchAnswer,
   isAssistantHiddenOn,
   loginBenefitsAnswer,
   loginPromptAnswer,
+  offeredHelpFeatures,
   otherQuestionReply,
   programIdentityFrom,
   quickRepliesFor,
@@ -37,6 +41,7 @@ import {
   savedProgramsAnswer,
   topicAnswer,
   userMessage,
+  withGettingStartedReplies,
 } from './assistantConversation'
 import { assistantMessages } from './assistantMessages'
 import { readAssistantConversation, writeAssistantConversation } from './assistantConversationStorage'
@@ -86,6 +91,11 @@ export function useAssistantViewModel(
   const { pathname, search } = useLocation()
   const { isAuthenticated, hasCompany } = useAuthSession()
   const receivedProposals = useReceivedProposals()
+  // 시작하기가 보이는 동안만 "다음에 뭘 하면 되나요?"를, 제공되는 동안(보이거나 닫아 둔 동안)만 시작하기 도움말을 씁니다.
+  // 읽기는 작업 화면 틀의 GettingStartedSync가 맡고, 패널을 열 때 다시 읽게 합니다.
+  const gettingStarted = useGettingStartedGuide()
+  const refreshGettingStarted = useRefreshGettingStarted()
+  const helpFeatures = useMemo(() => offeredHelpFeatures(gettingStarted), [gettingStarted])
   // 채널 주소는 빌드 환경값이라 인스턴스 동안 고정입니다. 대화 규칙 함수에는 값으로 넘겨 환경을 직접 읽지 않게 합니다.
   const contactUrl = useMemo(() => kakaoChannelChatUrl(), [kakaoChannelChatUrl])
   // 모델 호출은 빌드 스위치로만 켭니다. 꺼져 있으면 자유 입력을 주제 알약으로 돌려보내 비용이 들지 않습니다.
@@ -163,12 +173,15 @@ export function useAssistantViewModel(
     if (!isCurrentSession()) return
     updateUi({ isOpen: true, hasUnread: false })
     setShowLabel(false)
+    // 패널을 열 때 시작하기를 다시 읽습니다. 알약은 읽힌 결과로 보여 줄 때 정해지므로 기다리지 않습니다.
+    if (isAuthenticated) refreshGettingStarted()
     if (messages.length === 0) {
       dispatchToStore(assistantConversationReplaced({ ...conversationSession, messages: greetingMessages(), quickReplies: routeReplies() }))
     } else if (quickReplies.length === 0) {
       dispatchToStore(assistantQuickRepliesChanged({ ...conversationSession, quickReplies: routeReplies() }))
     }
-  }, [messages.length, quickReplies.length, routeReplies, dispatchToStore, conversationSession, isCurrentSession, updateUi])
+  }, [messages.length, quickReplies.length, routeReplies, dispatchToStore, conversationSession, isCurrentSession, updateUi,
+    isAuthenticated, refreshGettingStarted])
 
   const close = useCallback(() => updateUi({ isOpen: false }), [updateUi])
 
@@ -180,8 +193,9 @@ export function useAssistantViewModel(
   const returnTo = `${pathname}${search}`
 
   /**
-   * 자유 질문을 Core에 보냅니다. 최근 대화 6개, 현재 화면 경로와 공고 선택 여부, 챗봇 표면의 도움말 전량을 함께 실어
-   * 서버가 인용을 그 안에서만 인정하게 합니다. 45초 안에 답이 없으면 끊고 다시 시도를 안내합니다.
+   * 자유 질문을 Core에 보냅니다. 최근 대화 6개, 현재 화면 경로와 공고 선택 여부, 지금 쓸 수 있는 챗봇 도움말 전량을 함께 실어
+   * 서버가 인용을 그 안에서만 인정하게 합니다(시작하기가 제공되지 않으면 시작하기 도움말은 보내지 않음).
+   * 45초 안에 답이 없으면 끊고 다시 시도를 안내합니다.
    */
   const submitText = useCallback(async (text: string) => {
     if (!isCurrentSession()) return
@@ -189,7 +203,10 @@ export function useAssistantViewModel(
     if (trimmed === '') return
     const asked = userMessage(trimmed)
     if (!aiEnabled || !isValidAssistantMessage(trimmed)) {
-      append([asked, freeTextFallback()], routeReplies())
+      // 모델이 꺼져 있으면 지금 쓸 수 있는 도움말의 찾는 말로만 찾고(네트워크 없음), 맞는 항목이 없으면 주제 알약으로 돌려보냅니다.
+      const found = aiEnabled ? [] : findHelpEntriesByKeyword(trimmed, helpFeatures)
+      const answer = found.length > 0 ? helpSearchAnswer(found, pathname, helpFeatures) : freeTextFallback()
+      append([asked, answer], answer.role === 'assistant' && answer.followUps.length > 0 ? answer.followUps : routeReplies())
       return
     }
     // 서버가 비로그인 자유 질문을 받지 않으므로 보내지 않고 로그인을 안내합니다(이전 대화의 다시 시도 알약 등).
@@ -211,7 +228,7 @@ export function useAssistantViewModel(
         message: trimmed,
         history,
         context: { route: pathname.replace(/\/+$/, '') || '/', programSelected: programIdentityFrom(pathname, search) !== null },
-        helpEntries: helpEntriesForSurface('chatbot').map((entry) => ({
+        helpEntries: offeredChatbotHelpEntries(helpFeatures).map((entry) => ({
           id: entry.id, title: entry.title, question: entry.question, summary: entry.summary, body: [...entry.body],
           limitation: entry.limitation, audience: entry.audience, status: entry.status,
           // 서버 계약은 경로만 받으므로 `?mode=filter` 같은 질의는 떼고 보냅니다. 버튼은 화면이 원본 항목으로 다시 만듭니다.
@@ -220,7 +237,7 @@ export function useAssistantViewModel(
       }, controller.signal)
       if (!isCurrentSession()) return
       const answer = result.outcome === 'answered'
-        ? freeTextAnswer(result.answer, { pathname, search, session, returnTo })
+        ? freeTextAnswer(result.answer, { pathname, search, session, returnTo, offered: helpFeatures })
         : freeTextFailure(trimmed, result.outcome === 'rate-limited' ? assistantMessages.rateLimited(result.retryAfterSeconds) : assistantMessages.unavailable)
       append([answer], answer.role === 'assistant' && answer.followUps.length > 0 ? answer.followUps : routeReplies())
     } catch (error) {
@@ -236,7 +253,7 @@ export function useAssistantViewModel(
       if (isCurrentSession()) updateUi({ isTyping: false })
     }
   }, [aiEnabled, append, askAssistant, isAuthenticated, messages, pathname, returnTo, routeReplies, search, session,
-    dispatchToStore, conversationSession, isCurrentSession, updateUi])
+    dispatchToStore, conversationSession, isCurrentSession, updateUi, helpFeatures])
 
   /** 검색 이동 버튼은 검색 입력창에 도우미가 고른 검색어를 미리 채웁니다. 검색 자체는 사용자가 보낼 때 시작합니다. */
   const prepareNavigation = useCallback((button: AssistantCardButton) => {
@@ -257,15 +274,16 @@ export function useAssistantViewModel(
     const asked = userMessage(reply.label)
     dispatchToStore(assistantMessagesAdded({ ...conversationSession, messages: [asked], quickReplies: [] }))
 
+    // 지난 대화의 알약이라도 지금 쓸 수 없는 주제·도움말(시작하기가 더는 제공되지 않는 경우)은 답하지 않고 주제 알약으로 돌려보냅니다.
     if (reply.kind === 'topic') {
-      const topic = reply.topicId === undefined ? undefined : findAssistantHelpTopic(reply.topicId)
-      const answer = topic === undefined ? freeTextFallback() : topicAnswer(topic)
+      const topic = reply.topicId === undefined ? undefined : findAssistantHelpTopic(reply.topicId, helpFeatures)
+      const answer = topic === undefined ? freeTextFallback() : topicAnswer(topic, helpFeatures)
       append([answer], answer.role === 'assistant' && answer.followUps.length > 0 ? answer.followUps : routeReplies())
       return
     }
     if (reply.kind === 'help') {
-      const entry = reply.helpId === undefined ? undefined : findHelpEntry(reply.helpId)
-      const answer = entry === undefined ? freeTextFallback() : helpAnswer(entry, pathname)
+      const entry = reply.helpId === undefined ? undefined : findOfferedHelpEntry(reply.helpId, helpFeatures)
+      const answer = entry === undefined ? freeTextFallback() : helpAnswer(entry, pathname, helpFeatures)
       append([answer], answer.role === 'assistant' && answer.followUps.length > 0 ? answer.followUps : routeReplies())
       return
     }
@@ -289,6 +307,12 @@ export function useAssistantViewModel(
       append([answer], answer.role === 'assistant' ? answer.followUps : [])
       return
     }
+    if (reply.kind === 'getting-started') {
+      // 알약은 시작하기를 읽은 뒤에만 보이므로 보통 안내가 있습니다. 그 사이 사라졌으면 주제 알약으로 돌려보냅니다.
+      const answer = gettingStarted === null ? freeTextFallback() : gettingStartedAnswer(gettingStarted)
+      append([answer], answer.role === 'assistant' && answer.followUps.length > 0 ? answer.followUps : routeReplies())
+      return
+    }
     // 관심 공고는 UseCase로 읽습니다. 실패해도 대화를 막지 않고 안내로 남깁니다.
     updateUi({ isTyping: true })
     try {
@@ -303,7 +327,10 @@ export function useAssistantViewModel(
       if (isCurrentSession()) updateUi({ isTyping: false })
     }
   }, [append, browseSavedPrograms, contactUrl, isAuthenticated, pathname, receivedProposals, returnTo, routeReplies, session, submitText,
-    dispatchToStore, conversationSession, isCurrentSession, updateUi])
+    dispatchToStore, conversationSession, isCurrentSession, updateUi, gettingStarted, helpFeatures])
+
+  // 저장된 알약은 그대로 두고 보여 줄 때만 시작하기 상태에 맞게 시작하기 알약·주제·도움말 알약을 붙이거나 뺍니다.
+  const shownQuickReplies = useMemo(() => withGettingStartedReplies(quickReplies, gettingStarted), [quickReplies, gettingStarted])
 
   return {
     /** 채팅 화면·로그인처럼 도우미를 두지 않는 화면입니다. 아래 고정 바 위로 올리는 일은 CSS(assistantLift)가 맡습니다. */
@@ -315,7 +342,7 @@ export function useAssistantViewModel(
     showLabel: showLabel && !isOpen,
     hasUnread: hasUnread && !isOpen,
     messages,
-    quickReplies,
+    quickReplies: shownQuickReplies,
     isTyping,
     pickQuickReply: (reply: AssistantQuickReply) => { void pickQuickReply(reply) },
     /** 자유 질문 입력창을 둘지입니다. 거짓이면 입력창 대신 로그인 안내와 [loginPath] 링크를 둡니다. */

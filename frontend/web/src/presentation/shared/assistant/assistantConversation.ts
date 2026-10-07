@@ -1,11 +1,18 @@
+import {
+  type GettingStartedGuide,
+  gettingStartedProgress,
+  gettingStartedStepLabels,
+  nextGettingStartedStep,
+} from '@govbiz/shared/domain/entities/GettingStarted'
 import { daysUntil, ddayTone, formatDday } from '@govbiz/shared/domain/labels'
 
 import type { AssistantAnswer, AssistantCard as AssistantAnswerCard } from '../../../domain/entities/AssistantAnswer'
 import type { PartnerProposal } from '../../../domain/entities/PartnerProposal'
 import type { SavedSupportProgram } from '../../../domain/entities/SavedSupportProgram'
 import { loginPathFor, signupPathFor } from '../auth/returnPath'
-import { findHelpEntry, helpActionHref } from '../help/helpContent'
-import type { HelpEntry } from '../help/helpTypes'
+import { gettingStartedStepCopy } from '../getting-started/gettingStartedView'
+import { findOfferedHelpEntry, helpActionHref } from '../help/helpContent'
+import type { HelpEntry, HelpFeature } from '../help/helpTypes'
 import { appPaths, isAppPath, publicPaths, supportProgramQuestionPath } from '../routes/appPaths'
 import type { AssistantCardTagTone } from './Assistant.styles'
 import { assistantMessages } from './assistantMessages'
@@ -14,7 +21,7 @@ import { assistantMessages } from './assistantMessages'
 export type AssistantQuickReply = {
   id: string
   label: string
-  kind: 'topic' | 'help' | 'saved-programs' | 'received-proposals' | 'login-benefits' | 'contact' | 'other' | 'retry'
+  kind: 'topic' | 'help' | 'saved-programs' | 'received-proposals' | 'getting-started' | 'login-benefits' | 'contact' | 'other' | 'retry'
   /** `help`일 때 도움말 항목 id입니다. */
   helpId?: string
   /** `topic`일 때 주제 id입니다. */
@@ -26,15 +33,26 @@ export type AssistantQuickReply = {
 /** 도움말 항목을 묶는 주제입니다. 어느 화면에서 열어도 같은 주제 목록이 먼저 나오고, 주제 → 질문 → 답 순서로 타고 들어갑니다. */
 export type AssistantHelpTopic = { id: string; label: string; entryIds: readonly string[] }
 
-export const assistantHelpTopics: readonly AssistantHelpTopic[] = [
+/** 모든 주제입니다. 늘 보이는 주제 뒤에, 제공 여부가 다른 기능을 설명하는 주제(시작하기의 계정·기업)를 둡니다. */
+const allHelpTopics: readonly AssistantHelpTopic[] = [
   { id: 'search', label: '지원사업 검색', entryIds: ['search-confirm-card', 'search-score-meaning', 'eligibility-unknown', 'status-unknown-source', 'evidence-insufficient', 'search-slow-or-failed'] },
   { id: 'saved', label: '관심 공고·리포트', entryIds: ['saved-programs-pipeline', 'daily-report'] },
   { id: 'review', label: '중복 검토·신청 문서', entryIds: ['review-save-vs-run', 'review-input-revision', 'application-preparation-flow'] },
   { id: 'partner', label: '파트너·기업 등록', entryIds: ['partner-write-requires-company', 'proposal-box'] },
+  { id: 'account', label: '계정·기업', entryIds: ['getting-started'] },
 ]
 
-export function findAssistantHelpTopic(id: string): AssistantHelpTopic | undefined {
-  return assistantHelpTopics.find((topic) => topic.id === id)
+/** 지금 제공되는 기능([offered])에 비춰 쓸 수 있는 항목이 하나라도 있는 주제입니다. 쓸 항목이 없는 주제 알약은 두지 않습니다. */
+export function offeredHelpTopics(offered: readonly HelpFeature[]): AssistantHelpTopic[] {
+  return allHelpTopics.filter((topic) => topic.entryIds.some((id) => findOfferedHelpEntry(id, offered) !== undefined))
+}
+
+/** 제공 여부가 다른 기능 없이도 늘 보이는 주제입니다. 비로그인과 시작하기를 제공받지 않는 회원의 첫 화면 주제가 이것입니다. */
+export const assistantHelpTopics: readonly AssistantHelpTopic[] = offeredHelpTopics([])
+
+/** 지금 쓸 수 있는 주제를 id로 찾습니다. */
+export function findAssistantHelpTopic(id: string, offered: readonly HelpFeature[] = []): AssistantHelpTopic | undefined {
+  return offeredHelpTopics(offered).find((topic) => topic.id === id)
 }
 
 export type AssistantCardRow = {
@@ -114,14 +132,19 @@ function helpQuickReply(entry: HelpEntry): AssistantQuickReply {
   return { id: `help:${entry.id}`, label: entry.question, kind: 'help', helpId: entry.id }
 }
 
+function topicQuickReply(topic: AssistantHelpTopic): AssistantQuickReply {
+  return { id: `topic:${topic.id}`, label: topic.label, kind: 'topic', topicId: topic.id }
+}
+
 export const contactQuickReply: AssistantQuickReply = { id: 'contact', label: assistantMessages.quickContact, kind: 'contact' }
 
 /**
- * 처음 열었을 때와 "다른 주제"를 눌렀을 때의 빠른 답변입니다. 화면과 무관하게 도움말 주제 전부와 회원의 상태 질문을 둡니다.
+ * 처음 열었을 때와 "다른 주제"를 눌렀을 때의 빠른 답변입니다. 화면과 무관하게 늘 보이는 도움말 주제와 회원의 상태 질문을 둡니다.
  * 비로그인이면 상태 질문 대신 로그인 안내 하나를 둡니다. 카카오톡 채널이 설정돼 있으면 담당자 문의를 마지막에 둡니다.
+ * 시작하기에 따라 달라지는 알약은 보여 줄 때 `withGettingStartedReplies`가 붙입니다.
  */
 export function quickRepliesFor(session: AssistantSession): AssistantQuickReply[] {
-  const topics = assistantHelpTopics.map<AssistantQuickReply>((topic) => ({ id: `topic:${topic.id}`, label: topic.label, kind: 'topic', topicId: topic.id }))
+  const topics = assistantHelpTopics.map(topicQuickReply)
   const status: AssistantQuickReply[] = session.isAuthenticated
     ? [
         { id: 'status:saved-programs', label: assistantMessages.quickSavedPrograms, kind: 'saved-programs' },
@@ -134,17 +157,101 @@ export function quickRepliesFor(session: AssistantSession): AssistantQuickReply[
 
 export const otherQuestionReply: AssistantQuickReply = { id: 'other', label: assistantMessages.otherQuestion, kind: 'other' }
 
-/** 주제를 고르면 그 주제의 질문들을 알약으로 보여 줍니다. 답은 짧게 한 줄입니다. */
-export function topicAnswer(topic: AssistantHelpTopic): AssistantMessage {
+export const gettingStartedQuickReply: AssistantQuickReply = {
+  id: 'status:getting-started', label: assistantMessages.quickGettingStarted, kind: 'getting-started',
+}
+
+/** 도우미가 읽는 시작하기 상태입니다. 아직 읽지 못했거나 비로그인이면 null입니다. */
+export type AssistantGettingStarted = Pick<GettingStartedGuide, 'visible' | 'closed'> | null
+
+/**
+ * 시작하기가 제공되는 동안(보이거나 회원이 닫아 둔 동안) 도우미가 쓰는 조건부 기능입니다. 기능이 꺼졌거나 가입 30일·완료 24시간이
+ * 지났거나 관리자·비로그인이면 서버가 둘 다 거짓으로 주거나 상태가 없으므로 시작하기 도움말을 쓰지 않습니다.
+ */
+export function offeredHelpFeatures(guide: AssistantGettingStarted): HelpFeature[] {
+  return guide !== null && (guide.visible || guide.closed) ? ['getting-started'] : []
+}
+
+/**
+ * 보여 줄 빠른 답변입니다. 저장된 대화의 알약은 그대로 두고 보여 줄 때만 시작하기 상태에 맞게 고치므로, 안내가 늦게 읽히거나
+ * 사라져도 맞게 보입니다.
+ * - 지금 쓸 수 없는 도움말 질문 알약과, 쓸 수 있는 항목이 없는 주제 알약은 뺍니다.
+ * - 주제와 내 상태 알약이 함께 있는 첫 화면 목록에는 시작하기가 제공되는 동안 계정·기업 주제를 주제 끝에, 시작하기가 보이는 동안
+ *   "다음에 뭘 하면 되나요?"를 바로 확인(내 상태 알약) 맨 앞에 붙입니다.
+ */
+export function withGettingStartedReplies(replies: AssistantQuickReply[], guide: AssistantGettingStarted): AssistantQuickReply[] {
+  const offered = offeredHelpFeatures(guide)
+  const topics = offeredHelpTopics(offered)
+  const kept = replies.filter((reply) => {
+    if (reply.kind === 'getting-started') return false
+    if (reply.kind === 'help') return reply.helpId !== undefined && findOfferedHelpEntry(reply.helpId, offered) !== undefined
+    if (reply.kind === 'topic') return topics.some((topic) => topic.id === reply.topicId)
+    return true
+  })
+  const firstStatus = kept.findIndex((reply) => reply.kind === 'saved-programs')
+  const topicEnd = kept.findLastIndex((reply) => reply.kind === 'topic') + 1
+  // 첫 화면 목록은 주제 알약 다음에 내 상태 알약이 옵니다(quickRepliesFor). 그 밖의 목록에는 붙이지 않습니다.
+  const firstScreen = topicEnd > 0 && firstStatus >= topicEnd
+  const added = firstScreen
+    ? topics
+      .filter((topic) => !assistantHelpTopics.includes(topic) && !kept.some((reply) => reply.kind === 'topic' && reply.topicId === topic.id))
+      .map(topicQuickReply)
+    : []
+  const status = firstScreen && guide?.visible === true ? [gettingStartedQuickReply] : []
+  if (added.length === 0 && status.length === 0) return kept.length === replies.length ? replies : kept
+  return [...kept.slice(0, topicEnd), ...added, ...kept.slice(topicEnd, firstStatus), ...status, ...kept.slice(firstStatus)]
+}
+
+/**
+ * "다음에 뭘 하면 되나요?"의 답입니다. 모델을 부르지 않고 서버가 기존 기록으로 계산한 단계로 만듭니다.
+ * 결론("다음은 ‘단계’예요.") → 이유 한 줄 → 있으면 "아직 안 돼요" 한 줄, 그 화면을 여는 버튼 하나, 출처(내 이용 현황 · 시작하기 n/m)입니다.
+ */
+export function gettingStartedAnswer(guide: Pick<GettingStartedGuide, 'steps'>): AssistantMessage {
+  const { done, total } = gettingStartedProgress(guide)
+  const source = assistantMessages.gettingStartedSource(done, total)
+  const next = nextGettingStartedStep(guide)
+  if (next === null) {
+    return botMessage([assistantMessages.gettingStartedAllDone, assistantMessages.gettingStartedAllDoneNext], {
+      card: { rows: [], buttons: [{ label: assistantMessages.savedOpen, to: appPaths.savedPrograms }] },
+      source,
+      followUps: [otherQuestionReply],
+    })
+  }
+  const copy = gettingStartedStepCopy[next.id]
+  const paragraphs = [assistantMessages.gettingStartedNext(gettingStartedStepLabels[next.id])]
+  if (copy.reason !== null) paragraphs.push(copy.reason)
+  if (copy.limitation !== null) paragraphs.push(assistantMessages.gettingStartedLimitation(copy.limitation))
+  return botMessage(paragraphs, {
+    card: copy.to !== null && copy.action !== null ? { rows: [], buttons: [{ label: copy.action, to: copy.to }] } : null,
+    source,
+    followUps: [otherQuestionReply],
+  })
+}
+
+/**
+ * AI 자유 질문이 꺼진 환경에서 입력한 말로 찾은 도움말로 답합니다. 하나면 그 도움말로 바로 답하고, 여럿이면 질문 알약으로 고르게 합니다.
+ * [entries]는 지금 쓸 수 있는 항목만 찾은 결과(`findHelpEntriesByKeyword`)입니다.
+ */
+export function helpSearchAnswer(entries: HelpEntry[], pathname: string, offered: readonly HelpFeature[]): AssistantMessage {
+  const [first] = entries
+  if (first !== undefined && entries.length === 1) return helpAnswer(first, pathname, offered)
+  return botMessage([assistantMessages.helpSearchFound], { followUps: [...entries.map(helpQuickReply), otherQuestionReply] })
+}
+
+/** 주제를 고르면 그 주제에서 지금 쓸 수 있는 질문들을 알약으로 보여 줍니다. 답은 짧게 한 줄입니다. */
+export function topicAnswer(topic: AssistantHelpTopic, offered: readonly HelpFeature[]): AssistantMessage {
   const questions = topic.entryIds
-    .map((id) => findHelpEntry(id))
+    .map((id) => findOfferedHelpEntry(id, offered))
     .filter((entry): entry is HelpEntry => entry !== undefined)
     .map(helpQuickReply)
   return botMessage([assistantMessages.topicAsk(topic.label)], { followUps: [...questions, otherQuestionReply] })
 }
 
-/** 도움말 항목으로 답합니다. 결론 → 본문 첫 문단 → 지금 안 되는 것 → 행동 버튼. 준비 중·예시 항목은 그 사실을 함께 말합니다. */
-export function helpAnswer(entry: HelpEntry, pathname: string): AssistantMessage {
+/**
+ * 도움말 항목으로 답합니다. 결론 → 본문 첫 문단 → 지금 안 되는 것 → 행동 버튼. 준비 중·예시 항목은 그 사실을 함께 말합니다.
+ * 관련 항목 알약은 지금 쓸 수 있는 항목만 둡니다.
+ */
+export function helpAnswer(entry: HelpEntry, pathname: string, offered: readonly HelpFeature[]): AssistantMessage {
   const inApp = isAppPath(pathname)
   const paragraphs = [entry.summary, ...entry.body.slice(0, 1)]
   if (entry.limitation !== null) paragraphs.push(entry.limitation)
@@ -154,7 +261,7 @@ export function helpAnswer(entry: HelpEntry, pathname: string): AssistantMessage
     ? []
     : [{ label: entry.action.label, to: helpActionHref(entry.action.to, inApp) }]
   const followUps = entry.related
-    .map((id) => findHelpEntry(id))
+    .map((id) => findOfferedHelpEntry(id, offered))
     .filter((related): related is HelpEntry => related !== undefined)
     .slice(0, 2)
     .map(helpQuickReply)
@@ -190,7 +297,14 @@ export function programIdentityFrom(pathname: string, search: string): { sourceC
   return { sourceCode, sourceProgramId }
 }
 
-export type AssistantFreeTextContext = { pathname: string; search: string; session: AssistantSession; returnTo: string }
+export type AssistantFreeTextContext = {
+  pathname: string
+  search: string
+  session: AssistantSession
+  returnTo: string
+  /** 지금 제공되는 조건부 기능입니다. 사용법 답의 인용·관련 항목은 이 기능 안에서만 씁니다. */
+  offered: readonly HelpFeature[]
+}
 
 /** 에이전트 카드를 목록 행으로 바꿉니다. 종류 태그, 제목 링크, 부제와 고른 이유 한 줄입니다. */
 function agentCardRows(cards: AssistantAnswerCard[], inApp: boolean): AssistantCardRow[] {
@@ -223,10 +337,12 @@ export function freeTextAnswer(answer: AssistantAnswer, context: AssistantFreeTe
     case 'UNCLEAR':
       return botMessage([answer.clarificationQuestion ?? assistantMessages.greetingAsk], { followUps: quickRepliesFor(context.session) })
     case 'PRODUCT_HELP': {
-      const cited = answer.citations.map((id) => findHelpEntry(id)).filter((entry): entry is HelpEntry => entry !== undefined)
+      const cited = answer.citations
+        .map((id) => findOfferedHelpEntry(id, context.offered))
+        .filter((entry): entry is HelpEntry => entry !== undefined)
       const first = cited[0]
       const related = (first?.related ?? [])
-        .map((id) => findHelpEntry(id))
+        .map((id) => findOfferedHelpEntry(id, context.offered))
         .filter((entry): entry is HelpEntry => entry !== undefined)
         .slice(0, 2)
         .map(helpQuickReply)

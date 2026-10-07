@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import type { Account } from '../../../domain/entities/Account'
@@ -9,6 +9,9 @@ import { selectChatActivity } from '../../features/chat/state/chatSlice'
 import { getSupportProgramSearchReturnTo, isApplicationPreparationsReturnTo, isReportsReturnTo, isSavedProgramsReturnTo } from '../../features/support-program-detail/view/supportProgramNavigation'
 import { useAuthSession } from '../auth/hooks/useAuthSession'
 import { ChatActivityDot } from '../chat-activity/ChatActivityDot'
+import { GettingStartedChecklist } from '../getting-started/GettingStartedChecklist'
+import { gettingStartedMessages, isGettingStartedHiddenOn } from '../getting-started/gettingStartedView'
+import { useGettingStartedActions, useGettingStartedGuide } from '../getting-started/useGettingStarted'
 import { usePendingReceivedProposalCount } from '../partner-proposal/useReceivedProposals'
 import { useUnseenPreparationResultCount } from '../preparation-jobs/usePreparationJobs'
 import { appPaths, publicPaths } from '../routes/appPaths'
@@ -17,7 +20,7 @@ import { useFloatingPopover } from '../workspace/useFloatingPopover'
 import { appSidebarStyles, sidebarMenuItemClassName } from './AppSidebar.styles'
 import type { ChatHistoryViewModel } from '../../features/chat/hooks/useChatHistory'
 
-type MenuIcon = 'search' | 'document' | 'bookmark' | 'users' | 'inbox' | 'building' | 'shield' | 'pricing' | 'logout' | 'more' | 'newChat' | 'panel' | 'trash'
+type MenuIcon = 'search' | 'document' | 'bookmark' | 'users' | 'inbox' | 'building' | 'shield' | 'pricing' | 'logout' | 'more' | 'newChat' | 'panel' | 'trash' | 'checklist'
 
 /** 사이드바 메뉴 한 줄입니다. `to`가 없으면 아직 화면이 없는 메뉴이므로 링크로 만들지 않습니다. */
 type MenuItem = {
@@ -91,6 +94,14 @@ const iconPaths: Record<MenuIcon, ReactNode> = {
     </>
   ),
   shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+  // 체크 두 줄과 빈 줄 하나: 시작하기 체크리스트를 다시 연다는 뜻입니다.
+  checklist: (
+    <>
+      <path d="M10 6h10M10 12h10M10 18h10" />
+      <path d="m3.5 6 1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11" />
+      <path d="M4 18h3" />
+    </>
+  ),
   logout: (
     <>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -174,10 +185,32 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   // 계정 메뉴는 카드와 같은 폭으로 위에 펼치고, 위 공간이 모자라면 안에서 스크롤합니다.
   const accountMenuFloating = useFloatingPopover({ open: isAccountMenuOpen, placement: 'top-start', gap: 8, matchReferenceWidth: true })
+  const accountButtonRef = useRef<HTMLButtonElement | null>(null)
+  const referenceAccountMenu = accountMenuFloating.reference
+  const setAccountButton = useCallback((node: HTMLButtonElement | null) => {
+    accountButtonRef.current = node
+    referenceAccountMenu(node)
+  }, [referenceAccountMenu])
+  // 시작하기는 사이드바에만 보이고 먼저 말을 걸지 않습니다. 닫았으면 계정 메뉴에서만 다시 엽니다.
+  const gettingStarted = useGettingStartedGuide()
+  const gettingStartedActions = useGettingStartedActions()
+  const gettingStartedHeadingRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     setIsAccountMenuOpen(false)
   }, [pathname])
+
+  /** 닫은 체크리스트 자리에 초점이 남지 않게, 다시 볼 수 있는 계정 메뉴 버튼으로 옮깁니다. */
+  function focusAccountButton() {
+    accountButtonRef.current?.focus()
+  }
+
+  /** 다시 보기를 저장하면 메뉴를 닫고 다시 나타난 시작하기 제목으로 초점을 옮깁니다. */
+  async function reopenGettingStarted() {
+    if (!await gettingStartedActions.reopen()) return
+    setIsAccountMenuOpen(false)
+    setTimeout(() => gettingStartedHeadingRef.current?.focus(), 0)
+  }
 
   useEffect(() => {
     if (!isAccountMenuOpen) return
@@ -271,6 +304,7 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
               )}
             </nav>
           ))}
+        {account ? <GettingStartedChecklist headingRef={gettingStartedHeadingRef} onClosed={focusAccountButton} /> : null}
         {account ? <section className="mt-6 flex flex-col gap-1" aria-label="대화 기록">
           <h2 className="mb-1 px-3 text-xs font-medium text-[#888]">대화 기록</h2>
           {history.items.map((item) => <div key={item.id} className="flex min-w-0 items-center gap-1">
@@ -340,6 +374,21 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
                   </Link>
                 </>
               ) : null}
+              {/* 닫아서 숨긴 시작하기가 다시 열면 보이는 동안만 둡니다. 기간이 지났으면 서버가 closed를 거짓으로 줍니다.
+                  쓰는 중인 화면에서는 시작하기를 두지 않으므로 다시 보기도 두지 않습니다. */}
+              {gettingStarted?.closed && !isGettingStartedHiddenOn(pathname) ? (
+                <>
+                  <button className={appSidebarStyles.accountMenuButton} type="button"
+                    disabled={gettingStartedActions.pending === 'reopen'} aria-busy={gettingStartedActions.pending === 'reopen'}
+                    onClick={() => { void reopenGettingStarted() }}>
+                    <MenuIconGraphic name="checklist" />
+                    <span>{gettingStartedMessages.reopen}</span>
+                  </button>
+                  {gettingStartedActions.failed === 'reopen'
+                    ? <p className="m-0 px-3 pb-1 text-xs text-red-700" role="alert">{gettingStartedMessages.reopenFailed}</p>
+                    : null}
+                </>
+              ) : null}
               <button className={appSidebarStyles.accountMenuButton} type="button" onClick={signOutToLanding}>
                 <MenuIconGraphic name="logout" />
                 <span>로그아웃</span>
@@ -347,7 +396,7 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
             </div>
           ) : null}
           <button
-            ref={accountMenuFloating.reference}
+            ref={setAccountButton}
             className={appSidebarStyles.accountCard}
             type="button"
             aria-label={`계정 메뉴 · ${account.email}`}

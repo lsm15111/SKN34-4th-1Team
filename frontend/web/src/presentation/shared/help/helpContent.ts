@@ -1,5 +1,5 @@
 import { APP_PREFIX, appPaths, isAppPath, publicPaths, toAppPath } from '../routes/appPaths'
-import type { HelpEntry, HelpSurface } from './helpTypes'
+import type { HelpEntry, HelpFeature, HelpSurface } from './helpTypes'
 
 /**
  * 도움말 항목 한 벌입니다. 화면 문구를 여기에 모아 가이드·FAQ·매뉴얼·챗봇이 같은 내용을 씁니다.
@@ -267,11 +267,70 @@ export const helpEntries: readonly HelpEntry[] = [
     related: ['search-score-meaning'],
     updatedOn: '2026-10-04',
   },
+  {
+    id: 'getting-started',
+    title: '처음이라면 무엇부터 하나요',
+    question: '처음인데 뭐부터 하면 되나요?',
+    summary: '사이드바 "시작하기"에 할 일이 순서대로 있어요. 맨 위의 끝나지 않은 일부터 하면 돼요.',
+    body: [
+      '기업 회원은 기업 등록하기 · 관심 공고 담기 · 마감 알림 켜기 · 맞춤 리포트 받기 · 신청 준비 시작하기, 개인 회원은 기업 등록과 리포트를 뺀 세 가지예요. 항목을 누르면 그 일을 하는 화면이 열려요.',
+      '이미 한 일은 저절로 완료로 바뀌고, 모두 마치면 하루 뒤에 사라져요. 맞춤 리포트는 기업을 등록해야 받을 수 있어요.',
+      '[닫기]로 숨긴 시작하기는 계정 메뉴의 "시작하기 다시 보기"로 다시 열어요. 도우미의 "다음에 뭘 하면 되나요?"를 누르면 지금 할 일을 알려 드려요.',
+    ],
+    limitation: '시작하기는 가입하고 30일 동안만 보여요.',
+    category: 'screen',
+    // 시작하기가 제공되는 회원에게만 맞는 설명이라 기능 상태를 아는 도우미에만 두고, 도우미도 제공되는 동안만 씁니다.
+    surfaces: ['chatbot'],
+    audience: 'member',
+    requires: 'getting-started',
+    routes: [appPaths.chat, appPaths.profile],
+    action: { label: '검색 화면 열기', to: appPaths.chat },
+    status: 'available',
+    related: ['saved-programs-pipeline'],
+    keywords: ['처음', '시작', '뭐부터', '다음에뭘'],
+    updatedOn: '2026-10-08',
+  },
 ]
 
 /** `id`로 항목을 찾습니다. 챗봇 답변의 인용과 항목 사이 링크가 씁니다. */
 export function findHelpEntry(id: string): HelpEntry | undefined {
   return helpEntries.find((entry) => entry.id === id)
+}
+
+/** 지금 제공되는 기능([offered])에 비춰 도우미가 이 항목을 쓸 수 있는지입니다. 제공 여부가 다른 기능을 설명하지 않는 항목은 늘 씁니다. */
+export function isHelpEntryOffered(entry: HelpEntry, offered: readonly HelpFeature[]): boolean {
+  return entry.requires === undefined || offered.includes(entry.requires)
+}
+
+/** `id`로 지금 쓸 수 있는 항목을 찾습니다. 없거나 지금 제공되지 않는 기능의 항목이면 undefined입니다. */
+export function findOfferedHelpEntry(id: string, offered: readonly HelpFeature[]): HelpEntry | undefined {
+  const entry = findHelpEntry(id)
+  return entry !== undefined && isHelpEntryOffered(entry, offered) ? entry : undefined
+}
+
+/** 도우미가 지금 쓸 수 있는 챗봇 항목입니다. AI 자유 질문에도 이 항목만 보내 제공되지 않는 기능을 인용하지 않게 합니다. */
+export function offeredChatbotHelpEntries(offered: readonly HelpFeature[]): HelpEntry[] {
+  return helpEntriesForSurface('chatbot').filter((entry) => isHelpEntryOffered(entry, offered))
+}
+
+/** 띄어쓰기·문장부호를 빼고 비교합니다. "다음에 뭘 해요?"와 "다음에뭘"이 같게 맞습니다. */
+function compactText(text: string): string {
+  return text.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '')
+}
+
+/**
+ * AI 자유 질문이 꺼진 환경에서 입력한 말로 지금 쓸 수 있는 챗봇 도움말을 찾습니다. 항목의 찾는 말(`keywords`)이 입력에 들어 있을 때만
+ * 맞고, 정의 순서대로 최대 [limit]개를 돌려줍니다. 찾는 말이 없는 항목은 입력으로 찾지 않습니다(모델 없이 오답을 내지 않기 위해서).
+ */
+export function findHelpEntriesByKeyword(text: string, offered: readonly HelpFeature[], limit = 3): HelpEntry[] {
+  const input = compactText(text)
+  if (input === '') return []
+  return offeredChatbotHelpEntries(offered)
+    .filter((entry) => (entry.keywords ?? []).some((keyword) => {
+      const compact = compactText(keyword)
+      return compact !== '' && input.includes(compact)
+    }))
+    .slice(0, limit)
 }
 
 /** 한 표면에 노출할 항목을 정의 순서대로 돌려줍니다. */
@@ -282,11 +341,11 @@ export function helpEntriesForSurface(surface: HelpSurface): HelpEntry[] {
 /**
  * 지금 보고 있는 화면에서 추천할 챗봇 질문을 고릅니다.
  * 공개 경로는 대응하는 내부 경로로 바꿔 비교하므로 `/`와 `/app/chat`이 같은 결과를 냅니다.
- * 화면을 지정한 항목을 먼저, 화면과 무관한 항목을 나중에 둡니다.
+ * 화면을 지정한 항목을 먼저, 화면과 무관한 항목을 나중에 둡니다. 제공 여부가 다른 기능의 항목은 [offered]에 그 기능이 있을 때만 냅니다.
  */
-export function helpEntriesForRoute(pathname: string, limit = 3): HelpEntry[] {
+export function helpEntriesForRoute(pathname: string, limit = 3, offered: readonly HelpFeature[] = []): HelpEntry[] {
   const current = isAppPath(pathname) ? pathname.replace(/\/+$/, '') || APP_PREFIX : toAppPath(pathname)
-  const candidates = helpEntriesForSurface('chatbot')
+  const candidates = offeredChatbotHelpEntries(offered)
   const matched = candidates.filter((entry) => entry.routes.some((route) => current === route || current.startsWith(`${route}/`)))
   const global = candidates.filter((entry) => entry.routes.length === 0)
   return [...matched, ...global].slice(0, limit)

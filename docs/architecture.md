@@ -379,6 +379,17 @@ Core 내부 전용 소비자가 기존 검색·근거 답변을 재사용하며 
 같은 transaction에서 그 달 사용분을 `plan_usage_counter`에 남깁니다. 화면은 `GET /api/v1/plan-usage`로 남은 횟수를 읽습니다.
 [한도·세는 규칙·판단 근거](plan-usage-limits.md)를 참고하세요.
 
+## 시작하기 안내
+
+웹 사이드바 "시작하기"와 도우미의 "다음에 뭘 하면 되나요?"는 `GET /api/v1/me/getting-started`의 단계만 씁니다.
+`GettingStartedController → GettingStartedService → GettingStartedRepository → GettingStartedMapper → XML → MySQL` 순서로,
+기업·관심 공고·마감 알림 설정·준비된 리포트·신청 문서/중복 검토(목업 제외) 표를 단계마다 EXISTS 하나로 읽는 읽기 전용 SELECT 한 문장을
+실행하고 domain `GettingStartedGuide`가 단계·잠김·보임(기능 스위치·관리자 아님·닫지 않음·가입 30일·처음 완료 뒤 24시간)을 정합니다.
+모델 호출과 행동 기록은 없고, V55 `account_getting_started`에 닫은 시각과 처음 완료 시각만 남깁니다. 처음 모두 끝난 것을 본 요청이
+완료 시각을 한 번 기록하고, `PUT`(`{ closed }`)은 닫은 시각만 바꿉니다.
+웹은 작업 화면 틀의 `GettingStartedSync`가 로그인 뒤·화면 이동(15초 간격)·도우미 열기 때 읽어 Redux에 두고, 사이드바와 도우미가
+같은 사본을 씁니다. 도우미 답은 `View → assistantConversation`의 고정 문구로 만들며 Core 도우미 API를 부르지 않습니다.
+
 ## 검색·상세 조회·원문 근거 질문
 
 공개 대화 해석·검색·근거 질문은 입력 검증 뒤 Controller에서 `SupportProgramRequestAdmissionService`를 거쳐

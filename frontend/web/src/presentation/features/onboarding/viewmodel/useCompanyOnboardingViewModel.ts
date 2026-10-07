@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { canRegisterBusiness } from '@govbiz/shared/domain/entities/CompanyRegistration'
 
 import { appContainer } from '../../../../app/appContainer'
@@ -7,6 +7,7 @@ import { useAppDispatch } from '../../../../app/hooks'
 import { companyIndustries, companyProfileLimits, companyRegions } from '../../../../domain/entities/Company'
 import type { LookupBusinessUseCase, RegisterCompanyUseCase } from '../../../../domain/usecases/CompanyUseCases'
 import { useAuthSession } from '../../../shared/auth/hooks/useAuthSession'
+import { readWelcomeReturnPath } from '../../../shared/auth/returnPath'
 import { signedIn } from '../../../shared/auth/state/authSlice'
 import {
   type CompanyFormErrors,
@@ -38,6 +39,7 @@ type CompanyUseCases = {
  * 온보딩 2단계(기업 등록)입니다. 1단계에서 기업 회원을 고른 뒤 사업자등록번호를 조회하고 소재지·업종·설립연도를 적어
  * 등록합니다. 건너뛸 수 있고([나중에 하기]), 그러면 프로필의 "기업 등록" 카드가 이어받습니다.
  * 조회·검증·문구는 프로필과 같은 shared/company 부품을 쓰고, 이 화면만의 판단은 언제 폼을 여는지와 어디로 갈지입니다.
+ * 등록하거나 넘기면 원래 가려던 곳(`?next=`, 없으면 검색 화면)으로 갑니다.
  * 개인 회원이거나 이미 기업이 있는 계정에는 의미가 없어 `redirectTo`로 검색·프로필로 보냅니다.
  */
 export function useCompanyOnboardingViewModel(useCases: Partial<CompanyUseCases> = {}) {
@@ -47,6 +49,7 @@ export function useCompanyOnboardingViewModel(useCases: Partial<CompanyUseCases>
   }
   const { account } = useAuthSession()
   const navigate = useNavigate()
+  const returnTo = readWelcomeReturnPath(useLocation().search)
   const dispatchToStore = useAppDispatch()
   const isMounted = useRef(true)
   // 등록에 성공해 세션 계정에 기업이 생기는 순간, 아래 redirectTo가 프로필로 보내지 않도록 떠나는 중임을 기억합니다.
@@ -98,7 +101,7 @@ export function useCompanyOnboardingViewModel(useCases: Partial<CompanyUseCases>
       if (result.outcome === 'registered') {
         isLeaving.current = true
         dispatchToStore(signedIn(accountWithCompany(account, result.company)))
-        navigate(appPaths.chat, { replace: true })
+        navigate(returnTo, { replace: true })
         return
       }
       const failure = registerFailure(result)
@@ -155,7 +158,7 @@ export function useCompanyOnboardingViewModel(useCases: Partial<CompanyUseCases>
     foundedYearMin: companyProfileLimits.foundedYearMin,
     isSaving,
     submit,
-    /** 확인 없이 검색 화면으로 갑니다. 저장되는 것은 없고, 프로필의 기업 등록 카드가 이어받습니다. */
-    skip: () => navigate(appPaths.chat, { replace: true }),
+    /** 확인 없이 원래 가려던 곳(없으면 검색 화면)으로 갑니다. 저장되는 것은 없고, 프로필의 기업 등록 카드가 이어받습니다. */
+    skip: () => navigate(returnTo, { replace: true }),
   }
 }

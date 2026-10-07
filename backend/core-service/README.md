@@ -155,6 +155,35 @@ V53 `account_plan`에 운영자가 배정한 계정만 PLUS·PREMIUM 한도를 �
 호출 흐름: 하루 한도는 `Controller → PlanUsageService.consume → PlanUsageRepository(MySQL)·GuestPlanUsageRepository(Redis)` 뒤
 기존 검색·원문 답변 Service, 월 한도는 `기능 Service(TransactionTemplate) → 기능 Repository.reserve → PlanUsageService.requireMonthlyCapacity → PlanUsageRepository → MyBatis → MySQL`입니다.
 
+## 시작하기 안내
+
+`ai.govbiz.core.gettingstarted`는 웹 사이드바 "시작하기"와 도우미의 "다음에 뭘 하면 되나요?"가 쓰는 단계를 계산합니다. 모델을 부르지 않고
+새 행동 기록도 남기지 않으며, 이미 있는 데이터만 읽습니다. V55 `account_getting_started`에는 [닫기]를 누른 시각(`closed_at`)과 처음
+모든 단계를 마친 시각(`completed_at`)만 둡니다(계정 행 삭제 시 함께 삭제).
+
+| 단계 | 대상 | 완료 조건(읽기 전용 SELECT 한 문장의 EXISTS) |
+|---|---|---|
+| `SIGN_UP` | 전원 | 항상 완료 |
+| `COMPANY` | 회원 유형이 개인(`INDIVIDUAL`)이 아님 | `company` 행 |
+| `SAVE_PROGRAM` | 전원 | `saved_support_program` 행(원본 공고가 목록에서 숨겨져도 완료) |
+| `DEADLINE_REMINDER` | 전원 | `account_notification_setting.deadline_reminder_enabled` |
+| `DAILY_REPORT` | `COMPANY`가 보일 때 | `READY` 리포트. 없고 기업도 없으면 `LOCKED` |
+| `START_PREPARATION` | 전원 | 로컬 목업(`demo_seed_key`)이 아닌 신청 문서 또는 중복 검토 |
+
+- **보임(`visible`):** `GETTING_STARTED_ENABLED`(기본 false, 로컬 Compose만 true)가 켜져 있고, 관리자가 아니며, 닫지 않았고, 가입 30일 안이며,
+  처음 모두 마친 지 24시간이 지나지 않았을 때만 참입니다. 완료 시각은 처음 모두 끝난 것을 본 요청이 `COALESCE`로 한 번만 남기므로,
+  그 뒤 알림을 꺼 단계가 다시 할 일이 되어도 안내가 다시 나타나지 않습니다. 대조군(holdout)은 아직 없습니다.
+- **닫힘(`closed`):** 닫아서 숨겼고 다시 열면 보이는 상태일 때만 참입니다. 기간이 지났거나 대상이 아니면 `visible`·`closed`가 모두 거짓이라
+  화면은 다시 보기도 두지 않습니다.
+
+| 시작하기 API | 동작 |
+|---|---|
+| `GET /api/v1/me/getting-started` | `{ visible, closed, completedAt, steps: [{ id, status: DONE\|TODO\|LOCKED }] }`. `steps`는 화면 순서, `completedAt`은 서울 시각(+09:00) 또는 null. 로그인 필요(401), no-store |
+| `PUT /api/v1/me/getting-started` | `{ closed: true }`는 [닫기](처음 닫은 시각 유지), `{ closed: false }`는 다시 보기. 같은 응답. `closed` 누락·null·불리언 아님 400, 다른 Origin의 쿠키 요청 403, no-store |
+
+호출 흐름: `GettingStartedController → GettingStartedService → GettingStartedRepository → GettingStartedMapper → GettingStartedMapper.xml → MySQL`.
+단계와 보임 판단은 domain `GettingStartedGuide`가 합니다.
+
 ## 실행
 
 기업 맞춤 리포트는 `ai.govbiz.core.dailyreport`에서 저장된 기업 조건·지원 목적을 기존 검색과 HTML 근거 답변에
@@ -458,6 +487,7 @@ Controller의 `SupportProgramRequestAdmissionService.execute`가 공개 요청 �
 | `GET /api/v1/support-programs/detail` | 제공처 코드와 원본 ID로 현재 공고 상세 조회. `sourceUrl`은 공고 상세, `applicationRoute`는 공식 신청방법·URL·경로 분류, `contact`(담당 부서·제공처 원문 전화번호·문의처 원문, 없으면 null)·`preferenceDescription`·`supervisingInstitutionType`은 공식 API 값을 반환 |
 | `POST /api/v1/support-programs/detail/answers` | 특정 공고의 공식 원문 근거 질문·답변. 로그인 필요(401), 요금제 하루 질문 횟수를 씀(429 `PLAN_QUOTA_EXCEEDED`) |
 | `GET /api/v1/plan-usage` | 현재 요금제와 기능별 남은 사용량. 로그인 전에는 AI 대화 검색 체험만 |
+| `GET` `PUT /api/v1/me/getting-started` | 본인 시작하기 단계·보임·닫힘 조회와 닫기·다시 보기(`{ closed }`). 로그인 필요, 위 시작하기 안내 참고 |
 | `GET /api/v1/support-programs/detail/attachments` | 공고 원문이 직접 연결한 첨부 목록(이미지 제외, 최대 30개). 원본 주소 없이 `index`·`fileName`·`extension`만 반환하고, 원문에서 읽은 목록은 Redis에 6시간 보관. 원문을 읽지 못하면 503 `SUPPORT_PROGRAM_ATTACHMENTS_UNAVAILABLE` |
 | `GET /api/v1/support-programs/detail/attachments/download` | 목록의 `index` 첨부를 Core가 원본에서 받아 그대로 흘려보냄. 화면에서 읽은 이름을 UTF-8 `filename*`로 다시 붙이고 항상 `application/octet-stream`. 100MB 초과는 413 `SUPPORT_PROGRAM_ATTACHMENT_TOO_LARGE`, 목록에 없는 순번은 404 `SUPPORT_PROGRAM_ATTACHMENT_NOT_FOUND` |
 | `POST /api/v1/sample-items/prepare` | 계층 연결 학습용 예제 |
@@ -949,6 +979,14 @@ planusage/
 │   ├── mapper            # MyBatis Mapper, DbRow
 │   └── exception         # 사용량 저장소 장애
 └── domain                # 요금제별 한도, 기능·기간, 서울 기준 집계 기간
+gettingstarted/
+├── controller            # 본인 시작하기 조회·닫기·다시 보기 HTTP 진입점
+│   └── dto               # 공개 요청·응답 계약
+├── service               # 완료 사실 읽기, 처음 모두 마친 시각 한 번 기록, 닫기 저장
+├── repository            # 기존 기능 표의 EXISTS 읽기와 닫기·완료 시각 저장
+│   └── mapper            # MyBatis Mapper, DbRow
+├── domain                # 단계·상태·보임(30일·24시간·관리자·닫힘) 규칙
+└── config                # 기능 스위치
 _health                    # Core API Health
 _health_ai_service         # AI Service Health의 Controller → Service → Client
 _sampleitem                # 학습 예제

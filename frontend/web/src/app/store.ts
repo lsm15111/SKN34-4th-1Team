@@ -7,6 +7,7 @@ import { readAssistantConversation, writeAssistantConversation } from '../presen
 import assistantReducer, {
   type AssistantState,
 } from '../presentation/shared/assistant/state/assistantSlice'
+import gettingStartedReducer from '../presentation/shared/getting-started/state/gettingStartedSlice'
 import receivedProposalsReducer from '../presentation/shared/partner-proposal/state/receivedProposalsSlice'
 import preparationJobsReducer from '../presentation/shared/preparation-jobs/state/preparationJobsSlice'
 import sampleItemReducer from '../presentation/features/sample-item/state/sampleItemSlice'
@@ -36,6 +37,7 @@ export function createAppStore() {
       auth: authReducer,
       assistant: assistantReducer,
       chat: chatReducer,
+      gettingStarted: gettingStartedReducer,
       preparationJobs: preparationJobsReducer,
       receivedProposals: receivedProposalsReducer,
       sampleItem: sampleItemReducer,
