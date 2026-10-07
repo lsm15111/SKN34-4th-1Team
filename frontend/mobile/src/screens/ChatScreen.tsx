@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native'
-import type { SupportProgramConversationContext, SupportProgramInterpretation, SupportProgramPendingClarification } from '@govbiz/shared/domain/entities/SupportProgramConversation'
+import { clarificationQuickReplies, type SupportProgramConversationContext, type SupportProgramInterpretation,
+  type SupportProgramPendingClarification } from '@govbiz/shared/domain/entities/SupportProgramConversation'
 import type { SupportProgramSearchResult } from '@govbiz/shared/domain/entities/SupportProgramSearchResult'
 import { RestoreSupportProgramSearchUseCase } from '@govbiz/shared/domain/usecases/RestoreSupportProgramSearchUseCase'
 import { SearchSupportProgramsUseCase } from '@govbiz/shared/domain/usecases/SearchSupportProgramsUseCase'
 import { SupportProgramSearchRestoreError } from '@govbiz/shared/domain/errors/SupportProgramSearchRestoreError'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
-import { ApiError, errorMessage, programClient } from '../api/client'
-import { restoreSearchResults, searchPrograms } from '../api/searchResults'
+import { ApiError, programClient } from '../api/client'
+import { restoreSearchResults, searchPrograms, supportProgramFailureMessage } from '../api/searchResults'
 import type { LoginRequest } from '../auth/loginFlow'
 import { useAuth } from '../auth/session'
 import { SearchProgramCard } from '../components/SearchProgramCard'
@@ -138,11 +139,12 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
 
   function cancel() { generation.current += 1; request.current?.abort(); setBusy(null); clearTimelineScroll() }
 
-  async function interpret() {
-    if (!message.trim() || busy) return
+  /** 입력한 메시지나 고른 빠른 답변을 해석합니다. 빠른 답변도 확인 카드를 거쳐야 검색합니다. */
+  async function interpret(reply?: string) {
+    const text = (reply ?? message).trim()
+    if (!text || busy) return
     const controller = new AbortController(); request.current = controller
     const revision = ++generation.current
-    const text = message.trim()
     setBusy('interpret'); setError(null)
     requestTimelineScroll('message')
     pendingRestore.current = null; retryRestore.current = null; setRestoreFailure(null)
@@ -162,7 +164,7 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
     } catch (cause) {
       if (!controller.signal.aborted && generation.current === revision) {
         if (cause instanceof ApiError && cause.status === 401) void invalidateSession().catch(() => undefined)
-        setError(errorMessage(cause))
+        setError(supportProgramFailureMessage(cause, 'interpret'))
         requestTimelineScroll('notice')
       }
     } finally { if (generation.current === revision) setBusy(null) }
@@ -197,13 +199,20 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
     } catch (cause) {
       if (!controller.signal.aborted && generation.current === revision) {
         if (cause instanceof ApiError && cause.status === 401) void invalidateSession().catch(() => undefined)
-        setError(errorMessage(cause))
+        setError(supportProgramFailureMessage(cause, 'search'))
         requestTimelineScroll('notice')
       }
     } finally { if (generation.current === revision) setBusy(null) }
   }
 
   const introductory = history.length === 0 && !proposal && !result && !busy
+  const quickReplies = proposal?.status === 'CLARIFICATION_REQUIRED' ? clarificationQuickReplies(proposal.clarificationKind) : []
+  function sendQuickReply(reply: string) {
+    // 작성 중인 메시지는 덮어쓰지 않습니다. 고른 문구를 보낼 메시지로 보여 주고 해석합니다.
+    if (message.trim() || busy) return
+    setMessage(reply)
+    void interpret(reply)
+  }
   return <KeyboardAvoidingView testID="ai-search-keyboard-container" style={local.page}
     behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={keyboardOffset} enabled={active}>
     <ScrollView ref={timeline} testID="ai-search-timeline" bounces={false} overScrollMode="never" style={local.scroll} contentContainerStyle={[local.timeline, introductory && { flexGrow: 1 }]}
@@ -223,6 +232,12 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
           onLayout={index === history.length - 1 ? event => recordTimelineTarget('answer', timelineVersions.answer, event) : undefined}>
           <View style={local.assistantName}><Text style={local.miniMark}>G</Text><Text style={local.name}>GovBiz AI</Text></View>
           <Text selectable style={local.answer}>{item.text}</Text></View>)}
+      {!busy && quickReplies.length > 0 && <View accessibilityLabel="지원 분야로 답하기" style={local.quickReplies}>
+        {quickReplies.map(reply => <Pressable key={reply} accessibilityRole="button" accessibilityLabel={reply}
+          accessibilityState={{ disabled: Boolean(message.trim()) }} disabled={Boolean(message.trim())}
+          onPress={() => sendQuickReply(reply)} style={[local.quickReply, Boolean(message.trim()) && { opacity: 0.45 }]}>
+          <Text style={local.quickReplyText}>{reply}</Text></Pressable>)}
+      </View>}
       {busy === 'interpret' && <View key={`message-${timelineVersions.message}`} testID="ai-search-pending-message" style={local.userBubble}
         onLayout={event => recordTimelineTarget('message', timelineVersions.message, event)}><Text style={styles.body}>{message}</Text></View>}
       {busy && <View key={`waiting-${timelineVersions.waiting}`} testID="ai-search-waiting" accessibilityLiveRegion="polite" style={local.waiting}
@@ -303,6 +318,10 @@ const local = StyleSheet.create({
   miniMark: { overflow: 'hidden', backgroundColor: colors.primary, color: colors.surface, fontSize: 12, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
   name: { color: colors.text, fontSize: 14, fontWeight: '600' }, answer: { color: colors.text, fontSize: 15, lineHeight: 26 },
   waiting: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  quickReplies: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  quickReply: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: colors.fieldBorder, borderRadius: 999,
+    paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.surface },
+  quickReplyText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   locked: { backgroundColor: colors.soft, borderWidth: 1, borderColor: '#BFE3CF', borderRadius: 18, padding: 18, gap: 12 },
   lockPreview: { backgroundColor: colors.track, borderRadius: 12, padding: 14, gap: 12 },
   lockLine: { width: '70%', height: 14, borderRadius: 4, backgroundColor: colors.fieldBorder },

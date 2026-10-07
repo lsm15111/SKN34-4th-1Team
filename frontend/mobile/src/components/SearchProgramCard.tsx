@@ -26,9 +26,15 @@ export function SearchProgramCard({ program, onOpen }: { program: SupportProgram
     {onOpen && <Text style={local.description}>{[program.organization, ...program.regions].filter(Boolean).join(' · ')}</Text>}
     {onOpen && <Text style={local.description}>{program.applicationPeriod}</Text>}
     <View style={[local.quote, !onOpen && { padding: 8, gap: 6 }]}>
-      <Text style={[local.badge, review && review.status !== 'MATCH' ? { backgroundColor: colors.warningSoft, color: colors.warning }
-        : !review && { backgroundColor: colors.divider, color: colors.secondaryText }]}>
-        {review?.status === 'MATCH' ? onOpen ? '조건 확인 · API 본문 기준' : '조건 확인' : review ? '확인 필요' : '자격 미평가'}</Text>
+      <View style={local.badges}>
+        <Text style={[local.badge, review && review.status !== 'MATCH' ? { backgroundColor: colors.warningSoft, color: colors.warning }
+          : !review && { backgroundColor: colors.divider, color: colors.secondaryText }]}>
+          {review?.status === 'MATCH' ? onOpen ? '조건 확인 · API 본문 기준' : '조건 확인' : review ? '확인 필요' : '자격 미평가'}</Text>
+        {program.regionTagMismatch && <Text style={[local.badge, { backgroundColor: colors.warningSoft, color: colors.warning }]}>
+          다른 지역 한정일 수 있음</Text>}
+      </View>
+      {onOpen && program.regionTagMismatch && <Text style={local.evidence}>
+        공고 지역({program.regions.join('·')})이 회사 소재지와 달라 뒤쪽에 두었어요. 지역 조건은 원문에서 확인해 주세요.</Text>}
       {quotes.length > 0 ? (onOpen ? quotes : quotes.slice(0, 1)).map(quote => <Text selectable key={quote} style={[local.evidence, !onOpen && { fontSize: 12, lineHeight: 19 }]}>{quote}</Text>)
         : <Text style={local.evidence}>확인 가능한 본문 인용이 제공되지 않았습니다.</Text>}
     </View>
@@ -53,6 +59,7 @@ const local = StyleSheet.create({
   title: { color: colors.text, fontSize: 17, lineHeight: 25, fontWeight: '600' },
   description: { color: colors.secondaryText, fontSize: 13, lineHeight: 20 },
   quote: { backgroundColor: colors.background, borderRadius: 12, padding: 12, gap: 8 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   badge: { alignSelf: 'flex-start', overflow: 'hidden', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3,
     color: colors.primaryText, backgroundColor: colors.soft, fontSize: 12, lineHeight: 18, fontWeight: '600' },
   evidence: { color: colors.secondaryText, fontSize: 13, lineHeight: 21 },
