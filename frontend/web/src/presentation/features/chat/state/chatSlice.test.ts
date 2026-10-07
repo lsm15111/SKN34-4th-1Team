@@ -294,6 +294,26 @@ describe('요청 실패 대화 기록', () => {
   })
 })
 
+describe('검색 대기 시간의 기준 시각', () => {
+  it.each(['succeeded', 'failed', 'timeout', 'cancelled'] as const)('보낸 시각을 기억했다가 %s이면 지운다', (outcome) => {
+    const store = createAppStore()
+    const before = Date.now()
+    const started = searchStarted('서울 지원사업')
+    store.dispatch(started)
+    const startedAt = store.getState().chat.activeSearchStartedAt
+    expect(startedAt).toBe(started.payload.startedAt)
+    expect(startedAt).toBeGreaterThanOrEqual(before)
+    // 이미 진행 중이면 두 번째 시작은 기준 시각을 바꾸지 않습니다.
+    store.dispatch(searchStarted('다른 검색'))
+    expect(store.getState().chat.activeSearchStartedAt).toBe(startedAt)
+
+    const request = { requestId: started.payload.requestId, query: '서울 지원사업' }
+    store.dispatch(outcome === 'succeeded' ? searchSucceeded(completeSearchResult({ requestId: request.requestId, programs: [] }))
+      : outcome === 'failed' ? searchFailed(request) : outcome === 'timeout' ? searchTimedOut(request) : searchCancelled(request))
+    expect(store.getState().chat.activeSearchStartedAt).toBeNull()
+  })
+})
+
 function completeSearch(store: AppStore) {
   const interpretation = interpretationStarted({ message: '서울 SW 사업화 지원', context: emptyConversationContext })
   store.dispatch(interpretation)

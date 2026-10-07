@@ -17,6 +17,7 @@ import type { LoginRequest } from '../auth/loginFlow'
 import { useAuth } from '../auth/session'
 import { SearchProgramCard } from '../components/SearchProgramCard'
 import { SearchConditionCard } from '../components/SearchConditionCard'
+import { SearchProgress } from '../components/SearchProgress'
 import { AppIcon } from '../components/AppIcon'
 import { PartnerSheet } from '../components/PartnerSheet'
 import type { SearchProgramInterests } from '../components/SearchProgramInterests'
@@ -29,7 +30,9 @@ import { chatSearchOptions, chatSnapshot, contextFromSearch, emptyChatContext as
 type TimelineTarget = 'message' | 'waiting' | 'answer' | 'proposal' | 'results' | 'notice'
 
 export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active = true, interests, assistantDraft, onDraftConsumed }: {
-  onOpenProgram: (identity: SupportProgramIdentity) => void; onLogin: (request?: LoginRequest) => void; keyboardOffset?: number; active?: boolean
+  /** `ask`이면 공고 화면에서 원문 질문 시트를 엽니다. */
+  onOpenProgram: (identity: SupportProgramIdentity, options?: { ask?: boolean }) => void
+  onLogin: (request?: LoginRequest) => void; keyboardOffset?: number; active?: boolean
   interests?: SearchProgramInterests
   assistantDraft?: AssistantDraft | null; onDraftConsumed?(id: string): void
 }) {
@@ -51,6 +54,8 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
   const [result, setResult] = useState<SupportProgramSearchResult | null>(null)
   const [history, setHistory] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState<'interpret' | 'search' | 'restore' | null>(null)
+  // 검색을 보낸 시각입니다. 대기 화면이 지난 시간과 보통 걸리는 시간 안내를 이 시각부터 셉니다.
+  const [searchStartedAt, setSearchStartedAt] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [retryAction, setRetryAction] = useState<'interpret' | 'search' | null>(null)
   const [retryUnconfirmed, setRetryUnconfirmed] = useState(false)
@@ -365,7 +370,7 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
     const controller = new AbortController(); request.current = controller
     const revision = ++generation.current
     const nextContext = proposal.proposedContext
-    setBusy('search'); setError(null); setRetryAction(null)
+    setBusy('search'); setSearchStartedAt(Date.now()); setError(null); setRetryAction(null)
     let completed: SupportProgramSearchResult | null = null
     requestTimelineScroll('waiting')
     try {
@@ -448,6 +453,7 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
       <View style={styles.row}><Text style={styles.heading}>추천 공고</Text><Text style={styles.muted}>{totalCount}건</Text></View>
       {totalCount === 0 && <Notice>조건에 맞는 공고가 없습니다. 필요한 지원이나 회사 조건을 바꿔 보세요.</Notice>}
       {programs.map(program => <SearchProgramCard key={JSON.stringify([program.sourceCode, program.id])} program={program} onOpen={onOpenProgram}
+        onAsk={(identity) => onOpenProgram(identity, { ask: true })} signedIn={Boolean(token)}
         interests={interests} onLogin={() => onLogin()} searchRegion={item.searchOptions?.companyConditions?.region ?? null} />)}
       {!token && item.resultToken && totalCount > programs.length && <View style={local.locked}>
         <Text style={styles.heading}>이번 추천에 {totalCount - programs.length}건이 더 있어요</Text>
@@ -515,9 +521,10 @@ export function ChatScreen({ onOpenProgram, onLogin, keyboardOffset = 0, active 
         </View>}{item.programs !== undefined && renderResults(item)}</Fragment>)}
       {busy === 'interpret' && <View key={`message-${timelineVersions.message}`} testID="ai-search-pending-message" style={local.userBubble}
         onLayout={event => recordTimelineTarget('message', timelineVersions.message, event)}><Text style={styles.body}>{message}</Text></View>}
-      {busy && <View key={`waiting-${timelineVersions.waiting}`} testID="ai-search-waiting" accessibilityLiveRegion="polite" style={local.waiting}
-        onLayout={event => recordTimelineTarget('waiting', timelineVersions.waiting, event)}><ActivityIndicator color={colors.primary} />
-        <Text style={styles.body}>{busy === 'interpret' ? '검색 조건을 정리하는 중이에요.' : busy === 'restore' ? '로그인 전 검색 결과를 불러오는 중이에요.' : '공고를 찾는 중이에요.'}</Text></View>}
+      {busy && <View key={`waiting-${timelineVersions.waiting}`} testID="ai-search-waiting" style={busy === 'search' ? undefined : local.waiting}
+        onLayout={event => recordTimelineTarget('waiting', timelineVersions.waiting, event)}>
+        {busy === 'search' ? <SearchProgress startedAt={searchStartedAt} /> : <><ActivityIndicator color={colors.primary} />
+          <Text accessibilityLiveRegion="polite" style={styles.body}>{busy === 'interpret' ? '검색 조건을 정리하는 중이에요.' : '로그인 전 검색 결과를 불러오는 중이에요.'}</Text></>}</View>}
       {proposal?.status === 'READY' && <View key={`proposal-${timelineVersions.proposal}`} testID="ai-search-proposal" style={local.contentGroup}
         onLayout={event => recordTimelineTarget('proposal', timelineVersions.proposal, event)}>
         {message.trim() && <Notice>입력한 내용을 먼저 AI에게 보내 조건을 갱신해 주세요.</Notice>}

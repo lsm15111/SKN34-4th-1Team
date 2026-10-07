@@ -37,6 +37,8 @@ type ChatState = {
   isRestoredHistory: boolean
   activeRequestId: string | null
   activeSearchContext: SupportProgramConversationContext | null
+  /** 진행 중인 검색을 보낸 시각(ms)입니다. 대기 화면의 지난 시간을 화면을 떠났다 돌아와도 이어서 셉니다. */
+  activeSearchStartedAt: number | null
   lastSearch: SupportProgramLastSearch | null
   pendingProposal: SupportProgramConversationContext | null
   draft: string
@@ -216,6 +218,7 @@ const chatSlice = createSlice({
       if (state.activeRequestId !== action.payload.requestId) return
       state.activeRequestId = null
       state.activeSearchContext = null
+      state.activeSearchStartedAt = null
       if (state.draft.trim().length === 0) {
         state.draft = action.payload.query
       }
@@ -226,6 +229,7 @@ const chatSlice = createSlice({
       if (state.activeRequestId !== action.payload.requestId) return
       state.activeRequestId = null
       state.activeSearchContext = null
+      state.activeSearchStartedAt = null
       if (state.draft.trim().length === 0) {
         state.draft = action.payload.query
       }
@@ -239,6 +243,7 @@ const chatSlice = createSlice({
       if (state.activeRequestId !== action.payload.requestId) return
       state.activeRequestId = null
       state.activeSearchContext = null
+      state.activeSearchStartedAt = null
       if (state.draft.trim().length === 0) {
         state.draft = action.payload.query
       }
@@ -260,7 +265,7 @@ const chatSlice = createSlice({
     searchStarted: {
       reducer(
         state,
-        action: PayloadAction<{ messageId: string; query: string; requestId: string; searchOptions?: ChatSearchOptions }>,
+        action: PayloadAction<{ messageId: string; query: string; requestId: string; startedAt: number; searchOptions?: ChatSearchOptions }>,
       ) {
         if (state.searchStatus === 'pending') return
         state.activeRequestId = action.payload.requestId
@@ -272,6 +277,7 @@ const chatSlice = createSlice({
         const existingMessage = state.messages.find((message) => message.id === action.payload.messageId)
         const snapshot = copySearchOptions(action.payload.searchOptions ?? state.searchOptions)
         state.activeSearchContext = searchOptionsToConversationContext(action.payload.query, snapshot)
+        state.activeSearchStartedAt = action.payload.startedAt
         state.unseenOutcome = null
         if (existingMessage) {
           existingMessage.searchOptions = snapshot
@@ -287,6 +293,8 @@ const chatSlice = createSlice({
             messageId,
             query,
             requestId: nanoid(),
+            // 시각은 요청 ID처럼 prepare에서 만들어 리듀서를 순수하게 둡니다.
+            startedAt: Date.now(),
             searchOptions,
           },
         }
@@ -303,6 +311,7 @@ const chatSlice = createSlice({
         state.lastSearch = { context, resultCount: action.payload.totalCount }
         state.activeRequestId = null
         state.activeSearchContext = null
+        state.activeSearchStartedAt = null
         state.messages.push({
           id: action.payload.messageId,
           role: 'assistant',
@@ -369,6 +378,7 @@ export const selectChatMessages = (state: RootState) => state.chat.messages
 export const selectChatSearchError = (state: RootState) => state.chat.searchError
 export const selectCanRetryChatSearch = (state: RootState) => state.chat.searchStatus === 'failed' && state.chat.confirmedSearch !== null
 export const selectIsChatSearching = (state: RootState) => state.chat.searchStatus === 'pending'
+export const selectChatSearchStartedAt = (state: RootState) => state.chat.activeSearchStartedAt
 export const selectChatUnseenOutcome = (state: RootState) => state.chat.unseenOutcome
 
 /** 채팅 화면 밖에서 보여 줄 진행 상태입니다. 진행 중이면 그 종류를, 아니면 아직 보지 않은 결과를 알립니다. */
@@ -427,6 +437,7 @@ function createInitialState(welcomeMessage = createWelcomeMessage()): ChatState 
     isRestoredHistory: false,
     activeRequestId: null,
     activeSearchContext: null,
+    activeSearchStartedAt: null,
     lastSearch: null,
     pendingProposal: null,
     draft: '',

@@ -97,6 +97,14 @@ export const chatPageStyles = {
   loadingDots: 'flex h-5 shrink-0 items-center gap-1.5',
   loadingDot: 'size-1.5 rounded-full bg-brand-primary motion-safe:animate-chat-loading-dot motion-reduce:animate-none',
   loadingDescription: 'm-0 text-xs leading-relaxed text-ink-muted [overflow-wrap:anywhere]',
+  // 검색 대기 단계 목록입니다. 끝난 단계는 초록 체크, 서버가 진행 중인 단계는 빈 원으로 둡니다.
+  searchSteps: 'm-0 grid list-none gap-1.5 p-0',
+  searchStep: 'flex items-center gap-2 text-xs leading-relaxed',
+  searchStepDoneMark: 'grid size-4 shrink-0 place-items-center rounded-full bg-brand-primary text-white',
+  searchStepRunningMark: 'size-4 shrink-0 rounded-full border-2 border-brand-line bg-white',
+  searchStepLabel: 'font-semibold text-ink',
+  searchStepNote: 'ml-auto text-ink-muted',
+  searchElapsed: 'm-0 text-xs leading-relaxed text-ink-muted tabular-nums',
   loadingTrack: 'h-1 overflow-hidden rounded-full bg-brand-soft',
   loadingSweep: 'block h-full w-1/3 rounded-full bg-brand-primary/75 motion-safe:animate-chat-loading-sweep motion-reduce:mx-auto motion-reduce:animate-none',
   intro: '[view-transition-name:search-intro] mx-auto w-[min(1180px,calc(100%_-_2rem))] pt-[clamp(2.5rem,5vw,4.5rem)] text-center',
@@ -186,10 +194,20 @@ export const chatPageStyles = {
   matchedReasons: 'mt-[0.7rem] flex flex-wrap gap-[0.35rem]',
   matchedReason: 'text-[0.7rem] text-ink-muted',
   programActions: 'mt-[0.85rem] flex flex-wrap items-center justify-between gap-3',
+  programSourceLinks: 'flex flex-wrap items-center gap-x-4 gap-y-1',
+  programActionButtons: 'ml-auto flex flex-wrap items-center justify-end gap-2',
   programDetailsButton: classes(
     'cursor-pointer rounded-full border-0 px-[0.7rem] py-[0.55rem]',
     'bg-brand-primary text-[0.74rem] font-extrabold text-white',
   ),
+  // 상세 조건 보기와 같은 크기의 테두리 버튼입니다. 원문 질문 패널이 열린 상세로 갑니다.
+  programQuestionButton: classes(
+    'cursor-pointer rounded-full border border-brand-primary bg-white px-[0.7rem] py-[0.5rem]',
+    'text-[0.74rem] font-extrabold text-brand-primary hover:bg-brand-soft',
+    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
+  ),
+  // 같은 공고를 여러 제공처가 올려 한 칸에 묶었다는 표시입니다. 자격·주의 표시가 아니라 회색입니다.
+  postedTogetherTag: 'rounded-[0.35rem] bg-surface-muted px-[0.48rem] py-1 text-[0.68rem] font-extrabold text-ink-muted',
   programSourceLink:
     'inline-flex items-center gap-1 text-[0.8rem] font-bold text-brand-primary no-underline hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
 } as const
