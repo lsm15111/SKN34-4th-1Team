@@ -65,7 +65,7 @@ DB transaction 안에서 RabbitMQ·다운로드·AI를 호출하지 않는다. �
 - DB 고유키 `(review_id, request_key)`와 요청 해시가 중복 요청을 보호한다.
 - `(review_id, running_slot)`은 QUEUED/RUNNING/UNKNOWN을 같은 활성 슬롯으로 취급한다.
   UNKNOWN이 있는 검토는 새 키로도 재실행할 수 없다.
-- 계정 행 잠금 아래 계정 전체의 QUEUED/RUNNING/UNKNOWN 합계를 검사해 **최대 3건**만 허용한다.
+- 계정 행 잠금 아래 계정 전체의 QUEUED/RUNNING/UNKNOWN 합계를 검사해 **요금제의 동시 처리 건수(1·3·5건)**까지만 허용한다. 넘으면 429 `RUN_CAPACITY_EXCEEDED`에 `limit`을 함께 보낸다.
 - 새 접수는 기존 요청량 제한도 적용받는다. 정상적인 동일 키 재조회는 새 요청량을 소비하지 않는다.
 - 검토 큐는 single-active-consumer, 동시 소비 1, prefetch 1이다. 리포트 소비자와 별개다.
 - 검토 worker도 기존 `SupportProgramRequestAdmissionService`의 공유 동시 실행 슬롯을 사용한다.

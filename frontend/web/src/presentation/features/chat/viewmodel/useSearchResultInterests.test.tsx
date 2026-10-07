@@ -4,6 +4,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import { appContainer } from '../../../../app/appContainer'
 import { createAppStore } from '../../../../app/store'
@@ -43,6 +44,18 @@ function deferred<T>() {
 }
 
 describe('useSearchResultInterests', () => {
+  it('관심 공고 개수 한도에 닿으면 일반 실패 대신 빼면 다시 담을 수 있다는 안내를 카드에 둔다', async () => {
+    vi.mocked(appContainer.resolve('saveSupportProgramUseCase').execute).mockRejectedValue(new PlanQuotaExceededError({
+      feature: 'SAVED_PROGRAM', period: 'TOTAL', plan: 'FREE', limit: 30, resetsAt: null,
+    }))
+    const { result } = setup()
+    await waitFor(() => expect(result.current?.phase).toBe('ready'))
+
+    await act(async () => { await result.current!.toggle(identity) })
+    expect(result.current?.savedKeys.has(key)).toBe(false)
+    expect(result.current?.errors[key]).toBe('관심 공고는 30개까지 담을 수 있어요. 담은 공고를 빼면 그만큼 새로 담을 수 있어요.')
+  })
+
   it('비로그인 또는 결과가 없으면 관심 API를 호출하지 않는다', () => {
     expect(setup(null).result.current).toBeNull()
     expect(setup(member, false).result.current).toBeNull()

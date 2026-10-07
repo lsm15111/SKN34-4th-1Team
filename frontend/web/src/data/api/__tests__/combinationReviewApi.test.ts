@@ -4,6 +4,7 @@ import { runSchema } from '../../models/CombinationReviewDto'
 import { reviewFixture, runFixture } from '../../../presentation/features/combination-review/testing/reviewFixtures'
 import { CombinationReviewUseCase } from '../../../domain/usecases/CombinationReviewUseCase'
 import { PlanQuotaExceededError, QuotaUnavailableError } from '@govbiz/shared/domain/errors/PlanQuotaError'
+import { CombinationReviewError, reviewCapacityMessage } from '../../../domain/errors/CombinationReviewError'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 const repository = new CombinationReviewRepositoryImpl()
@@ -82,13 +83,20 @@ describe('combination review HTTP boundary', () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(Response.json(quota, { status: 429, headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '100' } }))
       .mockResolvedValueOnce(Response.json({ status: 503, code: 'QUOTA_UNAVAILABLE' }, { status: 503, headers: { 'Content-Type': 'application/problem+json' } }))
-      .mockResolvedValueOnce(Response.json({ code: 'RUN_RATE_LIMITED' }, { status: 429, headers: { 'Retry-After': '30' } })))
+      .mockResolvedValueOnce(Response.json({ code: 'RUN_RATE_LIMITED' }, { status: 429, headers: { 'Retry-After': '30' } }))
+      .mockResolvedValueOnce(Response.json({ code: 'RUN_CAPACITY_EXCEEDED', limit: 1 }, { status: 429, headers: { 'Retry-After': '60' } }))
+      .mockResolvedValueOnce(Response.json({ code: 'RUN_CAPACITY_EXCEEDED' }, { status: 429, headers: { 'Retry-After': '1' } })))
 
     const exceeded = await repository.start(12, request).catch((error: unknown) => error)
     expect(exceeded).toBeInstanceOf(PlanQuotaExceededError)
     expect((exceeded as PlanQuotaExceededError).message).toBe('이번 달 중복 검토 2회를 모두 썼어요. 진행 중인 검토도 횟수에 들어가요. 11월 1일에 다시 채워져요.')
     expect(await repository.start(12, request).catch((error: unknown) => error)).toBeInstanceOf(QuotaUnavailableError)
     await expect(repository.start(12, request)).rejects.toMatchObject({ name: 'CombinationReviewError', status: 429, code: 'RUN_RATE_LIMITED', retryAfter: '30' })
+    // 계정의 동시 처리 한도는 요금제의 건수와 함께 오고, 공유 실행 슬롯 부족은 같은 코드에 건수 없이 옵니다.
+    const capacity = await repository.start(12, request).catch((error: unknown) => error) as CombinationReviewError
+    expect(capacity).toMatchObject({ status: 429, code: 'RUN_CAPACITY_EXCEEDED', limit: 1 })
+    expect(reviewCapacityMessage(capacity)).toBe('진행 중인 중복 검토가 이미 1건이에요. 끝난 뒤 다시 시도해 주세요.')
+    expect(reviewCapacityMessage(await repository.start(12, request).catch((error: unknown) => error) as CombinationReviewError)).toBeNull()
   })
   it('rejects duplicate selection and invalid title before HTTP', () => {
     const useCase = new CombinationReviewUseCase(repository)

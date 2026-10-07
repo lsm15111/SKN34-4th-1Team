@@ -4,6 +4,7 @@ import { appContainer } from '../../../../app/appContainer'
 import { useAppSelector } from '../../../../app/hooks'
 import type { SupportProgramIdentity } from '../../../../domain/repositories/SupportProgramRepository'
 import { selectCurrentAccount, selectIsAuthenticated } from '../../../shared/auth/state/authSlice'
+import { planQuotaFailureMessage } from '../../../shared/plan-usage/planUsageView'
 
 export function searchResultInterestKey(identity: SupportProgramIdentity): string {
   return JSON.stringify([identity.sourceCode, identity.sourceProgramId])
@@ -86,9 +87,11 @@ export function useSearchResultInterests(hasResults: boolean) {
         else savedKeys.add(key)
         return { ...current, savedKeys }
       })
-    } catch {
+    } catch (caught) {
       if (!request.controller.signal.aborted) {
-        setState((current) => ({ ...current, errors: { ...current.errors, [key]: searchResultInterestMessages.saveFailed } }))
+        // 관심 공고 개수 한도에 닿았으면 일반 실패 대신 빼면 다시 담을 수 있다는 shared 안내를 카드에 둡니다.
+        const message = planQuotaFailureMessage(caught) ?? searchResultInterestMessages.saveFailed
+        setState((current) => ({ ...current, errors: { ...current.errors, [key]: message } }))
       }
     } finally {
       request.pending.delete(key)

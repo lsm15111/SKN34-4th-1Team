@@ -184,11 +184,12 @@ function ProgramSection({ vm, openPicker, pickButtonRef, changeButtonRef }: {
   </section>
 }
 
-function CapacityAlert({ jobs, onRetry }: { jobs: ApplicationFormDiscoveryJob[]; onRetry: () => void }) {
+/** 요금제의 동시 처리 한도에 닿았을 때입니다. 한도 건수는 서버가 알려 준 값이고, 모르면 숫자 없이 알립니다. */
+function CapacityAlert({ jobs, limit, onRetry }: { jobs: ApplicationFormDiscoveryJob[]; limit: number | null; onRetry: () => void }) {
   return <div className={`${n.alert} ${n.alertWarning}`} role="alert">
     <div className={n.alertText}>
-      <strong className={n.alertTitle}>진행 중이거나 확인이 필요한 분석이 3건입니다</strong>
-      <p>아래 분석이 끝나거나 풀리면 다시 시도해 주세요.</p>
+      <strong className={n.alertTitle}>{limit === null ? '진행 중이거나 확인이 필요한 분석이 있어요' : `진행 중이거나 확인이 필요한 분석이 이미 ${limit}건이에요`}</strong>
+      <p>아래 분석이 끝나거나 풀리면 다시 시도해 주세요. 동시에 진행할 수 있는 분석 수는 요금제마다 달라요.</p>
       {jobs.length > 0 && <ul className={n.jobList} aria-label="진행 중인 분석">
         {jobs.map((job) => <li className={n.jobItem} key={job.id}>
           <span className={n.jobTitle}>{job.programTitle}</span>
@@ -307,14 +308,14 @@ function FormSectionBody({ vm }: { vm: NewViewModel }) {
           {vm.discoveryWarnings.length > 0 && <ul className={n.warningList}>{vm.discoveryWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
           <div className={n.centeredAction}>
             <button type="button" className={n.secondary} disabled={vm.submitting || vm.analysisBlocked} onClick={vm.discoverForms}><AiIcon />{vm.lastAnalysis && vm.lastAnalysis.kind !== 'unknown' ? '입력칸별로 다시 분석' : '입력칸별로 분석'}</button>
-            <p className={n.muted}>AI가 공식 첨부를 읽어 문항을 뽑아요. 유료 AI 호출이며 계정당 동시에 3건까지 할 수 있어요.</p>
+            <p className={n.muted}>AI가 공식 첨부를 읽어 문항을 뽑아요. 유료 AI 호출이며 동시에 진행할 수 있는 분석 수는 요금제마다 달라요.</p>
             {/* 이번 달 신청 문서 이용량입니다. 이미 센 공고를 다시 분석하면 늘지 않으므로 한도에 닿아도 버튼은 막지 않습니다. */}
             {vm.draftUsage && <PlanUsageLine view={vm.draftUsage} pricingPath={appPaths.pricing} className={n.usageCentered} />}
             {program && <SourceLink href={program.sourceUrl} title={program.title} />}
           </div>
         </section>}
 
-    {vm.capacityJobs && <CapacityAlert jobs={vm.capacityJobs} onRetry={vm.discoverForms} />}
+    {vm.capacityJobs && <CapacityAlert jobs={vm.capacityJobs} limit={vm.capacityLimit} onRetry={vm.discoverForms} />}
     {discoveryError && <div className={`${n.alert} ${n.alertDanger}`} role="alert">
       <div className={n.alertText}><strong className={n.alertTitle}>양식을 분석하지 못했어요</strong><p>{discoveryError.message}</p></div>
       {officialOnly && program && <SourceLink href={program.sourceUrl} title={program.title} />}

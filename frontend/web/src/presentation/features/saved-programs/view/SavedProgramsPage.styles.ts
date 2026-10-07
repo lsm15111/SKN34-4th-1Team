@@ -8,6 +8,8 @@ const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 // 화면 통일안 19~21: 머리글 왼쪽 세그먼트(목록 · 달력 · 진행 관리) → 필터 막대 한 줄 → 적용 조건 칩 → 표(모바일 카드) / 달력 + 다가오는 마감 / 5열 보드.
 export const savedCalendarStyles = {
   lede: 'm-0 -mt-2 text-[0.8125rem] leading-[1.6] text-ink-muted',
+  // 요금제의 관심 공고 개수 한 줄입니다. 바로 위 안내 글과 붙여 둡니다.
+  usage: '-mt-3 text-[0.78rem]',
   // 필터 막대: 왼쪽 검색 알약(최소 12rem, 남는 폭을 차지), 오른쪽 지역·분야·대상 다중 선택 드롭다운. 폭이 모자라면 줄을 바꿉니다.
   filterBar: 'flex flex-wrap items-center gap-2',
   search: classes(

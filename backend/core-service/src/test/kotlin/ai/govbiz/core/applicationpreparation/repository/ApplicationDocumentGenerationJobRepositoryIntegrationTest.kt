@@ -62,15 +62,15 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
     }
 
     @Test
-    fun reusesTheSameRequestKeyAndAllowsOneActiveJobPerPreparationAndThreePerAccount() {
+    fun reusesTheSameRequestKeyAndAllowsOneActiveJobPerPreparationAndThePendingLimitPerAccount() {
         val preparation = preparations.create(ownerId, draft()).id
         val key = UUID.randomUUID().toString()
-        val first = requireNotNull(jobs.reserve(ownerId, key, preparation, 1).job)
+        val first = requireNotNull(jobs.reserve(ownerId, key, preparation, 1, PENDING_LIMIT).job)
         assertEquals(ApplicationDocumentGenerationJobStatus.QUEUED, first.status)
-        assertEquals(first, jobs.reserve(ownerId, key, preparation, 1).job)
+        assertEquals(first, jobs.reserve(ownerId, key, preparation, 1, PENDING_LIMIT).job)
         // 같은 키를 다른 준비 건·버전에 쓰면 충돌이고, 다른 키라도 준비 건에 진행 중인 작업이 있으면 충돌이다.
-        assertThrows(ApplicationPreparationRunConflictException::class.java) { jobs.reserve(ownerId, key, preparation, 2) }
-        assertThrows(ApplicationPreparationRunConflictException::class.java) { jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1) }
+        assertThrows(ApplicationPreparationRunConflictException::class.java) { jobs.reserve(ownerId, key, preparation, 2, PENDING_LIMIT) }
+        assertThrows(ApplicationPreparationRunConflictException::class.java) { jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1, PENDING_LIMIT) }
         assertThrows(DataAccessException::class.java) {
             jdbc.update("INSERT INTO application_document_generation_job (owner_account_id, preparation_id, request_key, expected_revision, created_at) VALUES (?, ?, ?, 1, NOW(6))",
                 ownerId, preparation, UUID.randomUUID().toString())
@@ -78,18 +78,18 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
         val second = preparations.create(ownerId, draft()).id
         val third = preparations.create(ownerId, draft()).id
         val fourth = preparations.create(ownerId, draft()).id
-        jobs.reserve(ownerId, UUID.randomUUID().toString(), second, 1)
-        jobs.reserve(ownerId, UUID.randomUUID().toString(), third, 1)
-        assertTrue(jobs.reserve(ownerId, UUID.randomUUID().toString(), fourth, 1).capacityExceeded)
+        jobs.reserve(ownerId, UUID.randomUUID().toString(), second, 1, PENDING_LIMIT)
+        jobs.reserve(ownerId, UUID.randomUUID().toString(), third, 1, PENDING_LIMIT)
+        assertTrue(jobs.reserve(ownerId, UUID.randomUUID().toString(), fourth, 1, PENDING_LIMIT).capacityExceeded)
         assertNull(jobs.findOwned(otherId, preparation, first.id))
         assertEquals(listOf(first.id), jobs.listOwned(ownerId, preparation).map { it.id })
-        assertThrows(ApplicationPreparationNotFoundException::class.java) { jobs.reserve(Long.MAX_VALUE, UUID.randomUUID().toString(), preparation, 1) }
+        assertThrows(ApplicationPreparationNotFoundException::class.java) { jobs.reserve(Long.MAX_VALUE, UUID.randomUUID().toString(), preparation, 1, PENDING_LIMIT) }
     }
 
     @Test
     fun recordsStagesResultsAndFailureDetailsAndReleasesTheActiveSlot() {
         val preparation = preparations.create(ownerId, draft()).id
-        val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1).job)
+        val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1, PENDING_LIMIT).job)
         assertEquals(listOf(job.id), jobs.claimable(10))
         val claimed = requireNotNull(jobs.claim(job.id))
         assertEquals(ApplicationDocumentGenerationJobStatus.RUNNING, claimed.status)
@@ -104,7 +104,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
         assertEquals(listOf(7L, 9L), done.fileIds)
         assertEquals(ApplicationDocumentGenerationStage.WRITING, done.stage)
         // 끝난 작업은 활성 슬롯을 비워 같은 준비 건에 새 작업을 받을 수 있다.
-        val next = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 2).job)
+        val next = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 2, PENDING_LIMIT).job)
         requireNotNull(jobs.claim(next.id))
         val notice = ApplicationDocumentMigrationNoticeResult("11111111-2222-3333-4444-555555555555", 2,
             changes = listOf(ApplicationDocumentMappingChangeResult("기업 개요 / 업체명", "TARGET_CHANGED", "p1", "p2")))
@@ -114,12 +114,12 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
         assertEquals("입력 위치가 변경됐습니다.", failed.failureMessage)
         assertEquals(notice, jobs.failureDetail(ownerId, preparation, next.id, ApplicationDocumentMigrationNoticeResult::class.java))
         assertNull(jobs.failureDetail(otherId, preparation, next.id, ApplicationDocumentMigrationNoticeResult::class.java))
-        val unknown = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 3).job)
+        val unknown = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 3, PENDING_LIMIT).job)
         requireNotNull(jobs.claim(unknown.id))
         jobs.fail(unknown.id, "RUN_OUTCOME_UNKNOWN", "결과 불명", unknown = true)
         assertEquals(ApplicationDocumentGenerationJobStatus.UNKNOWN, requireNotNull(jobs.findOwned(ownerId, preparation, unknown.id)).status)
         // 결과 불명은 활성 슬롯을 유지해 같은 준비 건의 새 작업을 막는다(사람이 확인할 때까지).
-        assertThrows(ApplicationPreparationRunConflictException::class.java) { jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 3) }
+        assertThrows(ApplicationPreparationRunConflictException::class.java) { jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 3, PENDING_LIMIT) }
     }
 
     @Test
@@ -127,9 +127,9 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
         val queued = preparations.create(ownerId, draft()).id
         val running = preparations.create(ownerId, draft()).id
         val interrupted = preparations.create(ownerId, draft()).id
-        val queuedJob = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), queued, 1).job)
-        val runningJob = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), running, 1).job)
-        val interruptedJob = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), interrupted, 1).job)
+        val queuedJob = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), queued, 1, PENDING_LIMIT).job)
+        val runningJob = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), running, 1, PENDING_LIMIT).job)
+        val interruptedJob = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), interrupted, 1, PENDING_LIMIT).job)
         requireNotNull(jobs.claim(runningJob.id))
         requireNotNull(jobs.claim(interruptedJob.id))
         assertTrue(jobs.beginAi(runningJob.id))
@@ -141,7 +141,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
         val expiredInterrupted = requireNotNull(jobs.findOwned(ownerId, interrupted, interruptedJob.id))
         assertEquals(ApplicationDocumentGenerationJobStatus.FAILED, expiredInterrupted.status)
         assertEquals("RUN_INTERRUPTED", expiredInterrupted.failureCode)
-        val retried = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), interrupted, 1).job)
+        val retried = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), interrupted, 1, PENDING_LIMIT).job)
         val expiredQueued = requireNotNull(jobs.findOwned(ownerId, queued, queuedJob.id))
         assertEquals(ApplicationDocumentGenerationJobStatus.FAILED, expiredQueued.status)
         assertEquals("QUEUE_EXPIRED", expiredQueued.failureCode)
@@ -155,7 +155,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
         jobs.expireStaleWork(java.time.Duration.ofHours(24))
         assertEquals("RUN_OUTCOME_UNKNOWN_EXPIRED", requireNotNull(jobs.findOwned(ownerId, running, runningJob.id)).failureCode)
         assertEquals(ApplicationDocumentGenerationJobStatus.FAILED, requireNotNull(jobs.findOwned(ownerId, running, runningJob.id)).status)
-        requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), running, 1).job)
+        requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), running, 1, PENDING_LIMIT).job)
         // 준비 건을 지우면 작업 기록도 함께 사라진다.
         jdbc.update("DELETE FROM application_preparation WHERE id = ?", queued)
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM application_document_generation_job WHERE preparation_id = ?", Int::class.java, queued))
@@ -165,7 +165,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
     @ValueSource(strings = ["QUEUED", "RUNNING", "UNKNOWN"])
     fun deletionPreservesPreparationAndActiveJob(status: String) {
         val preparation = preparations.create(ownerId, draft())
-        val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation.id, 1).job)
+        val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation.id, 1, PENDING_LIMIT).job)
         if (status != "QUEUED") requireNotNull(jobs.claim(job.id))
         if (status == "UNKNOWN") jobs.fail(job.id, "RUN_OUTCOME_UNKNOWN", "결과 불명", unknown = true)
         assertFalse(preparations.deleteOwned(otherId, preparation.id))
@@ -178,7 +178,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
     @ValueSource(strings = ["SUCCEEDED", "FAILED"])
     fun deletionCascadesOnlyFinishedJobs(status: String) {
         val preparation = preparations.create(ownerId, draft()).id
-        val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1).job)
+        val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1, PENDING_LIMIT).job)
         requireNotNull(jobs.claim(job.id))
         if (status == "SUCCEEDED") jobs.succeed(job.id, emptyList()) else jobs.fail(job.id, "GENERATION_FAILED", "생성 실패")
         assertTrue(preparations.deleteOwned(ownerId, preparation))
@@ -196,7 +196,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
         try {
             val reservation = pool.submit<Long> {
                 TransactionTemplate(transactions).execute {
-                    val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1).job)
+                    val job = requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1, PENDING_LIMIT).job)
                     reserved.countDown()
                     check(release.await(10, TimeUnit.SECONDS))
                     job.id
@@ -237,7 +237,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
             assertTrue(deleted.await(10, TimeUnit.SECONDS))
             val reservation = pool.submit<Long> {
                 reserving.countDown()
-                requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1).job).id
+                requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1, PENDING_LIMIT).job).id
             }
             assertTrue(reserving.await(10, TimeUnit.SECONDS))
             assertThrows(TimeoutException::class.java) { reservation.get(200, TimeUnit.MILLISECONDS) }
@@ -262,7 +262,7 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
                 TransactionTemplate(transactions).execute {
                     // 먼저 일반 조회로 작업이 없던 시점의 MySQL REPEATABLE READ snapshot을 만든다.
                     assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM application_document_generation_job WHERE preparation_id = ?", Int::class.java, preparation))
-                    pool.submit<Long> { requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1).job).id }
+                    pool.submit<Long> { requireNotNull(jobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1, PENDING_LIMIT).job).id }
                         .get(10, TimeUnit.SECONDS)
                     preparations.deleteOwned(ownerId, preparation)
                 }
@@ -278,4 +278,9 @@ class ApplicationDocumentGenerationJobRepositoryIntegrationTest {
 
     private fun draft() = NewApplicationPreparation("BIZINFO", "PBLN_000000000118979",
         "bizinfo-pbln-000000000118979-innovation-voucher-2026-v1", ApplicationServiceField.TECHNICAL_SUPPORT)
+
+    private companion object {
+        /** 서비스가 요금제에서 읽어 넘기는 계정의 동시 처리 한도입니다. 저장소 테스트는 PLUS의 3건으로 고정합니다. */
+        const val PENDING_LIMIT = 3
+    }
 }

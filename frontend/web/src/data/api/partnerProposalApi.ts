@@ -1,3 +1,4 @@
+import { readPlanQuotaProblem } from '@govbiz/shared/data/models/PlanUsageDto'
 import type { PartnerProposalBox, PartnerProposalInput } from '../../domain/entities/PartnerProposal'
 import type { PartnerProposalAction } from '../../domain/repositories/PartnerProposalRepository'
 import { AccountApiError } from './accountApi'
@@ -64,18 +65,18 @@ export async function browsePartnerProposalsApi(box: PartnerProposalBox, signal?
   return page
 }
 
+/** 이번 달 제안 수 한도(429 PLAN_QUOTA_EXCEEDED)와 이용량 확인 실패(503 QUOTA_UNAVAILABLE)는 shared 오류로 바꿉니다. */
 async function rejectFailedResponse(response: Response): Promise<void> {
   if (response.ok) return
 
-  let code: string | null = null
+  let payload: unknown = null
   try {
-    const payload: unknown = await response.json()
-    if (typeof payload === 'object' && payload !== null) {
-      const record = payload as { code?: unknown }
-      code = typeof record.code === 'string' ? record.code : null
-    }
+    payload = await response.json()
   } catch {
     // 본문이 JSON이 아니면 상태 코드만으로 판단합니다.
   }
-  throw new AccountApiError(response.status, code)
+  const quota = readPlanQuotaProblem(response.status, payload)
+  if (quota) throw quota
+  const record = typeof payload === 'object' && payload !== null ? payload as { code?: unknown } : {}
+  throw new AccountApiError(response.status, typeof record.code === 'string' ? record.code : null)
 }

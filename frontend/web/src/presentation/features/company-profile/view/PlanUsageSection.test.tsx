@@ -22,6 +22,10 @@ const usage: PlanUsage = {
     // 진행 중인 작업 때문에 한도를 넘겨 세어진 월 사용량입니다. 화면은 한도에서 멈춥니다.
     { feature: 'APPLICATION_DRAFT', period: 'MONTH', limit: 1, used: 2, resetsAt: '2026-11-01T00:00:00+09:00' },
     { feature: 'COMBINATION_REVIEW', period: 'MONTH', limit: 2, used: 0, resetsAt: '2026-11-01T00:00:00+09:00' },
+    // 관심 공고·모집 중인 모집글은 지금 가진 개수라 다시 채워지는 때 대신 다시 쓰는 방법을 적습니다.
+    { feature: 'SAVED_PROGRAM', period: 'TOTAL', limit: 30, used: 12, resetsAt: null },
+    { feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 1, used: 1, resetsAt: null },
+    { feature: 'PARTNER_PROPOSAL', period: 'MONTH', limit: 3, used: 2, resetsAt: '2026-11-01T00:00:00+09:00' },
   ],
 }
 
@@ -51,6 +55,9 @@ describe('프로필 요금제와 이용량', () => {
       '공고 원문 질문오늘 8/10회자정(서울 시간)에 다시 채워져요.',
       '신청 문서 초안이번 달 1/1건11월 1일에 다시 채워져요.',
       '중복 지원·수혜 검토이번 달 0/2회11월 1일에 다시 채워져요.',
+      '관심 공고12/30개담은 공고를 빼면 그만큼 새로 담을 수 있어요.',
+      '모집 중인 모집글1/1개모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.',
+      '파트너 제안 보내기이번 달 2/3건11월 1일에 다시 채워져요.',
     ])
     const meters = within(section).getAllByRole('progressbar')
     expect(meters.map((meter) => [meter.getAttribute('aria-label'), meter.getAttribute('aria-valuenow'), meter.getAttribute('aria-valuemin'),
@@ -59,6 +66,9 @@ describe('프로필 요금제와 이용량', () => {
       ['공고 원문 질문 이용량', '8', '0', '10', '오늘 8/10회'],
       ['신청 문서 초안 이용량', '1', '0', '1', '이번 달 1/1건'],
       ['중복 지원·수혜 검토 이용량', '0', '0', '2', '이번 달 0/2회'],
+      ['관심 공고 이용량', '12', '0', '30', '12/30개'],
+      ['모집 중인 모집글 이용량', '1', '0', '1', '1/1개'],
+      ['파트너 제안 보내기 이용량', '2', '0', '3', '이번 달 2/3건'],
     ])
     expect((meters[0]!.firstElementChild as HTMLElement).style.width).toBe('30%')
     expect((meters[2]!.firstElementChild as HTMLElement).style.width).toBe('100%')
@@ -85,7 +95,7 @@ describe('프로필 요금제와 이용량', () => {
     fireEvent.click(within(section).getByRole('button', { name: '다시 시도' }))
     expect(within(section).getByText('이용량을 불러오는 중이에요.')).toBeTruthy()
     await act(async () => finish(usage))
-    expect(within(section).getAllByRole('progressbar')).toHaveLength(4)
+    expect(within(section).getAllByRole('progressbar')).toHaveLength(7)
     expect(within(section).queryByRole('alert')).toBeNull()
     expect(read).toHaveBeenCalledTimes(2)
   })

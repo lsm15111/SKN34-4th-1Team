@@ -57,7 +57,7 @@ V26 `application_form_discovery_job`에 아래 규칙을 적용한다.
 - `(owner_account_id, request_key)`는 DB 고유키다. 같은 키·같은 공고는 기존 작업을 반환하며 다른 공고면 409다.
 - `(source_code, source_program_id, active_slot)` 고유키는 계정이 달라도 같은 공고의 중복 분석을 막는다.
   QUEUED/RUNNING/UNKNOWN이 있으면 다른 키 요청은 409다. 타인 작업 ID·결과는 공개하지 않는다.
-- 계정 행을 잠그고 해당 계정의 활성 작업 최대 3건을 검사한다. 초과 시 429다.
+- 계정 행을 잠그고 해당 계정의 활성 작업이 요금제의 동시 처리 건수(FREE 1·PLUS 3·PREMIUM 5건)에 닿았는지 검사한다. 초과 시 429에 `limit`을 함께 보낸다.
 - 접수 POST에는 기존 계정별 요청량·공유 슬롯 제한을 적용한다. 동일 키 POST도 이 요청량 제한을 통과해야 한다.
   GET 조회는 새 접수가 아니다. Worker는 `executeBackground`로 실행 슬롯만 사용하며 접수 횟수를 다시 계산하지 않는다.
 - 공유 슬롯 부족이면 DB 실행권을 얻기 전에 종료한다. QUEUED 상태를 유지하고 Outbox가 다시 전달한다.

@@ -125,6 +125,14 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
             .content("""{"requestKey":"$requestKey","sourceCode":"${form.sourceCode}","sourceProgramId":"$programId"}"""))
         submit(key, form.sourceProgramId).andExpect(status().isAccepted)
         submit(key, form.sourceProgramId).andExpect(status().isAccepted)
+        // FREE는 미완료 분석을 1건까지 둡니다. 첫 분석이 대기 중이면 다른 공고는 월 한도보다 먼저 동시 처리 한도에 걸립니다.
+        submit(UUID.randomUUID().toString(), "PBLN_000000000999999").andExpect(status().isTooManyRequests)
+            .andExpect(jsonPath("$.code").value("APPLICATION_FORM_JOB_CAPACITY"))
+            .andExpect(jsonPath("$.limit").value(1))
+        val first = jobs.listOwned(free.id).single()
+        requireNotNull(jobs.claim(first.id))
+        jobs.succeed(first.id, result)
+        // 첫 분석이 끝나 동시 처리 한도가 풀려도 이번 달 신청 문서 1건은 이미 썼습니다.
         submit(UUID.randomUUID().toString(), "PBLN_000000000999999").andExpect(status().isTooManyRequests)
             .andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
             .andExpect(jsonPath("$.feature").value("APPLICATION_DRAFT"))
@@ -267,7 +275,7 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
         val program = "PBLN_UNKNOWN_SETTLE"
         jdbc.update("DELETE FROM application_form_availability WHERE source_code = 'BIZINFO' AND source_program_id = ?", program)
         try {
-            val settled = jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program)
+            val settled = jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program, PENDING_LIMIT)
             service.executeQueued(settled.id)
             assertEquals("UNKNOWN", state(settled.id))
             // 가용성이 아직 분석 중이거나 AI 시작 전에 확정된 값이면 결과 불명을 그대로 둔다.
@@ -277,13 +285,13 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
             upsertAvailability(program, "RETRY_WAITING", LocalDateTime.of(2000, 1, 1, 0, 0))
             jobs.expireStaleWork()
             assertEquals("UNKNOWN", state(settled.id))
-            assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program) }
+            assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program, PENDING_LIMIT) }
             // AI 시작 뒤에 확정된 가용성이 있으면 닫히고 같은 공고의 새 요청을 받는다. AI는 다시 부르지 않는다.
             upsertAvailability(program, "RETRY_WAITING", null)
             jobs.expireStaleWork()
             assertEquals("FAILED", state(settled.id))
             assertEquals("RUN_OUTCOME_SETTLED", failure(settled.id))
-            val expired = jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program)
+            val expired = jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program, PENDING_LIMIT)
             service.executeQueued(expired.id)
             assertEquals("UNKNOWN", state(expired.id))
             // 확정된 가용성이 없어도 TTL이 지나면 닫힌다.
@@ -295,7 +303,7 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
             assertEquals("FAILED", state(expired.id))
             assertEquals("RUN_OUTCOME_UNKNOWN_EXPIRED", failure(expired.id))
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM application_form_discovery_job WHERE owner_account_id = ? AND active_slot = 1", Int::class.java, account.id))
-            assertNotNull(jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program))
+            assertNotNull(jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", program, PENDING_LIMIT))
             verify(discovery, times(2)).discoverQueued(anyString(), anyString(), any<() -> Unit>() ?: {})
         } finally {
             jdbc.update("DELETE FROM application_form_availability WHERE source_code = 'BIZINFO' AND source_program_id = ?", program)
@@ -316,7 +324,7 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
         assertEquals("UNKNOWN", state(running.id))
         assertFalse(jobs.beginAi(running.id))
         assertThrows(IllegalStateException::class.java) { jobs.succeed(running.id, result) }
-        val inactive = jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", "PBLN_2")
+        val inactive = jobs.reserve(account.id, UUID.randomUUID().toString(), "BIZINFO", "PBLN_2", PENDING_LIMIT)
         jdbc.update("UPDATE account SET suspended_at = CURRENT_TIMESTAMP(6) WHERE id = ?", account.id)
         service.executeQueued(inactive.id)
         jobs.expireStaleWork()
@@ -327,11 +335,11 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
     @Test
     fun uniqueIdentityCapacityAndRollbackAreEnforcedByMysql() {
         val job = enqueue()
-        assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(account.id, job.requestKey, "MSIT", "1") }
-        assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(newAccount().id, UUID.randomUUID().toString(), form.sourceCode, form.sourceProgramId) }
-        jobs.reserve(account.id, UUID.randomUUID().toString(), "MSIT", "1")
-        jobs.reserve(account.id, UUID.randomUUID().toString(), "KSTARTUP", "1")
-        assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(account.id, UUID.randomUUID().toString(), "CNTRADE_NOTICE", "1") }
+        assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(account.id, job.requestKey, "MSIT", "1", PENDING_LIMIT) }
+        assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(newAccount().id, UUID.randomUUID().toString(), form.sourceCode, form.sourceProgramId, PENDING_LIMIT) }
+        jobs.reserve(account.id, UUID.randomUUID().toString(), "MSIT", "1", PENDING_LIMIT)
+        jobs.reserve(account.id, UUID.randomUUID().toString(), "KSTARTUP", "1", PENDING_LIMIT)
+        assertThrows(ApplicationFormDiscoveryException::class.java) { jobs.reserve(account.id, UUID.randomUUID().toString(), "CNTRADE_NOTICE", "1", PENDING_LIMIT) }
         assertEquals(3, jobs.listOwned(account.id).size)
         assertThrows(DataAccessException::class.java) { jdbc.update("UPDATE application_form_discovery_job SET status = 'INVALID' WHERE id = ?", job.id) }
         assertThrows(DataAccessException::class.java) {
@@ -382,7 +390,7 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
         verifyNoInteractions(discovery)
     }
 
-    private fun enqueue() = jobs.reserve(account.id, UUID.randomUUID().toString(), form.sourceCode, form.sourceProgramId)
+    private fun enqueue() = jobs.reserve(account.id, UUID.randomUUID().toString(), form.sourceCode, form.sourceProgramId, PENDING_LIMIT)
     /** 한도와 무관한 흐름 테스트는 PREMIUM 계정으로 만들고, 요금제 한도 테스트만 FREE(plan = null)를 쓴다. */
     private fun newAccount(plan: String? = "PREMIUM") = accounts.createAccount(NewAccount("${UUID.randomUUID()}@form-queue.test", "hash", LocalDateTime.now()))
         .also { if (plan != null) jdbc.update("INSERT INTO account_plan (account_id, plan_code, assigned_at) VALUES (?, ?, NOW(6))", it.id, plan) }
@@ -407,6 +415,8 @@ class ApplicationFormDiscoveryQueueIntegrationTest {
 
     companion object {
         const val BASE = "/api/v1/application-preparations/forms/discovery-jobs"
+        /** 서비스가 요금제에서 읽어 넘기는 계정의 동시 처리 한도입니다. 저장소를 직접 부르는 테스트는 PLUS의 3건으로 고정합니다. */
+        const val PENDING_LIMIT = 3
         @Container @JvmField val rabbit = GenericContainer("rabbitmq:4.3.5-management-alpine").withExposedPorts(5672)
             .withEnv("RABBITMQ_DEFAULT_USER", "govbiz-test").withEnv("RABBITMQ_DEFAULT_PASS", "govbiz-test")
             .withEnv("RABBITMQ_DEFAULT_VHOST", "govbiz").waitingFor(Wait.forLogMessage(".*Server startup complete.*", 1))

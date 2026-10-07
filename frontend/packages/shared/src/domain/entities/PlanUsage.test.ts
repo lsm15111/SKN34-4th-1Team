@@ -6,6 +6,9 @@ import {
 
 const daily: PlanUsageItem = { feature: 'AI_SEARCH', period: 'DAY', limit: 10, used: 8, resetsAt: '2026-10-09T00:00:00+09:00' }
 const drafts: PlanUsageItem = { feature: 'APPLICATION_DRAFT', period: 'MONTH', limit: 1, used: 2, resetsAt: '2026-11-01T00:00:00+09:00' }
+const saved: PlanUsageItem = { feature: 'SAVED_PROGRAM', period: 'TOTAL', limit: 30, used: 12, resetsAt: null }
+const recruitments: PlanUsageItem = { feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 1, used: 1, resetsAt: null }
+const proposals: PlanUsageItem = { feature: 'PARTNER_PROPOSAL', period: 'MONTH', limit: 3, used: 2, resetsAt: '2026-11-01T00:00:00+09:00' }
 
 describe('PlanUsage', () => {
   it('warns from 80% of the limit and stops the visible count at the limit', () => {
@@ -17,6 +20,19 @@ describe('PlanUsage', () => {
     // 진행 중인 작업이 남아 한도를 넘겨 세어져도 화면은 한도에서 멈춥니다.
     expect(planUsageCountText(drafts)).toBe('이번 달 1/1건')
     expect(remainingPlanUses(drafts)).toBe(0)
+  })
+
+  it('counts held items as they are, even over the limit, and says how to free one up', () => {
+    expect(planUsageCountText(saved)).toBe('12/30개')
+    // 신청 준비가 함께 담아 한도를 넘었으면 넘은 개수를 그대로 보여 줍니다.
+    expect(planUsageCountText({ ...saved, used: 31 })).toBe('31/30개')
+    expect(planUsageCountText(recruitments)).toBe('1/1개')
+    expect(planUsageCountText(proposals)).toBe('이번 달 2/3건')
+    expect(isNearPlanLimit({ ...saved, used: 24 })).toBe(true)
+    expect(isPlanLimitReached(recruitments)).toBe(true)
+    expect(planUsageResetText(saved)).toBe('담은 공고를 빼면 그만큼 새로 담을 수 있어요.')
+    expect(planUsageResetText(recruitments)).toBe('모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')
+    expect(planUsageResetText(proposals)).toBe('11월 1일에 다시 채워져요.')
   })
 
   it('reads the reset date in Seoul time instead of the device time zone', () => {
@@ -33,6 +49,12 @@ describe('PlanUsage', () => {
       .toBe('이번 달 신청 문서 초안 1건을 모두 썼어요. 이미 시작한 공고의 문서는 계속 만들 수 있어요. 11월 1일에 다시 채워져요.')
     expect(planQuotaExceededMessage({ feature: 'COMBINATION_REVIEW', period: 'MONTH', limit: 2, plan: 'FREE', resetsAt: drafts.resetsAt }))
       .toContain('진행 중인 검토도 횟수에 들어가요.')
+    expect(planQuotaExceededMessage({ ...saved, plan: 'FREE' }))
+      .toBe('관심 공고는 30개까지 담을 수 있어요. 담은 공고를 빼면 그만큼 새로 담을 수 있어요.')
+    expect(planQuotaExceededMessage({ ...recruitments, plan: 'FREE' }))
+      .toBe('모집 중인 모집글은 1개까지 둘 수 있어요. 모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')
+    expect(planQuotaExceededMessage({ ...proposals, plan: 'FREE' }))
+      .toBe('이번 달 파트너 제안 3건을 모두 보냈어요. 철회한 제안도 횟수에 들어가요. 11월 1일에 다시 채워져요.')
   })
 
   it('finds a feature only when the usage was loaded', () => {

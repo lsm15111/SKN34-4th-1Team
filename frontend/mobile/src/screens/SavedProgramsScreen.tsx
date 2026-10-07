@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import type { SavedSupportProgram } from '@govbiz/shared/domain/entities/SavedSupportProgram'
+import { findPlanUsageItem } from '@govbiz/shared/domain/entities/PlanUsage'
 import { applicationProgressStages, type ApplicationPreparationSummary } from '@govbiz/shared/domain/entities/ApplicationPreparation'
 import { applicationProgressStageLabels, daysUntil, formatDday, programStatusLabels } from '@govbiz/shared/domain/labels'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
@@ -15,6 +16,7 @@ import { SegmentedControl } from '../components/SegmentedControl'
 import { preparationDate, preparationKey, PreparationRow, ReviewRow, ProgressStageSheet } from '../components/PreparationRows'
 import { usePreparationWorkspace } from '../components/usePreparationWorkspace'
 import { GuestFeatureNotice } from '../components/GuestFeatureNotice'
+import { PlanUsageLine, usePlanUsage } from '../components/PlanUsage'
 import { FilterMultiChoices } from '../components/FilterMultiChoices'
 import { PartnerSheet } from '../components/PartnerSheet'
 import { SavedProgramCalendar } from '../components/SavedProgramCalendar'
@@ -67,6 +69,16 @@ export function SavedProgramsScreen({ onOpenProgram, onCountChange, onLogin }: {
   }, [token, revision, invalidateSession]))
   const visible: SavedState = state.token === token ? state : { token, programs: [], loading: true, error: null }
   useEffect(() => { onCountChange?.(token ? visible.programs.length : 0) }, [token, visible.programs.length, onCountChange])
+  // 요금제의 관심 공고 개수입니다. 빼거나 되돌려 담아 담은 공고 수가 바뀌면 다시 읽어 목록과 같은 수를 보여 줍니다.
+  const { usage, reload: reloadUsage } = usePlanUsage(token ?? undefined, Boolean(token))
+  const savedUsage = findPlanUsageItem(usage, 'SAVED_PROGRAM')
+  const loadedCount = !visible.loading && !visible.error ? visible.programs.length : null
+  const usageCount = useRef<number | null>(null)
+  useEffect(() => {
+    if (loadedCount === null) return
+    if (usageCount.current !== null && usageCount.current !== loadedCount) reloadUsage()
+    usageCount.current = loadedCount
+  }, [loadedCount, reloadUsage])
   useEffect(() => { if (!undo) return; const timer = setTimeout(() => setUndo(null), 7_000); return () => clearTimeout(timer) }, [undo])
   useEffect(() => { setFilter('all'); setSavedView('list'); setMonth(savedCalendarMonth(savedCalendarToday())); setStageTarget(null); setFilterOpen(false) }, [token])
   const criteria = search.owner === token ? search.filters : emptySavedProgramFilters()
@@ -160,6 +172,7 @@ export function SavedProgramsScreen({ onOpenProgram, onCountChange, onLogin }: {
           <Button label="필터 초기화" size="small" variant="ghost" onPress={resetFilters} />
         </View>}
         {!visible.loading && !visible.error && listStageReady && <Text accessibilityLiveRegion="polite" style={styles.muted}>조건에 맞는 공고 {shown.length}건 / 담은 공고 {visible.programs.length}건{savedView === 'list' ? ' · 마감 임박순' : ''}</Text>}
+        {savedUsage && usage && <PlanUsageLine item={savedUsage} plan={usage.plan} />}
         {visible.loading && !visible.programs.length && <ActivityIndicator accessibilityLabel="관심 공고 불러오는 중" color={colors.primary} />}
         {visible.error && <Notice error>{visible.error}</Notice>}
         {!visible.loading && !visible.error && !visible.programs.length && <><Notice>아직 관심 공고가 없습니다. 공고 상세 화면에서 저장해 보세요.</Notice>

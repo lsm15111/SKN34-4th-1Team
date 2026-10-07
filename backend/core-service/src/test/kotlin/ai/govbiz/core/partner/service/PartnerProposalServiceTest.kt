@@ -25,21 +25,36 @@ import ai.govbiz.core.partner.service.exception.ProposalNotFoundException
 import ai.govbiz.core.partner.service.exception.ProposalNotPendingException
 import ai.govbiz.core.partner.service.exception.ProposalToOwnRecruitmentException
 import ai.govbiz.core.partner.service.exception.RecruitmentClosedException
+import ai.govbiz.core.planusage.PlanUsageTestHelper
+import ai.govbiz.core.planusage.domain.PlanCode
+import ai.govbiz.core.planusage.domain.PlanUsageFeature
+import ai.govbiz.core.planusage.domain.PlanUsageJob
+import ai.govbiz.core.planusage.domain.PlanUsagePeriod
+import ai.govbiz.core.planusage.domain.PlanUsageWindow
+import ai.govbiz.core.planusage.repository.GuestPlanUsageRepository
+import ai.govbiz.core.planusage.repository.PlanUsageRepository
+import ai.govbiz.core.planusage.service.PlanUsageService
+import ai.govbiz.core.planusage.service.exception.PlanQuotaExceededException
 import java.time.LocalDate
+import java.time.ZonedDateTime
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.dao.DuplicateKeyException
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.SimpleTransactionStatus
 
 @ExtendWith(MockitoExtension::class)
 class PartnerProposalServiceTest {
@@ -57,7 +72,8 @@ class PartnerProposalServiceTest {
 
     @BeforeEach
     fun setUp() {
-        service = PartnerProposalService(proposalRepository, recruitmentRepository, AccountTestHelper.FIXED_CLOCK)
+        service = PartnerProposalService(proposalRepository, recruitmentRepository, PlanUsageTestHelper.allowAll(AccountTestHelper.FIXED_CLOCK),
+            PlanUsageTestHelper.noTransactions(), AccountTestHelper.FIXED_CLOCK)
     }
 
     @Test
@@ -91,6 +107,32 @@ class PartnerProposalServiceTest {
         doReturn(recruitment(recruitmentDeadline = LocalDate.of(2026, 9, 5))).`when`(recruitmentRepository).findById(22L)
         assertThrows(RecruitmentClosedException::class.java) { service.send(proposer, 22L, input()) }
         verify(proposalRepository, never()).create(AccountTestHelper.anyValue())
+    }
+
+    @Test
+    fun sendRollsBackAProposalOverThisMonthsPlanLimitEvenIfEarlierOnesWereWithdrawn() {
+        doReturn(recruitment()).`when`(recruitmentRepository).findById(21L)
+        doReturn(proposal()).`when`(proposalRepository).create(AccountTestHelper.anyValue())
+        val plans = mock(PlanUsageRepository::class.java)
+        val september = PlanUsageWindow.current(PlanUsagePeriod.MONTH, ZonedDateTime.now(AccountTestHelper.FIXED_CLOCK))
+        doReturn(PlanCode.FREE).`when`(plans).findPlan(8L)
+        doReturn(emptyMap<Pair<PlanUsageFeature, String>, Int>()).`when`(plans).findCounts(8L, listOf("2026-09"))
+        // 이번 달 이미 보낸 3건(철회한 제안 포함)에 방금 보낸 제안을 더하면 FREE의 3건을 넘습니다.
+        doReturn(3).`when`(plans).countJobs(8L, PlanUsageFeature.PARTNER_PROPOSAL, september, PlanUsageJob.PartnerProposal(31L), null)
+        doReturn(4).`when`(plans).countJobs(8L, PlanUsageFeature.PARTNER_PROPOSAL, september, null, null)
+        val transactions = mock(PlatformTransactionManager::class.java)
+        doReturn(SimpleTransactionStatus()).`when`(transactions).getTransaction(ArgumentMatchers.any())
+        val limited = PartnerProposalService(proposalRepository, recruitmentRepository,
+            PlanUsageService(plans, mock(GuestPlanUsageRepository::class.java), AccountTestHelper.FIXED_CLOCK), transactions,
+            AccountTestHelper.FIXED_CLOCK)
+
+        val error = assertThrows(PlanQuotaExceededException::class.java) { limited.send(proposer, 21L, input()) }
+
+        assertEquals(PlanUsageFeature.PARTNER_PROPOSAL, error.feature)
+        assertEquals(3, error.limit)
+        assertEquals(3, error.used)
+        verify(transactions).rollback(ArgumentMatchers.any())
+        verify(transactions, never()).commit(ArgumentMatchers.any())
     }
 
     @Test

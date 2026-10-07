@@ -78,7 +78,8 @@ function DocumentResults({ id }: { id: number }) {
   /** 끝났지만 성공하지 못한 생성 작업. 실패 코드에 따라 알림의 동작이 달라집니다. */
   const [failedJob, setFailedJob] = useState<ApplicationDocumentGenerationJob | null>(null)
   /** 제출 때 계정의 진행 작업 3건이 차 있었는지. 전용 안내와 [다시 시도]를 보여 줍니다. */
-  const [capacityFull, setCapacityFull] = useState(false)
+  // 요금제의 동시 처리 한도에 걸린 문서 생성입니다. limit은 서버가 알려 준 동시 처리 건수이고, 모르면 null입니다.
+  const [capacity, setCapacity] = useState<{ limit: number | null } | null>(null)
   /** 이번 달 신청 문서 한도로 거절된 제출의 안내입니다. 다시 시도해도 같으므로 [다시 시도] 대신 요금제 안내를 둡니다. */
   const [planLimitMessage, setPlanLimitMessage] = useState<string | null>(null)
   // 이번 달 신청 문서 이용량입니다. 이미 센 공고는 다시 만들어도 늘지 않으므로 한도에 닿아도 버튼은 막지 않습니다.
@@ -162,7 +163,7 @@ function DocumentResults({ id }: { id: number }) {
       return current
     }
     async function load() {
-      setBusy(true); setBusySince(Date.now()); setError(null); setFailedJob(null); setCapacityFull(false); setPlanLimitMessage(null); setMigration(null); setJob(null)
+      setBusy(true); setBusySince(Date.now()); setError(null); setFailedJob(null); setCapacity(null); setPlanLimitMessage(null); setMigration(null); setJob(null)
       try {
         const [detail, stored, recent] = await Promise.all([
           useCase.get(id, controller.signal),
@@ -227,7 +228,7 @@ function DocumentResults({ id }: { id: number }) {
       } catch (caught) {
         if (controller.signal.aborted) return
         // 한도 초과는 작업을 만들지 않았으므로 요청한 버전을 남겨 두고 [다시 시도]로 같은 버전을 제출합니다.
-        if (caught instanceof ApplicationPreparationError && caught.code === 'APPLICATION_DOCUMENT_JOB_CAPACITY') setCapacityFull(true)
+        if (caught instanceof ApplicationPreparationError && caught.code === 'APPLICATION_DOCUMENT_JOB_CAPACITY') setCapacity({ limit: caught.limit })
         // 이번 달 신청 문서 한도는 서버가 만든 안내를 그대로 보여 줍니다. 이용량 확인 실패는 아래 일반 오류로 다시 시도를 둡니다.
         else if (caught instanceof PlanQuotaExceededError) setPlanLimitMessage(caught.message)
         else setError(caught instanceof Error ? caught.message : '문서를 생성하지 못했습니다.')
@@ -378,10 +379,10 @@ function DocumentResults({ id }: { id: number }) {
 
         {failedJob && preparation && <FailureCard job={failedJob} sourceUrl={preparation.form.sourceUrl} editorTo={back}
           reanalyzeTo={reanalyzeTo} retryDisabled={busy} onRetry={regenerate} />}
-        {capacityFull && <div className={`${n.alert} ${n.alertWarning}`} role="alert">
+        {capacity && <div className={`${n.alert} ${n.alertWarning}`} role="alert">
           <div className={n.alertText}>
-            <strong className={n.alertTitle}>진행 중인 초안 만들기가 3건이에요</strong>
-            <p>계정당 동시에 3건까지 만들 수 있어요. 다른 문서의 초안이 끝나면 다시 시도해 주세요. 답변은 그대로 저장되어 있어요.</p>
+            <strong className={n.alertTitle}>{capacity.limit === null ? '진행 중인 문서 생성이 있어요' : `진행 중인 문서 생성이 이미 ${capacity.limit}건이에요`}</strong>
+            <p>{capacity.limit === null ? '' : `지금 요금제는 동시에 ${capacity.limit}건까지 만들 수 있어요. `}다른 문서의 초안이 끝나면 다시 시도해 주세요. 답변은 그대로 저장되어 있어요.</p>
           </div>
           <div className={d.alertActions}>
             <button type="button" className={n.secondarySm} disabled={busy} onClick={() => setAttempt((count) => count + 1)}>다시 시도</button>
@@ -427,7 +428,7 @@ function DocumentResults({ id }: { id: number }) {
         {/* 이번 달 신청 문서 이용량입니다. 만드는 동안에는 진행 카드가, 한도로 거절됐으면 위 안내가 알리므로 두지 않습니다. */}
         {!busy && preparation && draftUsage && !planLimitMessage && <PlanUsageLine view={draftUsage} pricingPath={appPaths.pricing} className={d.usage} />}
 
-        {!busy && preparation && files.length === 0 && !error && !failedJob && !capacityFull && !planLimitMessage && !migration && !migrationMessage && <section className={n.card} aria-labelledby="documents-empty-title">
+        {!busy && preparation && files.length === 0 && !error && !failedJob && !capacity && !planLimitMessage && !migration && !migrationMessage && <section className={n.card} aria-labelledby="documents-empty-title">
           <div className={n.empty}>
             <h2 className={n.cardTitle} id="documents-empty-title">아직 만든 초안이 없어요</h2>
             <p className={n.muted}>{draftMode === 'original' ? '입력한 답변이 없거나 모두 미정이에요. AI 호출 없이 공식 양식 그대로 저장돼요.'

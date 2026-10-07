@@ -7,6 +7,7 @@ import ai.govbiz.core.applicationpreparation.service.ApplicationDocumentService
 import ai.govbiz.core.applicationpreparation.service.ApplicationDocumentDownloadLinkService
 import ai.govbiz.core.applicationpreparation.service.dto.*
 import ai.govbiz.core.applicationpreparation.service.exception.ApplicationDocumentException
+import ai.govbiz.core.applicationpreparation.service.exception.ApplicationDocumentJobCapacityException
 import java.time.LocalDateTime
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -31,6 +32,16 @@ class ApplicationDocumentBoundaryContractTest {
         assertEquals(json.readTree("""{"status":"MAPPING_CHANGED","approvalToken":"token","expectedRevision":7,
             "expiresInSeconds":900,"changes":[{"fieldLabel":"label","changeType":"TARGET_CHANGED",
             "oldLocation":null,"newLocation":"new location"}]}"""), tree)
+    }
+
+    @Test fun jobCapacityIsA429WithThePlansConcurrentLimitLikeTheOtherQueues() {
+        val response = ApplicationDocumentExceptionHandler().jobCapacity(ApplicationDocumentJobCapacityException(3))
+        assertEquals(429, response.statusCode.value())
+        assertEquals("no-store", response.headers.cacheControl)
+        val problem = requireNotNull(response.body)
+        assertEquals("진행 중인 문서 생성이 이미 3건입니다. 끝난 뒤 다시 시도해 주세요.", problem.detail)
+        assertEquals("APPLICATION_DOCUMENT_JOB_CAPACITY", problem.properties!!["code"])
+        assertEquals(3, problem.properties!!["limit"])
     }
 
     @Test fun confirmMapsInternalResultToExactPublicResponse() {

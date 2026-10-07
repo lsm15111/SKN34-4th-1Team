@@ -8,6 +8,7 @@ import {
 import { HelpTip } from '../../../shared/workspace/HelpTip'
 import { WorkspacePageHeader } from '../../../shared/workspace/WorkspacePageHeader'
 import { appPaths } from '../../../shared/routes/appPaths'
+import { PlanUsageLine } from '../../../shared/plan-usage/PlanUsageLine'
 import { SavedSupportProgramPickerDialog } from '../../../shared/support-program/SavedSupportProgramPickerDialog'
 import { usePartnerRecruitmentCreateViewModel } from '../viewmodel/usePartnerRecruitmentCreateViewModel'
 import { partnerRecruitmentStyles } from './PartnerRecruitment.styles'
@@ -37,6 +38,7 @@ export function PartnerRecruitmentCreatePage() {
     selectedProgramKeys,
     toggleProgram,
     clearProgram,
+    recruitmentUsage,
   } = usePartnerRecruitmentCreateViewModel()
   const pickerButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -75,6 +77,8 @@ export function PartnerRecruitmentCreatePage() {
 
       <div className={workspacePageStyles.content}>
         <div className={workspacePageStyles.column}>
+          {/* 모집 중인 모집글 수입니다. 한도에 닿았으면 글을 쓰기 전에 마감하면 새로 쓸 수 있다고 알립니다. */}
+          {recruitmentUsage ? <PlanUsageLine view={recruitmentUsage} pricingPath={appPaths.pricing} className={partnerRecruitmentStyles.usage} /> : null}
           <form className={partnerRecruitmentStyles.form} onSubmit={(event) => void submit(event)} aria-label="모집글 작성" noValidate>
             <section className={partnerRecruitmentStyles.formSection}>
               <div className={partnerRecruitmentStyles.formSectionHeader}>
@@ -175,7 +179,7 @@ export function PartnerRecruitmentCreatePage() {
                 <Link className={partnerRecruitmentStyles.formCancelButton} to={appPaths.partners}>
                   취소
                 </Link>
-                <button className={partnerRecruitmentStyles.formSubmitButton} type="submit" disabled={isSubmitting}>
+                <button className={partnerRecruitmentStyles.formSubmitButton} type="submit" disabled={isSubmitting || recruitmentUsage?.isLimitReached === true}>
                   {isSubmitting ? '등록 중…' : '모집글 등록'}
                 </button>
               </div>

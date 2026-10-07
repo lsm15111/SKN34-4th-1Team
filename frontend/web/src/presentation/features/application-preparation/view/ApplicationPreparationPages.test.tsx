@@ -632,13 +632,14 @@ it('keeps the empty state when the last failure belongs to answers that have cha
   expect(repository.submitDocumentJob).not.toHaveBeenCalled()
 })
 
-it('explains the three-job limit at submit time and submits again only on retry', async () => {
+it('explains the plan\'s concurrent job limit at submit time and submits again only on retry', async () => {
   repository.get.mockResolvedValue(readyPreparation())
-  repository.submitDocumentJob.mockRejectedValueOnce(new ApplicationPreparationError(429, 'APPLICATION_DOCUMENT_JOB_CAPACITY'))
+  // 동시 처리 한도는 요금제마다 다르고(무료 1건) 서버가 알려 준 건수를 그대로 씁니다.
+  repository.submitDocumentJob.mockRejectedValueOnce(new ApplicationPreparationError(429, 'APPLICATION_DOCUMENT_JOB_CAPACITY', null, 1))
   mount('/app/application-preparations/12/documents?generate=3')
   const alert = await screen.findByRole('alert')
-  expect(alert.querySelector('strong')?.textContent).toBe('진행 중인 초안 만들기가 3건이에요')
-  expect(alert.textContent).toContain('계정당 동시에 3건까지 만들 수 있어요')
+  expect(alert.querySelector('strong')?.textContent).toBe('진행 중인 문서 생성이 이미 1건이에요')
+  expect(alert.textContent).toContain('지금 요금제는 동시에 1건까지 만들 수 있어요')
   expect(alert.textContent).not.toContain('신청 준비 정보를 처리하지 못했습니다')
   expect(within(alert).getByRole('link', { name: '목록으로' }).getAttribute('href')).toBe('/app/application-preparations')
   expect(screen.queryByText('아직 만든 초안이 없어요')).toBeNull()
@@ -646,8 +647,11 @@ it('explains the three-job limit at submit time and submits again only on retry'
   fireEvent.click(within(alert).getByRole('button', { name: '다시 시도' }))
   await waitFor(() => expect(receiveButton()).toBeTruthy())
   expect(repository.submitDocumentJob.mock.calls.map((call) => call[1])).toEqual([3, 3])
+  expect(new ApplicationPreparationError(429, 'APPLICATION_DOCUMENT_JOB_CAPACITY', null, 3).message)
+    .toBe('진행 중인 문서 생성이 이미 3건이에요. 끝난 뒤 다시 시도해 주세요.')
+  // 한도 건수를 모르는 이전 서버 응답이면 숫자 없이 알립니다.
   expect(new ApplicationPreparationError(429, 'APPLICATION_DOCUMENT_JOB_CAPACITY').message)
-    .toBe('진행 중인 초안 만들기가 3건이에요. 끝난 뒤 다시 시도해 주세요.')
+    .toBe('진행 중인 문서 생성이 있어 새로 만들지 못했어요. 끝난 뒤 다시 시도해 주세요.')
 })
 
 const draftLimitMessage = '이번 달 신청 문서 초안 1건을 모두 썼어요. 이미 시작한 공고의 문서는 계속 만들 수 있어요. 11월 1일에 다시 채워져요.'
@@ -1859,7 +1863,7 @@ describe('application preparation creation and detail', () => {
     // 분석은 텍스트 링크가 아니라 가운데 보조 버튼이고, 유료 AI와 한도를 바로 아래에 적습니다.
     expect(within(card).getByRole('button', { name: '입력칸별로 분석' }).tagName).toBe('BUTTON')
     expect(within(card).queryByRole('link', { name: '입력칸별로 분석' })).toBeNull()
-    expect(within(card).getByText('AI가 공식 첨부를 읽어 문항을 뽑아요. 유료 AI 호출이며 계정당 동시에 3건까지 할 수 있어요.')).toBeTruthy()
+    expect(within(card).getByText('AI가 공식 첨부를 읽어 문항을 뽑아요. 유료 AI 호출이며 동시에 진행할 수 있는 분석 수는 요금제마다 달라요.')).toBeTruthy()
     expect(startButton().disabled).toBe(true)
     expect(startReason()).toBe('양식을 분석하면 시작할 수 있어요')
     expect(follows(card, startButton())).toBe(true)
@@ -2119,12 +2123,14 @@ describe('application preparation creation and detail', () => {
       { ...completedDiscovery({ items: [structuredClone(firstForm)], warnings: [], cached: false }), id: 3, status: 'UNKNOWN', result: null, programTitle: '확인 공고' },
       { ...completedDiscovery({ items: [structuredClone(firstForm)], warnings: [], cached: false }), id: 4, programTitle: '끝난 공고' },
     ])
-    repository.discover.mockRejectedValue(new ApplicationPreparationError(429, 'APPLICATION_FORM_JOB_CAPACITY'))
+    repository.discover.mockRejectedValue(new ApplicationPreparationError(429, 'APPLICATION_FORM_JOB_CAPACITY', null, 3))
     mount(newPath)
     await screen.findByRole('region', { name: '작성할 신청 양식이 없어요' })
     fireEvent.click(within(formSection()).getByRole('button', { name: '입력칸별로 분석' }))
     const alert = await within(formSection()).findByRole('alert')
-    expect(alert.textContent).toContain('진행 중이거나 확인이 필요한 분석이 3건입니다')
+    // 요금제의 동시 처리 건수(플러스 3건)는 서버가 알려 준 값입니다.
+    expect(alert.querySelector('strong')?.textContent).toBe('진행 중이거나 확인이 필요한 분석이 이미 3건이에요')
+    expect(alert.textContent).toContain('동시에 진행할 수 있는 분석 수는 요금제마다 달라요.')
     const jobs = within(alert).getByRole('list', { name: '진행 중인 분석' })
     expect(within(jobs).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       expect.stringContaining('대기 공고대기 중'), expect.stringContaining('분석 공고분석 중'), expect.stringContaining('확인 공고결과 확인 필요'),

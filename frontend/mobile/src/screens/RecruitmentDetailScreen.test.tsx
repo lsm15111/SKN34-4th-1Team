@@ -126,6 +126,20 @@ test('proposal requires an explicit message and keeps the checked company profil
   await screen.findByText('제안을 보냈어요')
 })
 
+test('the proposal sheet shows this month\'s sent proposals and blocks sending once the plan limit is used', async () => {
+  jest.mocked(apiRequest).mockImplementation((path) => Promise.resolve(path === '/api/v1/plan-usage'
+    ? { plan: 'FREE', items: [{ feature: 'PARTNER_PROPOSAL', period: 'MONTH', limit: 3, used: 3, resetsAt: '2026-11-01T00:00:00+09:00' }] }
+    : company))
+  render(<RecruitmentDetailScreen id={9} {...callbacks} />)
+  fireEvent.press(await screen.findByText('제안 보내기'))
+  expect(await screen.findByText('이번 달 파트너 제안 3건을 모두 보냈어요. 철회한 제안도 횟수에 들어가요. 11월 1일에 다시 채워져요.')).toBeTruthy()
+  fireEvent.changeText(screen.getByLabelText('제안 메시지'), '제조 현장 실증에 참여하겠습니다.')
+  await screen.findByText(/넥스트웨이브 · 경기 · 제조업 · 2019년 설립/)
+  expect(screen.getByLabelText('보내기').props.accessibilityState.disabled).toBe(true)
+  expect(sendProposal).not.toHaveBeenCalled()
+  expect(apiRequest).toHaveBeenCalledWith('/api/v1/plan-usage', expect.objectContaining({ accessToken: 'my-token' }))
+})
+
 test('an invalid company response cannot populate the proposal profile or enable submission', async () => {
   jest.mocked(apiRequest).mockResolvedValue({ ...company, foundedYear: '2019' })
   render(<RecruitmentDetailScreen id={9} {...callbacks} />)

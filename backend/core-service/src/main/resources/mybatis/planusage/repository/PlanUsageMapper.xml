@@ -7,6 +7,12 @@
         <result property="usedCount" column="used_count" />
     </resultMap>
 
+    <resultMap id="recruitmentProgram" type="ai.govbiz.core.planusage.repository.mapper.PlanUsageRecruitmentProgramDbRow">
+        <result property="applicationPeriodRaw" column="application_period_raw" />
+        <result property="applicationStartDate" column="application_start_date" />
+        <result property="applicationEndDate" column="application_end_date" />
+    </resultMap>
+
     <select id="findPlanCode" resultType="string">
         SELECT plan_code FROM account_plan WHERE account_id = #{accountId}
     </select>
@@ -117,5 +123,39 @@
             SELECT #{includeSourceCode} COLLATE utf8mb4_0900_bin, #{includeSourceProgramId} COLLATE utf8mb4_0900_bin
             </if>
         ) programs
+    </select>
+
+    <!--
+        파트너 제안은 이번 달 보낸 제안을 상태와 관계없이 셉니다. 철회·거절·만료된 제안도 보낸 달의 사용량에 남아
+        철회하고 다시 보내는 방식으로 한도를 늘리지 못합니다. excludeProposalId는 방금 만든 제안을 뺀 수를 셀 때 씁니다.
+    -->
+    <select id="countSentPartnerProposals" resultType="int">
+        SELECT COUNT(*)
+        FROM partner_proposal
+        WHERE proposer_account_id = #{accountId}
+          AND created_at &gt;= #{from} AND created_at &lt; #{to}
+        <if test="excludeProposalId != null">AND id &lt;&gt; #{excludeProposalId}</if>
+    </select>
+
+    <!-- 관심 공고함 목록과 같은 기준입니다. 더 이상 노출되지 않는 공고는 목록에서 빠지므로 개수에도 넣지 않습니다. -->
+    <select id="countSavedPrograms" resultType="int">
+        SELECT COUNT(*)
+        FROM saved_support_program saved
+        INNER JOIN support_program program ON program.id = saved.support_program_id
+        WHERE saved.account_id = #{accountId}
+          AND program.is_source_present = TRUE
+    </select>
+
+    <!--
+        모집 상태는 저장하지 않고 조회 시점에 계산합니다. 수동 마감과 모집 마감일은 여기서 거르고,
+        공고 접수 마감은 신청 기간 원문까지 보는 공고 상태 규칙이라 Repository가 판단합니다.
+    -->
+    <select id="findOpenRecruitmentPrograms" resultMap="recruitmentProgram">
+        SELECT program.application_period_raw, program.application_start_date, program.application_end_date
+        FROM partner_recruitment recruitment
+        INNER JOIN support_program program ON program.id = recruitment.support_program_id
+        WHERE recruitment.account_id = #{accountId}
+          AND recruitment.closed_at IS NULL
+          AND recruitment.recruitment_deadline &gt;= #{today}
     </select>
 </mapper>

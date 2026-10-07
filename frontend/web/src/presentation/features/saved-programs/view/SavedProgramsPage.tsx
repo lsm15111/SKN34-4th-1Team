@@ -7,6 +7,9 @@ import type { SupportProgramStatus } from '../../../../domain/entities/SupportPr
 import { regionNames } from '../../../../domain/entities/Region'
 import { supportProgramCategories } from '../../../../domain/entities/SupportProgramCategory'
 import { assistantCover } from '../../../shared/assistant/assistantPlacement'
+import { PlanUsageLine } from '../../../shared/plan-usage/PlanUsageLine'
+import { planUsageView } from '../../../shared/plan-usage/planUsageView'
+import { usePlanUsage } from '../../../shared/plan-usage/usePlanUsage'
 import { appPaths, readSavedProgramsViewMode, savedProgramsPath, supportProgramDetailPath, type SavedProgramsViewMode } from '../../../shared/routes/appPaths'
 import { EmptyState } from '../../../shared/workspace/EmptyState'
 import { ErrorState } from '../../../shared/workspace/ErrorState'
@@ -94,6 +97,17 @@ export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase, 
   }
   const monthLabel = `${vm.year}년 ${vm.month}월`
   const isEmpty = vm.phase === 'ready' && vm.totalProgramCount === 0
+  // 요금제의 관심 공고 개수입니다. 빼거나 되돌려 담은 공고 수가 바뀌면 다시 읽어 목록과 같은 수를 보여 줍니다.
+  const planUsage = usePlanUsage()
+  const { reload: reloadPlanUsage } = planUsage
+  const savedUsage = planUsageView(planUsage.usage, 'SAVED_PROGRAM')
+  const loadedCount = vm.phase === 'ready' ? vm.totalProgramCount : null
+  const shownCount = useRef<number | null>(null)
+  useEffect(() => {
+    if (loadedCount === null) return
+    if (shownCount.current !== null && shownCount.current !== loadedCount) reloadPlanUsage()
+    shownCount.current = loadedCount
+  }, [loadedCount, reloadPlanUsage])
   // 적용 조건 칩은 값마다 하나씩이고, 칩의 ×는 그 값만 끕니다.
   const activeFilters: { key: keyof SavedProgramCalendarFilters; value: string; label: string }[] = [
     ...(vm.filters.keyword.trim() ? [{ key: 'keyword' as const, value: '', label: `검색 · ${vm.filters.keyword.trim()}` }] : []),
@@ -122,6 +136,7 @@ export function SavedProgramsPage({ initial, browseUseCase, preparationUseCase, 
     <div className={workspacePageStyles.content}>
       <div className={workspacePageStyles.column}>
         <p className={s.lede}>{lede}</p>
+        {savedUsage ? <PlanUsageLine view={savedUsage} pricingPath={appPaths.pricing} className={s.usage} /> : null}
 
         {/* 검색어·지역·분야·대상은 저장된 공고 안에서 바로 거릅니다. 지역·분야·대상은 드롭다운 안에서 여러 개를 함께 고릅니다. */}
         <form className={s.filterBar} aria-label="관심 공고 필터" onSubmit={event => event.preventDefault()}>

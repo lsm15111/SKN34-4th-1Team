@@ -54,17 +54,19 @@ class CombinationReviewRunService(
             throw CombinationReviewRunException(ReviewRunFailureCode.INPUT_PROGRAM_COUNT_UNSUPPORTED)
         }
         if (!queueEnabled) throw CombinationReviewRunException(ReviewRunFailureCode.RUN_QUEUE_UNAVAILABLE)
+        // 계정이 동시에 둘 수 있는 미완료 실행 수는 요금제 속성이다.
+        val maxPending = planUsage.concurrentJobLimit(account.id)
         try {
             return admission.execute("combination-review-account:${account.id}") {
                 // 새 실행 접수와 월 한도 확인을 한 transaction으로 묶어 한도를 넘는 실행은 남기지 않는다.
                 requireNotNull(transactions.execute { _ ->
-                    runs.reserve(account.id, reviewId, expectedRevision, requestKey, additionalFacts, runnerInstanceId).also { reservation ->
+                    runs.reserve(account.id, reviewId, expectedRevision, requestKey, additionalFacts, runnerInstanceId, maxPending).also { reservation ->
                         if (reservation.created) planUsage.requireMonthlyCapacity(account.id, PlanUsageJob.ReviewRun(reservation.run.id))
                     }
                 })
             }
-        } catch (_: CombinationReviewCapacityException) {
-            throw CombinationReviewRunException(ReviewRunFailureCode.RUN_CAPACITY_EXCEEDED, retryAfterSeconds = 60)
+        } catch (error: CombinationReviewCapacityException) {
+            throw CombinationReviewRunException(ReviewRunFailureCode.RUN_CAPACITY_EXCEEDED, retryAfterSeconds = 60, limit = error.limit)
         } catch (error: SupportProgramRequestRejectedException) {
             val code = if (error.reason == SupportProgramRequestRejectedException.Reason.RATE_LIMITED) ReviewRunFailureCode.RUN_RATE_LIMITED else ReviewRunFailureCode.RUN_CAPACITY_EXCEEDED
             throw CombinationReviewRunException(code, cause = error, retryAfterSeconds = error.retryAfterSeconds)

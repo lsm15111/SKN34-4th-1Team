@@ -57,6 +57,10 @@ const usage = { plan: 'FREE', items: [
   // 진행 중인 작업 때문에 한도를 넘겨 세어져도 막대와 숫자는 한도에서 멈춥니다.
   { feature: 'APPLICATION_DRAFT', period: 'MONTH', limit: 1, used: 2, resetsAt: '2026-11-01T00:00:00+09:00' },
   { feature: 'COMBINATION_REVIEW', period: 'MONTH', limit: 2, used: 0, resetsAt: '2026-11-01T00:00:00+09:00' },
+  // 관심 공고·모집 중인 모집글은 지금 가진 개수라 다시 채워지는 때 대신 다시 쓰는 방법을 적습니다.
+  { feature: 'SAVED_PROGRAM', period: 'TOTAL', limit: 30, used: 12, resetsAt: null },
+  { feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 1, used: 1, resetsAt: null },
+  { feature: 'PARTNER_PROPOSAL', period: 'MONTH', limit: 3, used: 2, resetsAt: '2026-11-01T00:00:00+09:00' },
 ] }
 function signIn() {
   jest.mocked(useAuth).mockReturnValue({ status: 'signedIn', session: { accessToken: 'owner', account: { email: 'owner@example.com', company: null } },
@@ -72,15 +76,20 @@ test('a signed-in account shows its plan and every usage limit as progress witho
   expect(view.getByText('현재 요금제')).toBeTruthy()
   expect(view.getByText('무료')).toBeTruthy()
   for (const [label, count] of [['AI 대화 검색', '오늘 3/10회'], ['공고 원문 질문', '오늘 8/10회'],
-    ['신청 문서 초안', '이번 달 1/1건'], ['중복 지원·수혜 검토', '이번 달 0/2회']]) {
+    ['신청 문서 초안', '이번 달 1/1건'], ['중복 지원·수혜 검토', '이번 달 0/2회'], ['관심 공고', '12/30개'],
+    ['모집 중인 모집글', '1/1개'], ['파트너 제안 보내기', '이번 달 2/3건']]) {
     expect(view.getByText(label)).toBeTruthy()
     expect(view.getByText(count)).toBeTruthy()
   }
-  expect(view.getAllByRole('progressbar')).toHaveLength(4)
+  expect(view.getAllByRole('progressbar')).toHaveLength(7)
   expect(view.getByRole('progressbar', { name: 'AI 대화 검색 이용량' }).props.accessibilityValue).toEqual({ min: 0, max: 10, now: 3 })
   expect(view.getByRole('progressbar', { name: '신청 문서 초안 이용량' }).props.accessibilityValue).toEqual({ min: 0, max: 1, now: 1 })
+  expect(view.getByRole('progressbar', { name: '관심 공고 이용량' }).props.accessibilityValue).toEqual({ min: 0, max: 30, now: 12 })
   expect(view.getAllByText('자정(서울 시간)에 다시 채워져요.')).toHaveLength(2)
-  expect(view.getAllByText('11월 1일에 다시 채워져요.')).toHaveLength(2)
+  expect(view.getAllByText('11월 1일에 다시 채워져요.')).toHaveLength(3)
+  expect(view.getByText('담은 공고를 빼면 그만큼 새로 담을 수 있어요.')).toBeTruthy()
+  expect(view.getByText('모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')).toBeTruthy()
+  expect(StyleSheet.flatten(view.getByText('1/1개').props.style).color).toBe(colors.warning)
   expect(StyleSheet.flatten(view.getByText('오늘 8/10회').props.style).color).toBe(colors.warning)
   expect(StyleSheet.flatten(view.getByText('오늘 3/10회').props.style).color).not.toBe(colors.warning)
   expect(view.getByText('결제는 아직 받지 않아요.')).toBeTruthy()

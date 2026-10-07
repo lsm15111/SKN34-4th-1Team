@@ -2,7 +2,7 @@ import type { z } from 'zod'
 import { reviewPageSchema, reviewProblemSchema, reviewSchema, runPageSchema, runSchema } from '@govbiz/shared/data/models/CombinationReviewDto'
 import { readPlanQuotaProblem } from '@govbiz/shared/data/models/PlanUsageDto'
 import type { SupportProgram } from '@govbiz/shared/domain/entities/SupportProgram'
-import { CombinationReviewError } from '@govbiz/shared/domain/errors/CombinationReviewError'
+import { CombinationReviewError, reviewCapacityMessage } from '@govbiz/shared/domain/errors/CombinationReviewError'
 import { PlanQuotaExceededError, QuotaUnavailableError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 import type { ReviewDraft, RunRequest } from '@govbiz/shared/domain/entities/CombinationReview'
 import type { CombinationReviewRepository } from '@govbiz/shared/domain/repositories/CombinationReviewRepository'
@@ -33,8 +33,9 @@ export class MobileCombinationReviewRepository implements CombinationReviewRepos
       if (!response.ok) {
         const problemBody: unknown = await response.json().catch(() => null)
         const problem = reviewProblemSchema.safeParse(problemBody)
+        // 계정 동시 처리 한도(RUN_CAPACITY_EXCEEDED)에는 요금제가 허용하는 진행 중 실행 수가 함께 옵니다.
         const failure = new CombinationReviewError(response.status, problem.success ? problem.data.code : 'REQUEST_FAILED',
-          problem.success ? problem.data.runId ?? null : null, response.headers.get('Retry-After'))
+          problem.success ? problem.data.runId ?? null : null, response.headers.get('Retry-After'), problem.success ? problem.data.limit ?? null : null)
         // 요금제 한도 문제 응답은 shared 안내 문구를 원인으로 남깁니다. 상태 코드는 그대로 두어 요청 키 정리 규칙이 같게 동작합니다.
         const quota = readPlanQuotaProblem(response.status, problemBody)
         if (quota) failure.cause = quota
@@ -110,6 +111,8 @@ export function reviewErrorMessage(error: unknown): string {
     if (error.status === 404) return '검토 또는 실행을 찾을 수 없어요.'
     if (error.code === 'COMBINATION_REVIEW_DELETE_CONFLICT') return '대기·분석 중이거나 결과 확인이 필요한 실행이 있어 검토를 삭제할 수 없어요. 검토와 실행 기록은 유지됩니다. 실행 상태를 확인해 주세요.'
     if (error.status === 409) return '저장된 입력이나 분석 요청이 변경됐어요. 작성한 내용은 유지됩니다. 최신 검토와 실행 이력을 확인해 주세요.'
+    const capacityMessage = reviewCapacityMessage(error)
+    if (capacityMessage !== null) return capacityMessage
     if (error.status === 429) return '요청량 또는 진행 중인 분석 한도에 도달했어요. 잠시 후 다시 확인해 주세요.'
     if (error.code === 'RUN_QUEUE_UNAVAILABLE') return '지금은 분석 요청을 접수할 수 없어요. 잠시 후 다시 시도해 주세요.'
     if (error.status === 422) return '선택한 공고나 공식 자료를 자동 분석할 수 없어요. 공식 원문을 확인해 주세요.'

@@ -3,6 +3,7 @@ package ai.govbiz.core.supportprogram.controller
 import ai.govbiz.core._common.test.MySqlTestContainerConfig
 import ai.govbiz.core.account.helper.SessionCookieHelper
 import ai.govbiz.core.account.helper.SignupTestHelper
+import ai.govbiz.core.supportprogram.repository.SavedSupportProgramRepository
 import jakarta.servlet.http.Cookie
 import java.time.LocalDate
 import org.junit.jupiter.api.BeforeEach
@@ -19,6 +20,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
@@ -43,6 +45,9 @@ class SavedSupportProgramFlowIntegrationTest {
 
     @Autowired
     private lateinit var jdbcTemplate: JdbcTemplate
+
+    @Autowired
+    private lateinit var savedSupportProgramRepository: SavedSupportProgramRepository
 
     private val today: LocalDate = LocalDate.now()
 
@@ -139,6 +144,59 @@ class SavedSupportProgramFlowIntegrationTest {
             .andExpect(jsonPath("$.saved").value(false))
         val rows = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM saved_support_program", Int::class.java)
         assert(rows == 1) { "saved row must stay for when the program is published again" }
+    }
+
+    @Test
+    fun freeAccountsHoldThirtyVisibleProgramsAndAPreparationMayGoOverWhileNewSavesStayBlocked() {
+        val session = signUp("member@company.co.kr")
+        val accountId = requireNotNull(jdbcTemplate.queryForObject("SELECT id FROM account WHERE email = 'member@company.co.kr'", Long::class.java))
+        (1..30).forEach { insertProgram("bulk-$it", today.plusDays(30), present = true) }
+        // 29개는 미리 담아 두고 비노출 공고 하나를 더 담아 둡니다. 비노출 공고는 목록처럼 개수에서도 빠집니다.
+        jdbcTemplate.update(
+            """
+            INSERT INTO saved_support_program (account_id, support_program_id, saved_at)
+            SELECT ?, id, NOW(6) FROM support_program
+            WHERE source_code = 'TESTSRC' AND (source_program_id = 'hidden-program' OR source_program_id LIKE 'bulk-%' AND source_program_id <> 'bulk-30')
+            """.trimIndent(),
+            accountId,
+        )
+        mockMvc.perform(post("/api/v1/me/saved-programs").cookie(session).origin().json(saveBody("bulk-30")))
+            .andExpect(status().isOk())
+
+        mockMvc.perform(post("/api/v1/me/saved-programs").cookie(session).origin().json(saveBody("open-program")))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
+            .andExpect(jsonPath("$.feature").value("SAVED_PROGRAM"))
+            .andExpect(jsonPath("$.period").value("TOTAL"))
+            .andExpect(jsonPath("$.plan").value("FREE"))
+            .andExpect(jsonPath("$.limit").value(30))
+            .andExpect(jsonPath("$.used").value(30))
+            .andExpect(jsonPath("$.resetsAt").doesNotExist())
+            .andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER))
+        mockMvc.perform(get("/api/v1/me/saved-programs/status").cookie(session).param("sourceCode", "TESTSRC").param("sourceProgramId", "open-program"))
+            .andExpect(jsonPath("$.saved").value(false))
+        // 이미 담긴 공고를 다시 담으면 개수가 늘지 않으므로 한도에 닿아 있어도 같은 응답입니다.
+        mockMvc.perform(post("/api/v1/me/saved-programs").cookie(session).origin().json(saveBody("bulk-30")))
+            .andExpect(status().isOk())
+
+        // 신청 준비를 시작하면 한도와 관계없이 그 공고를 함께 담고(31개), 그 뒤 새로 담는 것은 계속 막습니다.
+        assert(savedSupportProgramRepository.saveIfPresent(accountId, "TESTSRC", "open-program")) { "preparation save must not be blocked" }
+        mockMvc.perform(post("/api/v1/me/saved-programs").cookie(session).origin().json(saveBody("another-program")))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.used").value(31))
+        mockMvc.perform(get("/api/v1/plan-usage").cookie(session))
+            .andExpect(jsonPath("$.items[4].feature").value("SAVED_PROGRAM"))
+            .andExpect(jsonPath("$.items[4].used").value(31))
+            .andExpect(jsonPath("$.items[4].limit").value(30))
+            .andExpect(jsonPath("$.items[4].resetsAt").value(org.hamcrest.Matchers.nullValue()))
+
+        // 빼서 한도 아래로 내려가면 다시 담을 수 있습니다.
+        listOf("bulk-1", "bulk-2").forEach { id ->
+            mockMvc.perform(delete("/api/v1/me/saved-programs").cookie(session).origin().param("sourceCode", "TESTSRC").param("sourceProgramId", id))
+                .andExpect(status().isNoContent())
+        }
+        mockMvc.perform(post("/api/v1/me/saved-programs").cookie(session).origin().json(saveBody("another-program")))
+            .andExpect(status().isOk())
     }
 
     private fun saveBody(sourceProgramId: String): String =

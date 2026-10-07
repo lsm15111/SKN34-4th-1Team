@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router'
 import { catalogSourceLabels } from '@govbiz/shared/domain/entities/SupportProgramCatalog'
 import { partnerRoleLabels, type PartnerRecruitment } from '@govbiz/shared/domain/entities/PartnerRecruitment'
 import { partnerProposalStatusLabels } from '@govbiz/shared/domain/entities/PartnerProposal'
+import { findPlanUsageItem, isPlanLimitReached } from '@govbiz/shared/domain/entities/PlanUsage'
 import type { Company } from '@govbiz/shared/domain/entities/Company'
 import type { SupportProgramIdentity } from '@govbiz/shared/domain/repositories/SupportProgramRepository'
 import type { SupportProgramStatus } from '@govbiz/shared/domain/entities/SupportProgram'
@@ -15,6 +16,7 @@ import { getCompany } from '../api/company'
 import { closeRecruitment, getPartnerWebUrl, getRecruitment, partnerErrorMessage, sendProposal } from '../api/partners'
 import { useAuth } from '../auth/session'
 import { PartnerSheet } from '../components/PartnerSheet'
+import { PlanUsageLine, usePlanUsage } from '../components/PlanUsage'
 import { partnerFullDate, recruitmentDeadlineLabel, recruitmentDeadlineTone } from '../components/PartnerDates'
 import { Button, Card, Notice, Page, StatusBadge, colors, styles } from '../ui'
 
@@ -39,6 +41,10 @@ export function RecruitmentDetailScreen({ id, onLogin, onCompany, onProgram, onI
   const [linkedStatus, setLinkedStatus] = useState<{ key: string; status: SupportProgramStatus | null; error: boolean } | null>(null)
   const request = useRef<AbortController | null>(null)
   const insets = useSafeAreaInsets()
+  // 이번 달 보낸 제안 수입니다. 제안 작성 창을 열 때 읽고, 다 썼으면 보내지 않습니다.
+  const { usage, reload: reloadUsage } = usePlanUsage(token ?? undefined, proposalOpen)
+  const proposalUsage = findPlanUsageItem(usage, 'PARTNER_PROPOSAL')
+  const proposalLimitReached = proposalUsage !== null && isPlanLimitReached(proposalUsage)
 
   useFocusEffect(useCallback(() => {
     const controller = new AbortController()
@@ -96,7 +102,7 @@ export function RecruitmentDetailScreen({ id, onLogin, onCompany, onProgram, onI
 
   async function submitProposal() {
     const value = message.trim()
-    if (!token || !company || !value || busy || !state.detail || state.detail.status !== 'OPEN') return
+    if (!token || !company || !value || busy || !state.detail || state.detail.status !== 'OPEN' || proposalLimitReached) return
     const controller = new AbortController(); request.current = controller
     setBusy(true); setActionError(null)
     try {
@@ -109,7 +115,11 @@ export function RecruitmentDetailScreen({ id, onLogin, onCompany, onProgram, onI
       if (controller.signal.aborted) return
       if (cause instanceof ApiError && cause.status === 401) void invalidateSession().catch(() => undefined)
       setActionError(partnerErrorMessage(cause))
-    } finally { if (request.current === controller) setBusy(false) }
+    } finally {
+      if (request.current === controller) setBusy(false)
+      // 보냈든 한도로 거절됐든 이번 달 남은 제안 수를 다시 읽습니다.
+      reloadUsage()
+    }
   }
 
   async function copyLink() {
@@ -194,7 +204,7 @@ export function RecruitmentDetailScreen({ id, onLogin, onCompany, onProgram, onI
       {toast === '제안을 보냈어요' && <Button label="제안함 보기" variant="ghost" onPress={onInbox} />}</View>}
     <PartnerSheet visible={proposalOpen} title="제안 보내기" onClose={closeProposal}
       actions={<><Button label="취소" variant="secondary" disabled={busy} onPress={closeProposal} />
-        <Button label="보내기" disabled={busy || !message.trim() || !company} busy={busy} onPress={() => void submitProposal()} /></>}>
+        <Button label="보내기" disabled={busy || !message.trim() || !company || proposalLimitReached} busy={busy} onPress={() => void submitProposal()} /></>}>
       <View style={local.author}><Text style={local.avatar}>{detail.company.companyName.slice(0, 1)}</Text>
         <View><Text style={styles.heading}>{detail.company.companyName}</Text><Text style={styles.muted}>{detail.title}</Text></View></View>
       <Card><Text style={styles.heading}>모집 조건</Text><Fact label="찾는 역할" value={`${partnerRoleLabels[detail.seekingRole]} ${detail.seekingCount}곳`} />
@@ -212,6 +222,7 @@ export function RecruitmentDetailScreen({ id, onLogin, onCompany, onProgram, onI
             ? `${company.companyName} · ${company.region} · ${company.industry} · ${company.foundedYear}년 설립 정보를 함께 보내요`
             : '기업 정보를 확인 중입니다.'}</Text></View></Pressable>
       <Text style={styles.muted}>연락처는 제안 수락 후 공개돼요.</Text>
+      {proposalUsage && usage && <PlanUsageLine item={proposalUsage} plan={usage.plan} />}
       {companyLoading && <ActivityIndicator accessibilityLabel="기업 정보 확인 중" color={colors.primary} />}
       {actionError && <Notice error>{actionError}</Notice>}
     </PartnerSheet>

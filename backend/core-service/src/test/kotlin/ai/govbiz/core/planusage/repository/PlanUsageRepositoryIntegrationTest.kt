@@ -12,6 +12,7 @@ import ai.govbiz.core.planusage.domain.PlanUsageFeature
 import ai.govbiz.core.planusage.domain.PlanUsageJob
 import ai.govbiz.core.planusage.domain.PlanUsagePeriod
 import ai.govbiz.core.planusage.domain.PlanUsageWindow
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -29,7 +30,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.dao.DataAccessException
 import org.springframework.jdbc.core.JdbcTemplate
 
-/** 실제 MySQL 8.4에서 사용량의 조건부 증가·되돌리기·삭제 보존과 월 한도 작업 집계 SQL을 확인합니다. */
+/** 실제 MySQL 8.4에서 사용량의 조건부 증가·되돌리기·삭제 보존과 월 한도 작업 집계, 개수 한도 집계 SQL을 확인합니다. */
 @SpringBootTest(properties = [
     "app.account.jwt-secret=test-jwt-secret-0123456789abcdef0123456789",
     "app.ai-service.base-url=http://127.0.0.1:1",
@@ -134,7 +135,7 @@ class PlanUsageRepositoryIntegrationTest {
     fun countsDraftProgramsOnceAcrossAnalysisGenerationFilesAndSectionRuns() {
         val now = LocalDateTime.now(seoul)
         val preparation = preparations.create(ownerId, draft()).id
-        val job = requireNotNull(generationJobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1).job)
+        val job = requireNotNull(generationJobs.reserve(ownerId, UUID.randomUUID().toString(), preparation, 1, 3).job)
         discovery("PBLN_000000000118979", "SUCCEEDED", now)
         discovery("PBLN_DISCOVERED", "SUCCEEDED", now)
         discovery("PBLN_FAILED", "FAILED", now)
@@ -170,6 +171,46 @@ class PlanUsageRepositoryIntegrationTest {
             VALUES (?, 1, 'demo.hwpx', 'application/octet-stream', X'00', ?, JSON_ARRAY(), ?)""", demo, "c".repeat(64), now)
 
         assertEquals(4, repository.countJobs(ownerId, PlanUsageFeature.APPLICATION_DRAFT, window))
+    }
+
+    @Test
+    fun countsVisibleSavedProgramsOpenRecruitmentsAndEveryProposalSentThisMonth() {
+        val today = LocalDate.now(seoul)
+        val tag = UUID.randomUUID().toString().take(8)
+        try {
+            val open = program("$tag-open", "${today.minusDays(1)} ~ ${today.plusDays(30)}", today.minusDays(1), today.plusDays(30))
+            val rolling = program("$tag-rolling", "예산 소진 시까지", null, null)
+            val ended = program("$tag-ended", "모집 종료", null, null)
+            val hidden = program("$tag-hidden", "${today} ~ ${today.plusDays(30)}", today, today.plusDays(30), present = false)
+            val last = program("$tag-last", "${today.minusDays(30)} ~ ${today.plusDays(30)}", today.minusDays(30), today.plusDays(30))
+
+            // 관심 공고는 목록에 보이는(노출 중인) 공고만 셉니다.
+            listOf(open, rolling, hidden).forEach { saved(it) }
+            assertEquals(2, repository.countHeld(ownerId, PlanUsageFeature.SAVED_PROGRAM, today))
+
+            // 모집글은 모집 중인 글만 셉니다. 수동 마감, 모집 마감일 경과, 신청 기간 원문의 접수 종료는 빠집니다.
+            val company = company()
+            val openRecruitment = recruitment(company, open, today.plusDays(5))
+            val closingToday = recruitment(company, rolling, today)
+            recruitment(company, ended, today.plusDays(5))
+            recruitment(company, hidden, today.plusDays(5), closedAt = LocalDateTime.now(seoul))
+            val expired = recruitment(company, last, today.minusDays(1))
+            assertEquals(2, repository.countHeld(ownerId, PlanUsageFeature.PARTNER_RECRUITMENT, today))
+
+            // 제안은 이번 달 보낸 것을 철회·거절과 관계없이 모두 셉니다. 지난달에 보낸 제안은 빠집니다.
+            val now = LocalDateTime.now(seoul)
+            val sent = proposal(openRecruitment, company, now, withdrawnAt = now)
+            proposal(closingToday, company, now)
+            proposal(expired, company, month.startsAt.toLocalDateTime().minusSeconds(1))
+            assertEquals(2, repository.countJobs(ownerId, PlanUsageFeature.PARTNER_PROPOSAL, month))
+            assertEquals(1, repository.countJobs(ownerId, PlanUsageFeature.PARTNER_PROPOSAL, month, PlanUsageJob.PartnerProposal(sent)))
+            assertThrows(IllegalArgumentException::class.java) { repository.countJobs(ownerId, PlanUsageFeature.SAVED_PROGRAM, month) }
+            assertThrows(IllegalArgumentException::class.java) { repository.countHeld(ownerId, PlanUsageFeature.PARTNER_PROPOSAL, today) }
+        } finally {
+            jdbc.update("DELETE FROM partner_recruitment WHERE account_id = ?", ownerId)
+            jdbc.update("DELETE FROM saved_support_program WHERE account_id = ?", ownerId)
+            jdbc.update("DELETE FROM support_program WHERE source_code = 'TESTSRC' AND source_program_id LIKE ?", "$tag-%")
+        }
     }
 
     private fun used(feature: PlanUsageFeature, periodKey: String): Int =
@@ -212,4 +253,45 @@ class PlanUsageRepositoryIntegrationTest {
 
     private fun draft() = NewApplicationPreparation("BIZINFO", "PBLN_000000000118979",
         "bizinfo-pbln-000000000118979-innovation-voucher-2026-v1", ApplicationServiceField.TECHNICAL_SUPPORT)
+
+    private fun program(programId: String, period: String, start: LocalDate?, end: LocalDate?, present: Boolean = true): Long {
+        jdbc.update("""INSERT INTO support_program (source_code, source_program_id, title, organization, summary, categories, regions,
+            target_description, application_period_raw, application_start_date, application_end_date, source_url, is_source_present)
+            VALUES ('TESTSRC', ?, '요금제 한도 공고 · 특수문자 & 🧪', '기관', '요약', '["기술"]', '["서울"]', '대상', ?, ?, ?,
+            'https://www.bizinfo.go.kr', ?)""", programId, period, start, end, present)
+        return requireNotNull(jdbc.queryForObject(
+            "SELECT id FROM support_program WHERE source_code = 'TESTSRC' AND source_program_id = ?", Long::class.java, programId,
+        ))
+    }
+
+    private fun saved(programId: Long) {
+        jdbc.update("INSERT INTO saved_support_program (account_id, support_program_id, saved_at) VALUES (?, ?, NOW(6))", ownerId, programId)
+    }
+
+    private fun company(): Long {
+        jdbc.update("""INSERT INTO company (account_id, business_number, company_name, business_status, business_status_code, region,
+            industry, founded_year, business_verified_at, created_at, updated_at)
+            VALUES (?, ?, '요금제 테스트 기업', '계속사업자', '01', '서울특별시', '정보통신업', 2020, NOW(6), NOW(6), NOW(6))""",
+            ownerId, "%010d".format(ownerId % 10_000_000_000L))
+        return requireNotNull(jdbc.queryForObject("SELECT id FROM company WHERE account_id = ?", Long::class.java, ownerId))
+    }
+
+    private fun recruitment(companyId: Long, programId: Long, deadline: LocalDate, closedAt: LocalDateTime? = null): Long {
+        jdbc.update("""INSERT INTO partner_recruitment (account_id, company_id, support_program_id, title, body, own_role, seeking_role,
+            seeking_count, region, capabilities, recruitment_deadline, closed_at, created_at, updated_at)
+            VALUES (?, ?, ?, '모집', '본문', 'LEAD', 'PARTICIPANT', 1, '서울', JSON_ARRAY(), ?, ?, NOW(6), NOW(6))""",
+            ownerId, companyId, programId, deadline, closedAt)
+        return requireNotNull(jdbc.queryForObject(
+            "SELECT id FROM partner_recruitment WHERE account_id = ? AND support_program_id = ?", Long::class.java, ownerId, programId,
+        ))
+    }
+
+    private fun proposal(recruitmentId: Long, companyId: Long, createdAt: LocalDateTime, withdrawnAt: LocalDateTime? = null): Long {
+        jdbc.update("""INSERT INTO partner_proposal (recruitment_id, proposer_account_id, proposer_company_id, message, share_profile,
+            withdrawn_at, created_at, updated_at) VALUES (?, ?, ?, '제안', TRUE, ?, ?, ?)""",
+            recruitmentId, ownerId, companyId, withdrawnAt, createdAt, createdAt)
+        return requireNotNull(jdbc.queryForObject(
+            "SELECT id FROM partner_proposal WHERE recruitment_id = ? AND proposer_account_id = ?", Long::class.java, recruitmentId, ownerId,
+        ))
+    }
 }

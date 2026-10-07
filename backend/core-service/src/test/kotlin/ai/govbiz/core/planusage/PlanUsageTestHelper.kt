@@ -13,6 +13,7 @@ import java.time.ZonedDateTime
 import org.mockito.Mockito
 import org.mockito.quality.Strictness
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.SimpleTransactionStatus
 
 /** 요금제 한도와 무관한 흐름을 검증하는 단위 테스트가 쓰는 대역입니다. */
 object PlanUsageTestHelper {
@@ -39,6 +40,11 @@ object PlanUsageTestHelper {
         return PlanUsageService(repository, guests, clock)
     }
 
-    /** TransactionTemplate가 부를 때 아무 일도 하지 않는 transaction 관리자입니다. */
-    fun noTransactions(): PlatformTransactionManager = Mockito.mock(PlatformTransactionManager::class.java)
+    /**
+     * TransactionTemplate가 부를 때 아무 일도 하지 않는 transaction 관리자입니다. Kotlin 콜백은 transaction 상태를 null로 받을 수 없어
+     * 빈 상태 값을 돌려줍니다.
+     */
+    fun noTransactions(): PlatformTransactionManager = Mockito.mock(PlatformTransactionManager::class.java, LENIENT).also {
+        Mockito.doReturn(SimpleTransactionStatus()).`when`(it).getTransaction(Mockito.any())
+    }
 }

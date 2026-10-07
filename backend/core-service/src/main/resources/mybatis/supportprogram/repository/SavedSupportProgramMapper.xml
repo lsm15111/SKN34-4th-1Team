@@ -32,6 +32,11 @@
         program.startup_details
     </sql>
 
+    <!-- 담은 뒤 센 관심 공고 수로 요금제 한도를 확인하므로, 같은 계정의 동시 담기가 서로의 행을 보도록 계정 행을 먼저 잠급니다. -->
+    <select id="lockAccount" resultType="long">
+        SELECT id FROM account WHERE id = #{accountId} FOR UPDATE
+    </select>
+
     <insert id="insertIfPresent">
         INSERT IGNORE INTO saved_support_program (account_id, support_program_id, saved_at)
         SELECT #{accountId}, program.id, #{savedAt}

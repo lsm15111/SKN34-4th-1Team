@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import { appContainer } from '../../../../app/appContainer'
 import type { SavedSupportProgram } from '../../../../domain/entities/SavedSupportProgram'
@@ -100,9 +101,12 @@ export function useSavedProgramCalendarViewModel(
         noticeSequence.current += 1
         setRemovalNotice({ id: noticeSequence.current, text: '더 이상 제공되지 않는 공고라 다시 담을 수 없어요.', program: null })
       }
-    } catch {
+    } catch (caught) {
       noticeSequence.current += 1
-      setRemovalNotice({ id: noticeSequence.current, text: '다시 담지 못했어요. 잠시 후 다시 시도해 주세요.', program })
+      // 그새 다른 공고를 담아 관심 공고 개수 한도에 닿았으면 다시 눌러도 같으므로 [되돌리기] 없이 한도 안내를 둡니다.
+      setRemovalNotice(caught instanceof PlanQuotaExceededError
+        ? { id: noticeSequence.current, text: `다시 담지 못했어요. ${caught.message}`, program: null }
+        : { id: noticeSequence.current, text: '다시 담지 못했어요. 잠시 후 다시 시도해 주세요.', program })
     } finally {
       setRemovingId(null)
     }

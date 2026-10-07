@@ -10,6 +10,7 @@ import type {
   SaveSupportProgramUseCase,
 } from '../../../domain/usecases/SavedSupportProgramUseCases'
 import { loginPathFor } from '../auth/returnPath'
+import { planQuotaFailureMessage } from '../plan-usage/planUsageView'
 import { selectCurrentAccount, selectIsAuthenticated } from '../auth/state/authSlice'
 import { appPaths } from '../routes/appPaths'
 
@@ -103,8 +104,9 @@ export function useSupportProgramSaveViewModel(identity: SupportProgramIdentity,
       }
       setIsSaved(true)
       setNotice(supportProgramSaveMessages.saved)
-    } catch {
-      if (!controller.signal.aborted) setNotice(supportProgramSaveMessages.failed)
+    } catch (caught) {
+      // 관심 공고 개수 한도에 닿았으면 다시 시도해도 같으므로 빼면 다시 담을 수 있다는 shared 안내를 보여 줍니다.
+      if (!controller.signal.aborted) setNotice(planQuotaFailureMessage(caught) ?? supportProgramSaveMessages.failed)
     } finally {
       if (mutation.current === controller) {
         mutation.current = null

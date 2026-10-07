@@ -194,6 +194,8 @@ class CombinationReviewRunIntegrationTest {
         val succeededReview = reviewId
         reviewId = reviews.create(freeId, draft).id
         val second = id(submit(cookie = free).andExpect(status().isAccepted()))
+        // FREE는 미완료 실행을 1건까지 두므로 월 한도를 보려면 두 번째 실행도 끝낸다.
+        service.executeQueued(second)
         reviewId = reviews.create(freeId, draft).id
         submit(cookie = free).andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
@@ -204,8 +206,8 @@ class CombinationReviewRunIntegrationTest {
         // 한도를 넘은 접수는 실행을 남기지 않습니다.
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM combination_review_run WHERE review_id = ?", Int::class.java, reviewId))
         // 실패로 끝난 실행은 횟수에서 빠집니다.
-        jdbc.update("UPDATE combination_review_run SET status = 'FAILED', failure_code = 'RUN_FAILED', finished_at = NOW(6) WHERE id = ?", second)
-        submit(cookie = free).andExpect(status().isAccepted())
+        jdbc.update("UPDATE combination_review_run SET status = 'FAILED', failure_code = 'RUN_FAILED', analysis_json = NULL, finished_at = NOW(6) WHERE id = ?", second)
+        service.executeQueued(id(submit(cookie = free).andExpect(status().isAccepted())))
         // 이미 쓴 검토를 지워도 그 달 횟수는 남습니다.
         mvc.perform(delete("/api/v1/combination-reviews/$succeededReview").cookie(free).header(HttpHeaders.ORIGIN, ORIGIN))
             .andExpect(status().isNoContent())
@@ -215,17 +217,20 @@ class CombinationReviewRunIntegrationTest {
             .andExpect(jsonPath("$.plan").value("FREE"))
             .andExpect(jsonPath("$.items[3].feature").value("COMBINATION_REVIEW"))
             .andExpect(jsonPath("$.items[3].used").value(2))
-        verify(ai, times(1)).analyze(any(AiCombinationReviewRequest::class.java) ?: request)
+        verify(ai, times(3)).analyze(any(AiCombinationReviewRequest::class.java) ?: request)
     }
 
     @Test
-    fun accountCanReserveOnlyThreePendingReviewsAndOtherAccountsAreIndependent() {
+    fun accountCanReserveOnlyThePlansPendingRunsAndOtherAccountsAreIndependent() {
+        // 계정이 동시에 둘 수 있는 미완료 실행 수는 요금제 속성입니다(PLUS 3건).
+        val (plusId, plus) = session(plan = "PLUS")
         repeat(3) {
-            reviewId = reviews.create(ownerId, draft).id
-            submit().andExpect(status().isAccepted())
+            reviewId = reviews.create(plusId, draft).id
+            submit(cookie = plus).andExpect(status().isAccepted())
         }
-        reviewId = reviews.create(ownerId, draft).id
-        submit().andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("RUN_CAPACITY_EXCEEDED"))
+        reviewId = reviews.create(plusId, draft).id
+        submit(cookie = plus).andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("RUN_CAPACITY_EXCEEDED"))
+            .andExpect(jsonPath("$.limit").value(3))
         reviewId = reviews.create(otherId, draft).id
         submit(cookie = other).andExpect(status().isAccepted())
         verifyNoInteractions(source, ai)
@@ -317,7 +322,7 @@ class CombinationReviewRunIntegrationTest {
         try {
             val admission = executor.submit(Callable {
                 TransactionTemplate(transactionManager).execute {
-                    val run = runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString()).run
+                    val run = runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString(), PENDING_LIMIT).run
                     reserved.countDown()
                     check(release.await(20, TimeUnit.SECONDS))
                     run.id
@@ -357,7 +362,7 @@ class CombinationReviewRunIntegrationTest {
             val admission = executor.submit(Callable {
                 reserving.countDown()
                 assertThrows(CombinationReviewNotFoundException::class.java) {
-                    runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString())
+                    runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString(), PENDING_LIMIT)
                 }
             })
             assertTrue(reserving.await(10, TimeUnit.SECONDS))
@@ -666,13 +671,13 @@ class CombinationReviewRunIntegrationTest {
         try {
             val jobs = (1..2).map { executor.submit(Callable {
                 ready.await(10, TimeUnit.SECONDS)
-                runs.reserve(ownerId, reviewId, 1, key, "", UUID.randomUUID().toString())
+                runs.reserve(ownerId, reviewId, 1, key, "", UUID.randomUUID().toString(), PENDING_LIMIT)
             }) }
             ready.countDown()
             val results = jobs.map { it.get(20, TimeUnit.SECONDS) }
             assertEquals(1, results.count { it.created })
             assertEquals(1, results.map { it.run.id }.distinct().size)
-            assertThrows(CombinationReviewRunConflictException::class.java) { runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString()) }
+            assertThrows(CombinationReviewRunConflictException::class.java) { runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString(), PENDING_LIMIT) }
             assertThrows(DuplicateKeyException::class.java) {
                 jdbc.update("""INSERT INTO combination_review_run (review_id,input_revision,request_key,request_hash,status,input_json,runner_instance_id,started_at)
                     SELECT review_id,input_revision,?,request_hash,status,input_json,runner_instance_id,started_at FROM combination_review_run WHERE id = ?""", UUID.randomUUID().toString(), results.first().run.id)
@@ -682,7 +687,7 @@ class CombinationReviewRunIntegrationTest {
 
     @Test
     fun failedSourceIntegrityCheckRollsBackEvidenceAndAllSourceWrites() {
-        val run = runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString()).run
+        val run = runs.reserve(ownerId, reviewId, 1, UUID.randomUUID().toString(), "", UUID.randomUUID().toString(), PENDING_LIMIT).run
         requireNotNull(runs.claim(run.id, UUID.randomUUID().toString()))
         val doc = ReviewSourceDocument(0, "https://www.mss.go.kr/example", "test.hwpx", "HWPX", "0".repeat(64), "0".repeat(64), "test", LocalDateTime.now())
         assertThrows(IllegalArgumentException::class.java) { runs.saveEvidence(run.id, ReviewEvidenceSnapshot(listOf(doc), emptyList(), emptyList()), listOf(general)) }
@@ -755,6 +760,8 @@ class CombinationReviewRunIntegrationTest {
     private fun id(result: org.springframework.test.web.servlet.ResultActions) = json.readTree(result.andReturn().response.contentAsString).path("id").asLong()
     companion object {
         const val ORIGIN = "http://localhost:5173"
+        /** 서비스가 요금제에서 읽어 넘기는 계정의 동시 처리 한도입니다. 저장소를 직접 부르는 테스트는 PLUS의 3건으로 고정합니다. */
+        const val PENDING_LIMIT = 3
         const val BIZINFO_PAGE_URL = "https://www.bizinfo.go.kr/sii/siia/selectSIIA200Detail.do?pblancId=PBLN_000000000117820"
     }
 }

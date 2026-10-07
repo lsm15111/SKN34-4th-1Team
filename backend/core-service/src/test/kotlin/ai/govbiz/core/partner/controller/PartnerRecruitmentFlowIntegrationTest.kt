@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.ObjectMapper
@@ -178,6 +179,8 @@ class PartnerRecruitmentFlowIntegrationTest {
             post("/api/v1/me/company").cookie(participant).origin()
                 .json("""{"businessNumber":"220-81-62517","region":"부산광역시","industry":"제조업","foundedYear":2018}"""),
         ).andExpect(status().isCreated())
+        // 모집글 두 개를 함께 모집하므로 동시 모집글 한도가 1개인 FREE 대신 PLUS로 둡니다.
+        assignPlan("participant@company.co.kr", "PLUS")
 
         // 서울·참여기관·마감 10일 뒤 (lead), 전국·주관기관·마감 5일 뒤 (participant), 부산·참여기관·오늘 마감 (participant)
         mockMvc.perform(post("/api/v1/partners/recruitments").cookie(lead).origin().json(requestBody()))
@@ -314,6 +317,57 @@ class PartnerRecruitmentFlowIntegrationTest {
         mockMvc.perform(get("/api/v1/partners/recruitments").param("mine", "true").cookie(owner))
             .andExpect(jsonPath("$.total").value(1))
             .andExpect(jsonPath("$.recruitments[0].status").value("CLOSED"))
+    }
+
+    @Test
+    fun aFreeAccountKeepsOneOpenRecruitmentAndCanWriteAgainAfterClosingIt() {
+        insertProgram("second-program", today.plusDays(40), present = true)
+        val owner = signUp("owner@company.co.kr")
+        mockMvc.perform(
+            post("/api/v1/me/company").cookie(owner).origin()
+                .json("""{"businessNumber":"124-81-00998","region":"서울특별시","industry":"정보통신업","foundedYear":2021}"""),
+        ).andExpect(status().isCreated())
+        val first = objectMapper.readTree(
+            mockMvc.perform(post("/api/v1/partners/recruitments").cookie(owner).origin().json(requestBody()))
+                .andExpect(status().isCreated()).andReturn().response.contentAsString,
+        ).get("id").asLong()
+
+        mockMvc.perform(post("/api/v1/partners/recruitments").cookie(owner).origin().json(requestBody(sourceProgramId = "second-program")))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
+            .andExpect(jsonPath("$.feature").value("PARTNER_RECRUITMENT"))
+            .andExpect(jsonPath("$.period").value("TOTAL"))
+            .andExpect(jsonPath("$.limit").value(1))
+            .andExpect(jsonPath("$.used").value(1))
+            .andExpect(jsonPath("$.resetsAt").doesNotExist())
+            .andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER))
+        // 한도를 넘은 글은 남기지 않습니다.
+        mockMvc.perform(get("/api/v1/partners/recruitments").param("mine", "true").cookie(owner))
+            .andExpect(jsonPath("$.total").value(1))
+        mockMvc.perform(get("/api/v1/plan-usage").cookie(owner))
+            .andExpect(jsonPath("$.items[5].feature").value("PARTNER_RECRUITMENT"))
+            .andExpect(jsonPath("$.items[5].used").value(1))
+            .andExpect(jsonPath("$.items[5].resetsAt").value(org.hamcrest.Matchers.nullValue()))
+
+        // 마감한 글은 모집 중인 글에서 빠지므로 새 글을 쓸 수 있습니다. 모집 마감일이 지난 글도 같습니다.
+        mockMvc.perform(post("/api/v1/partners/recruitments/$first/close").cookie(owner).origin())
+            .andExpect(status().isOk())
+        val second = objectMapper.readTree(
+            mockMvc.perform(post("/api/v1/partners/recruitments").cookie(owner).origin().json(requestBody(sourceProgramId = "second-program")))
+                .andExpect(status().isCreated()).andReturn().response.contentAsString,
+        ).get("id").asLong()
+        jdbcTemplate.update("UPDATE partner_recruitment SET recruitment_deadline = ? WHERE id = ?", today.minusDays(1), second)
+        insertProgram("third-program", today.plusDays(40), present = true)
+        mockMvc.perform(post("/api/v1/partners/recruitments").cookie(owner).origin().json(requestBody(sourceProgramId = "third-program")))
+            .andExpect(status().isCreated())
+    }
+
+    private fun assignPlan(email: String, plan: String) {
+        jdbcTemplate.update(
+            "INSERT INTO account_plan (account_id, plan_code, assigned_at) SELECT id, ?, NOW(6) FROM account WHERE email = ?",
+            plan,
+            email,
+        )
     }
 
     private fun updateBody(recruitmentDeadline: LocalDate = today.plusDays(12)): String =

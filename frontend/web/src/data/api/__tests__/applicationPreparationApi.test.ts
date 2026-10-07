@@ -338,8 +338,8 @@ describe('application preparation HTTP boundary', () => {
       .mockResolvedValueOnce(Response.json(quota, { status: 429, headers: { ...problem, 'Retry-After': '100' } }))
       .mockResolvedValueOnce(Response.json({ ...quota, instance: '/api/v1/application-preparations/1/documents/jobs' }, { status: 429, headers: problem }))
       .mockResolvedValueOnce(Response.json({ status: 503, code: 'QUOTA_UNAVAILABLE' }, { status: 503, headers: problem }))
-      // 요금제 계약이 아닌 429는 지금처럼 신청 준비 오류로 둡니다.
-      .mockResolvedValueOnce(Response.json({ code: 'APPLICATION_DOCUMENT_JOB_CAPACITY' }, { status: 429 })))
+      // 요금제 계약이 아닌 429는 지금처럼 신청 준비 오류로 두고, 동시 처리 한도 건수를 함께 읽습니다.
+      .mockResolvedValueOnce(Response.json({ code: 'APPLICATION_DOCUMENT_JOB_CAPACITY', limit: 3 }, { status: 429 })))
     const repository = new ApplicationPreparationRepositoryImpl()
 
     const discovery = await repository.discover('BIZINFO', 'PBLN_1').catch((error: unknown) => error)
@@ -347,7 +347,10 @@ describe('application preparation HTTP boundary', () => {
     expect((discovery as Error).message).toBe('이번 달 신청 문서 초안 1건을 모두 썼어요. 이미 시작한 공고의 문서는 계속 만들 수 있어요. 11월 1일에 다시 채워져요.')
     expect(await repository.submitDocumentJob(1, 3).catch((error: unknown) => error)).toBeInstanceOf(PlanQuotaExceededError)
     expect(await repository.submitDocumentJob(1, 3).catch((error: unknown) => error)).toBeInstanceOf(QuotaUnavailableError)
-    await expect(repository.submitDocumentJob(1, 3)).rejects.toMatchObject({ name: 'ApplicationPreparationError', status: 429, code: 'APPLICATION_DOCUMENT_JOB_CAPACITY' })
+    await expect(repository.submitDocumentJob(1, 3)).rejects.toMatchObject({
+      name: 'ApplicationPreparationError', status: 429, code: 'APPLICATION_DOCUMENT_JOB_CAPACITY', limit: 3,
+      message: '진행 중인 문서 생성이 이미 3건이에요. 끝난 뒤 다시 시도해 주세요.',
+    })
   })
 
   it('uses a form-discovery-specific message for an invalid AI response', async () => {

@@ -135,7 +135,8 @@ class ApplicationPreparationService(
             draft.serviceField,
         )
         // 신청 준비를 시작한 공고는 관심 공고함에도 담아 둡니다. 진행 관리와 관심 공고함이 같은 목록을 보게 하는
-        // 규칙이며, 이미 담겨 있거나 더 이상 노출되지 않는 공고면 아무것도 바꾸지 않습니다.
+        // 규칙이며, 이미 담겨 있거나 더 이상 노출되지 않는 공고면 아무것도 바꾸지 않습니다. 관심 공고 개수 한도로
+        // 신청 준비를 막지 않도록 여기서는 한도를 확인하지 않고, 한도를 넘으면 그 뒤 직접 담기만 막힙니다.
         savedSupportPrograms.saveIfPresent(account.id, draft.sourceCode, draft.sourceProgramId)
         return ApplicationPreparationDetailResult(repository.create(account.id, draft), form)
     }

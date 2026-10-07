@@ -12,6 +12,7 @@ import ai.govbiz.core.planusage.repository.PlanUsageRepository
 import ai.govbiz.core.planusage.service.exception.PlanQuotaExceededException
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -114,6 +115,55 @@ class PlanUsageServiceTest {
     }
 
     @Test
+    fun heldItemLimitBlocksOnlyANewItemThatGoesOverTheLimitAndNeverResets() {
+        val seoulToday = LocalDate.of(2026, 10, 8)
+        Mockito.doReturn(PlanCode.FREE).`when`(repository).findPlan(7)
+        // 새로 담은 공고까지 30개면 한도 안입니다.
+        Mockito.doReturn(30).`when`(repository).countHeld(7, PlanUsageFeature.SAVED_PROGRAM, seoulToday)
+        service.requireHeldCapacity(7, PlanUsageFeature.SAVED_PROGRAM)
+
+        // 신청 준비가 함께 담아 이미 31개였다면 새로 담은 32번째는 막고, 담기 전 개수를 알립니다.
+        Mockito.doReturn(32).`when`(repository).countHeld(7, PlanUsageFeature.SAVED_PROGRAM, seoulToday)
+        val error = assertThrows(PlanQuotaExceededException::class.java) {
+            service.requireHeldCapacity(7, PlanUsageFeature.SAVED_PROGRAM)
+        }
+        assertEquals(PlanUsageFeature.SAVED_PROGRAM, error.feature)
+        assertEquals(30, error.limit)
+        assertEquals(31, error.used)
+        assertNull(error.resetsAt)
+        assertNull(error.retryAfterSeconds)
+
+        Mockito.doReturn(2).`when`(repository).countHeld(7, PlanUsageFeature.PARTNER_RECRUITMENT, seoulToday)
+        assertEquals(1, assertThrows(PlanQuotaExceededException::class.java) {
+            service.requireHeldCapacity(7, PlanUsageFeature.PARTNER_RECRUITMENT)
+        }.limit)
+        // 기간 한도 기능을 개수 한도로 잘못 부르면 연결 오류입니다.
+        assertThrows(IllegalArgumentException::class.java) { service.requireHeldCapacity(7, PlanUsageFeature.PARTNER_PROPOSAL) }
+    }
+
+    @Test
+    fun sentProposalsCountForTheMonthTheyWereSentIn() {
+        Mockito.doReturn(PlanCode.FREE).`when`(repository).findPlan(7)
+        Mockito.doReturn(emptyMap<Pair<PlanUsageFeature, String>, Int>()).`when`(repository).findCounts(7, listOf("2026-10"))
+        val proposal = PlanUsageJob.PartnerProposal(41)
+        // 철회한 제안을 포함해 이번 달 3건을 이미 보냈으면 4번째 제안은 되돌립니다.
+        Mockito.doReturn(3).`when`(repository).countJobs(7, PlanUsageFeature.PARTNER_PROPOSAL, thisMonth, proposal, null)
+        Mockito.doReturn(4).`when`(repository).countJobs(7, PlanUsageFeature.PARTNER_PROPOSAL, thisMonth, null, null)
+
+        val error = assertThrows(PlanQuotaExceededException::class.java) { service.requireMonthlyCapacity(7, proposal) }
+        assertEquals(PlanUsageFeature.PARTNER_PROPOSAL, error.feature)
+        assertEquals(3, error.limit)
+        assertEquals(3, error.used)
+        assertEquals(ZonedDateTime.of(2026, 11, 1, 0, 0, 0, 0, seoul), error.resetsAt)
+    }
+
+    @Test
+    fun concurrentJobsFollowThePlan() {
+        Mockito.doReturn(PlanCode.FREE, PlanCode.PLUS, PlanCode.PREMIUM).`when`(repository).findPlan(7)
+        assertEquals(listOf(1, 3, 5), List(3) { service.concurrentJobLimit(7) })
+    }
+
+    @Test
     fun deletingKeepsTheUsageThatTheDeletedWorkAlreadySpentThisMonth() {
         Mockito.doReturn(3, 1).`when`(repository).countJobs(7, PlanUsageFeature.COMBINATION_REVIEW, thisMonth, null, null)
 
@@ -133,9 +183,12 @@ class PlanUsageServiceTest {
         Mockito.doReturn(PlanCode.FREE).`when`(repository).findPlan(7)
         Mockito.doReturn(
             mapOf((PlanUsageFeature.AI_SEARCH to "2026-10-08") to 4, (PlanUsageFeature.COMBINATION_REVIEW to "2026-10") to 1),
-        ).`when`(repository).findCounts(7, listOf("2026-10-08", "2026-10-08", "2026-10", "2026-10"))
+        ).`when`(repository).findCounts(7, listOf("2026-10-08", "2026-10-08", "2026-10", "2026-10", "2026-10"))
         Mockito.doReturn(1).`when`(repository).countJobs(7, PlanUsageFeature.APPLICATION_DRAFT, thisMonth, null, null)
         Mockito.doReturn(1).`when`(repository).countJobs(7, PlanUsageFeature.COMBINATION_REVIEW, thisMonth, null, null)
+        Mockito.doReturn(2).`when`(repository).countJobs(7, PlanUsageFeature.PARTNER_PROPOSAL, thisMonth, null, null)
+        Mockito.doReturn(12).`when`(repository).countHeld(7, PlanUsageFeature.SAVED_PROGRAM, LocalDate.of(2026, 10, 8))
+        Mockito.doReturn(1).`when`(repository).countHeld(7, PlanUsageFeature.PARTNER_RECRUITMENT, LocalDate.of(2026, 10, 8))
 
         val usage = service.usage(member, "192.0.2.1")
 
@@ -146,8 +199,17 @@ class PlanUsageServiceTest {
                 PlanUsageFeature.EVIDENCE_QUESTION to 0,
                 PlanUsageFeature.APPLICATION_DRAFT to 1,
                 PlanUsageFeature.COMBINATION_REVIEW to 2,
+                PlanUsageFeature.SAVED_PROGRAM to 12,
+                PlanUsageFeature.PARTNER_RECRUITMENT to 1,
+                PlanUsageFeature.PARTNER_PROPOSAL to 2,
             ),
             usage.items.map { it.feature to it.used },
+        )
+        assertEquals(listOf(10, 10, 1, 2, 30, 1, 3), usage.items.map { it.limit })
+        // 개수 한도는 다시 채워지지 않아 초기화 시각이 없고, 제안은 다음 달 1일에 다시 채워집니다.
+        assertEquals(
+            listOf(today.resetsAt, today.resetsAt, thisMonth.resetsAt, thisMonth.resetsAt, null, null, thisMonth.resetsAt),
+            usage.items.map { it.resetsAt },
         )
     }
 }

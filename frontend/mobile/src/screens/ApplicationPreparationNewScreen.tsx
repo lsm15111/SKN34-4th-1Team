@@ -168,7 +168,7 @@ function OwnedNew({ token, email, initialProgram, onOpenProgram, onCreated, onPe
       {form && form.supportedServiceFields.length > 1 && <ChoiceField label="신청 분야" value={field} options={form.supportedServiceFields.map(value => ({ value, label: applicationServiceFieldLabels[value] }))} onChange={value => setField(value as ApplicationServiceField)} disabled={busy} />}
       <Text style={styles.muted}>양식 분석은 유료 AI를 사용해요. 저장된 양식으로 작성 시작만 하면 AI를 호출하지 않아요.</Text>
       <Button label={pending?.kind === 'discovery' ? '같은 분석 요청으로 확인' : forms.length ? '입력칸별 양식 다시 분석' : '입력칸별 양식 분석하기'} variant="secondary" disabled={!pendingReady || loading || busy || Boolean(job && (!terminal(job) || job.status === 'UNKNOWN'))} onPress={() => void analyze()} />
-      {jobs.filter(candidate => candidate.status === 'QUEUED' || candidate.status === 'RUNNING' || candidate.status === 'UNKNOWN').length >= 3 && <Notice>진행 중이거나 확인이 필요한 분석이 3건이에요. 기존 작업을 먼저 확인해 주세요.</Notice>}
+      {jobs.some(candidate => candidate.status === 'QUEUED' || candidate.status === 'RUNNING' || candidate.status === 'UNKNOWN') && <Notice>진행 중이거나 확인이 필요한 분석이 있어요. 동시에 진행할 수 있는 분석 수는 요금제마다 달라요.</Notice>}
     </Page>}
     <View style={preparationUi.footer}>{step === 'selection'
       ? <Button label="다음 · 양식 확인" disabled={!program || busy} onPress={() => setStep('form')} />

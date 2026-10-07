@@ -58,4 +58,5 @@ export const runSchema = runSummarySchema.extend({
     }
   }
 })
-export const reviewProblemSchema = z.object({ code: z.string(), runId: id.optional() })
+/** limit은 계정의 동시 처리 한도(`RUN_CAPACITY_EXCEEDED`)에 걸렸을 때 요금제가 허용하는 진행 중 실행 수입니다. */
+export const reviewProblemSchema = z.object({ code: z.string(), runId: id.optional(), limit: z.number().int().positive().optional() })

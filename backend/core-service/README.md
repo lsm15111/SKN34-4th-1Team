@@ -123,7 +123,7 @@ V20에 맞추고 미적용 대화용 V19를 한 번만 out-of-order로 적용하
 
 ## 요금제 사용량 한도
 
-`ai.govbiz.core.planusage`는 요금제별 AI 기능 사용 횟수를 세고 막습니다. 결제 연동 전이라 모든 회원은 FREE에서 시작하고,
+`ai.govbiz.core.planusage`는 요금제별 AI 기능 사용 횟수와 관심 공고·파트너 모집글·제안 개수를 세고 막습니다. 결제 연동 전이라 모든 회원은 FREE에서 시작하고,
 V53 `account_plan`에 운영자가 배정한 계정만 PLUS·PREMIUM 한도를 씁니다(테스트 계정 예:
 `INSERT INTO account_plan (account_id, plan_code, assigned_at) VALUES (?, 'PREMIUM', NOW(6))`). 한도 숫자는 domain `PlanCode`에 있고
 웹 요금제 화면의 한도표와 같아야 합니다. 판단 근거와 세는 규칙은 [요금제 사용량 한도](../../docs/plan-usage-limits.md)를 참고하세요.
@@ -134,6 +134,10 @@ V53 `account_plan`에 운영자가 배정한 계정만 PLUS·PREMIUM 한도를 �
 | 공고 원문 질문(`EVIDENCE_QUESTION`) | 로그인 필요 | 하루 10회 | 하루 50회 | 하루 200회 | 같음 |
 | 신청 문서 초안(`APPLICATION_DRAFT`) | 로그인 필요 | 월 1건 | 월 5건 | 월 30건 | 이번 달 양식 분석·문서 생성·문항별 AI 실행 중 실패하지 않은 것과 만든 문서 파일의 공고 수(같은 공고는 한 건) |
 | 중복 검토(`COMBINATION_REVIEW`) | 로그인 필요 | 월 2회 | 월 20회 | 월 100회 | 이번 달 시작한 실행 중 실패하지 않은 것(대기·실행·결과 불명 포함) |
+| 관심 공고(`SAVED_PROGRAM`) | 로그인 필요 | 30개 | 300개 | 1,000개 | 지금 관심 공고함에 보이는(노출 중인) 공고 수(`TOTAL`, 빼면 다시 담을 수 있음) |
+| 파트너 모집글(`PARTNER_RECRUITMENT`) | 로그인 필요 | 동시 1개 | 동시 5개 | 동시 20개 | 지금 모집 중인 글 수(`TOTAL`, 수동 마감·모집 마감일·공고 접수 마감이면 빠짐) |
+| 파트너 제안(`PARTNER_PROPOSAL`) | 로그인 필요 | 월 3건 | 월 30건 | 월 100건 | 이번 달 보낸 제안 수(철회·거절·만료돼도 남음) |
+| 동시 분석·초안(요금제 속성) | 로그인 필요 | 1건 | 3건 | 5건 | 중복 검토 실행·양식 분석·문서 생성마다 대기·진행·결과 확인 상태인 작업 수. 사용량 API에는 없음 |
 
 - **기간:** 하루는 서울 날짜, 한 달은 서울 달력의 달입니다. 기간 키가 바뀌면 새 행을 쓰므로 초기화 작업이 없습니다.
 - **하루 한도:** `plan_usage_counter`의 행을 만들거나 잠근 뒤 조건부 UPDATE 한 문장으로 한도 안에서만 더합니다. 로그인 전
@@ -141,19 +145,29 @@ V53 `account_plan`에 운영자가 배정한 계정만 PLUS·PREMIUM 한도를 �
 - **월 한도:** 각 기능이 새 작업을 만든 같은 transaction(계정 행 잠금)에서 그 작업까지 센 사용량을 확인하고, 넘으면 작업을
   남기지 않습니다. 실패·만료로 끝난 작업은 별도 처리 없이 빠지고, 신청 문서·중복 검토를 지우면 그 달에 쓴 횟수를
   `plan_usage_counter`에 남겨 삭제로 한도가 다시 늘지 않게 합니다. 로컬 목업(`demo_seed_key`)은 세지 않습니다.
+  파트너 제안은 `partner_proposal`의 이번 달 행을 상태와 관계없이 세므로 철회하고 다시 보내도 늘어난 횟수가 남습니다.
+- **개수 한도(`TOTAL`):** 관심 공고 담기와 모집글 작성은 계정 행을 잠근 transaction에서 새 행을 넣은 뒤 지금 가진 개수를
+  세고, 한도를 넘으면 되돌립니다. 이미 담긴 공고를 다시 담으면 개수가 늘지 않아 같은 응답입니다. 신청 준비 시작이 함께
+  담는 관심 공고는 신청 준비를 막지 않도록 한도를 확인하지 않으며, 그래서 한도를 넘으면 그 뒤 직접 담기만 막힙니다.
+  별도 표 없이 `saved_support_program`·`partner_recruitment`를 그대로 셉니다.
+- **동시 처리:** 중복 검토 실행·양식 분석·문서 생성 접수는 고정 3건 대신 요금제의 `concurrentJobs`(1·3·5건)로 계정의 미완료
+  작업을 막습니다. 넘으면 세 기능 모두 429(`RUN_CAPACITY_EXCEEDED`·`APPLICATION_FORM_JOB_CAPACITY`·`APPLICATION_DOCUMENT_JOB_CAPACITY`)에
+  요금제의 동시 처리 건수 `limit`을 함께 보냅니다.
 - **응답:** 한도 초과는 `429 PLAN_QUOTA_EXCEEDED`(`feature`·`period`·`plan`·`limit`·`used`·`resetsAt`·`retryAfterSeconds`,
-  `Retry-After`=다음 초기화까지 초)이고 분당 제한 `SUPPORT_PROGRAM_RATE_LIMITED`와 구분합니다. 사용량 저장소(MySQL·Redis)를
-  읽거나 쓰지 못하면 유료 기능을 실행하지 않고 `503 QUOTA_UNAVAILABLE`입니다.
+  `Retry-After`=다음 초기화까지 초)이고 분당 제한 `SUPPORT_PROGRAM_RATE_LIMITED`와 구분합니다. 개수 한도(`period: TOTAL`)는
+  기다려도 다시 채워지지 않아 `resetsAt`·`retryAfterSeconds`·`Retry-After`를 보내지 않습니다. 사용량 저장소(MySQL·Redis)를
+  읽거나 쓰지 못하면 기능을 실행하지 않고 `503 QUOTA_UNAVAILABLE`입니다.
 - **로그인:** 공고 원문 질문(`POST /api/v1/support-programs/detail/answers`)과 도우미 자유 질문(`POST /api/v1/assistant/messages`)은
   로그인한 회원만 씁니다(없으면 401 `AUTHENTICATION_REQUIRED`). 기업 맞춤 리포트의 내부 검색·원문 답변은 리포트 예산으로만 셉니다.
 - **문항별 AI:** 화면에서 쓰지 않는 문항별 해석·초안 API도 신청 문서 월 한도와 계정별 분당 요청 제한을 지킵니다.
 
 | 사용량 API | 동작 |
 |---|---|
-| `GET /api/v1/plan-usage` | 현재 요금제와 기능별 `limit`·`used`·`resetsAt`(+09:00). 로그인 전에는 `plan: null`과 접속 주소의 AI 대화 검색 체험만. 월 한도의 `used`에는 진행 중인 작업이 포함돼 한도를 넘을 수 있음. no-store |
+| `GET /api/v1/plan-usage` | 현재 요금제와 기능별 `limit`·`used`·`resetsAt`(+09:00). 개수 한도(`period: TOTAL`)는 `resetsAt: null`. 로그인 전에는 `plan: null`과 접속 주소의 AI 대화 검색 체험만. 월 한도의 `used`에는 진행 중인 작업이, 관심 공고의 `used`에는 신청 준비가 함께 담은 공고가 포함돼 한도를 넘을 수 있음. 새 기능은 기존 4개 뒤에 붙여 이전 앱은 모르는 줄을 건너뜀. no-store |
 
 호출 흐름: 하루 한도는 `Controller → PlanUsageService.consume → PlanUsageRepository(MySQL)·GuestPlanUsageRepository(Redis)` 뒤
-기존 검색·원문 답변 Service, 월 한도는 `기능 Service(TransactionTemplate) → 기능 Repository.reserve → PlanUsageService.requireMonthlyCapacity → PlanUsageRepository → MyBatis → MySQL`입니다.
+기존 검색·원문 답변 Service, 월 한도는 `기능 Service(TransactionTemplate) → 기능 Repository.reserve·create → PlanUsageService.requireMonthlyCapacity → PlanUsageRepository → MyBatis → MySQL`,
+개수 한도는 `기능 Service(TransactionTemplate) → 기능 Repository(계정 행 잠금 뒤 INSERT) → PlanUsageService.requireHeldCapacity → PlanUsageRepository → MyBatis → MySQL`입니다.
 
 ## 실행
 
@@ -240,7 +254,7 @@ HWPX discovery 요청에는 원본 `sourceBase64`·`sourceSha256`을 내부 AI �
 |---|---|
 | `GET /api/v1/application-preparations/{id}/documents` | 현재 입력 revision의 생성 파일 메타데이터 목록 |
 | `POST /api/v1/application-preparations/{id}/documents` | `expectedRevision`으로 원본 양식 기입 및 같은 형식 파일 저장(동기 경로, 현재 웹은 호출하지 않음) |
-| `POST /api/v1/application-preparations/{id}/documents/jobs` | UUID `requestKey`·`expectedRevision`으로 V45 계정별 생성 작업 접수(202·Location). 같은 키는 같은 작업, 준비 건에 진행 중·결과 불명 작업이 있으면 409, 계정당 3개 초과는 422 `APPLICATION_DOCUMENT_JOB_CAPACITY`, 답변 버전이 다르면 409 |
+| `POST /api/v1/application-preparations/{id}/documents/jobs` | UUID `requestKey`·`expectedRevision`으로 V45 계정별 생성 작업 접수(202·Location). 같은 키는 같은 작업, 준비 건에 진행 중·결과 불명 작업이 있으면 409, 계정의 미완료 작업이 요금제의 동시 처리 한도(1·3·5건)에 닿으면 429 `APPLICATION_DOCUMENT_JOB_CAPACITY`(`limit`), 답변 버전이 다르면 409 |
 | `GET /api/v1/application-preparations/{id}/documents/jobs/{jobId}` | 본인 작업의 상태(QUEUED·RUNNING·SUCCEEDED·FAILED·UNKNOWN)·단계(PREPARING·MAPPING·WRITING·SAVING)·파일 ID·실패 코드/문구·입력 위치 변경 안내 |
 | `GET /api/v1/application-preparations/{id}/documents/jobs` | 그 준비 건의 최근 5개 작업(변경 안내 제외). 화면이 진행 중 작업을 이어받을 때 읽음 |
 | `GET /api/v1/application-preparations/documents/jobs` | 계정의 최근 20개 작업(준비 건 구분 없음, 변경 안내 제외). 목록 화면이 초안을 만드는 중·결과 확인 중·실패한 준비 건을 표시할 때 읽음. 각 작업의 `seen`은 끝난 결과를 확인했는지 |
@@ -457,7 +471,7 @@ Controller의 `SupportProgramRequestAdmissionService.execute`가 공개 요청 �
 | `POST /api/v1/assistant/messages` | 도우미 자유 질문 한 건의 의도 분류·답변. 로그인 필요(401), 세션 계정의 관심 공고함·받은 제안함·기업 상태로 답함. 프런트 `VITE_ASSISTANT_AI_ENABLED=true`일 때만 호출됨 |
 | `GET /api/v1/support-programs/detail` | 제공처 코드와 원본 ID로 현재 공고 상세 조회. `sourceUrl`은 공고 상세, `applicationRoute`는 공식 신청방법·URL·경로 분류, `contact`(담당 부서·제공처 원문 전화번호·문의처 원문, 없으면 null)·`preferenceDescription`·`supervisingInstitutionType`은 공식 API 값을 반환 |
 | `POST /api/v1/support-programs/detail/answers` | 특정 공고의 공식 원문 근거 질문·답변. 로그인 필요(401), 요금제 하루 질문 횟수를 씀(429 `PLAN_QUOTA_EXCEEDED`) |
-| `GET /api/v1/plan-usage` | 현재 요금제와 기능별 남은 사용량. 로그인 전에는 AI 대화 검색 체험만 |
+| `GET /api/v1/plan-usage` | 현재 요금제와 기능별 남은 사용량(개수 한도는 `resetsAt: null`). 로그인 전에는 AI 대화 검색 체험만 |
 | `GET /api/v1/support-programs/detail/attachments` | 공고 원문이 직접 연결한 첨부 목록(이미지 제외, 최대 30개). 원본 주소 없이 `index`·`fileName`·`extension`만 반환하고, 원문에서 읽은 목록은 Redis에 6시간 보관. 원문을 읽지 못하면 503 `SUPPORT_PROGRAM_ATTACHMENTS_UNAVAILABLE` |
 | `GET /api/v1/support-programs/detail/attachments/download` | 목록의 `index` 첨부를 Core가 원본에서 받아 그대로 흘려보냄. 화면에서 읽은 이름을 UTF-8 `filename*`로 다시 붙이고 항상 `application/octet-stream`. 100MB 초과는 413 `SUPPORT_PROGRAM_ATTACHMENT_TOO_LARGE`, 목록에 없는 순번은 404 `SUPPORT_PROGRAM_ATTACHMENT_NOT_FOUND` |
 | `POST /api/v1/sample-items/prepare` | 계층 연결 학습용 예제 |
@@ -483,11 +497,11 @@ Controller의 `SupportProgramRequestAdmissionService.execute`가 공개 요청 �
 | `GET /api/v1/admin/audit-logs` | 관리자 전용 감사 기록. `actorAccountId` `targetAccountId` `action` `from`·`to`(서울 날짜, 끝 날 포함) `before`(커서) `limit`(1~50, 기본 50). 최신순 `records[]`(처리자 ID·이메일, 대상 ID, 요청 요약, 접속 주소, User-Agent, 시각)와 `nextCursor`, `no-store`. 이 조회도 기록 |
 | `GET /api/v1/me/company/lookup` | 로그인한 회원이 사업자등록번호로 국세청 등록 여부·상호·사업자 상태를 미리 보기(Bizno) |
 | `GET` `POST` `PUT /api/v1/me/company` | 내 기업 조회·등록(계속·휴업자만, 폐업자는 422, 201)·담당자 입력 항목 수정. 파트너 모집글·제안 쓰기는 계속사업자만(403 `ACTIVE_BUSINESS_REQUIRED`) |
-| `GET` `POST` `DELETE /api/v1/me/saved-programs`, `GET …/status` | 관심 공고함. 로그인 회원이 현재 노출 중인 공고를 담고(같은 공고는 한 번) 빼며 최근 순서로 읽음. 없거나 숨겨진 공고는 404 `SUPPORT_PROGRAM_NOT_FOUND` |
+| `GET` `POST` `DELETE /api/v1/me/saved-programs`, `GET …/status` | 관심 공고함. 로그인 회원이 현재 노출 중인 공고를 담고(같은 공고는 한 번) 빼며 최근 순서로 읽음. 없거나 숨겨진 공고는 404 `SUPPORT_PROGRAM_NOT_FOUND`, 새로 담아 요금제 개수(30·300·1,000개)를 넘으면 429 `PLAN_QUOTA_EXCEEDED` |
 | `GET` `PUT /api/v1/me/company/partner-profile` | 협업·파트너 설정(참여 역할·관심 분야·한 줄 소개·역량 태그) 조회·저장. 기업당 한 행 UPSERT |
 | `GET /api/v1/partners/recruitments`, `GET .../{id}` | 파트너 모집글 목록(검색·찾는 역할·지역·내 글·정렬·페이지)과 상세. 세션 없이도 읽기 가능 |
-| `POST /api/v1/partners/recruitments` | 기업을 등록한 회원이 접수 중인 공고 하나에 모집글 작성(201). 공고당 하나 |
-| `POST /api/v1/partners/recruitments/{id}/proposals` | 기업을 등록한 회원이 남의 모집글에 참여 제안 보내기(201). 모집글당 하나 |
+| `POST /api/v1/partners/recruitments` | 기업을 등록한 회원이 접수 중인 공고 하나에 모집글 작성(201). 공고당 하나, 모집 중인 글이 요금제 한도(1·5·20개)를 넘으면 429 `PLAN_QUOTA_EXCEEDED` |
+| `POST /api/v1/partners/recruitments/{id}/proposals` | 기업을 등록한 회원이 남의 모집글에 참여 제안 보내기(201). 모집글당 하나, 이번 달 보낸 제안이 요금제 한도(3·30·100건)를 넘으면 429 `PLAN_QUOTA_EXCEEDED` |
 | `GET /api/v1/partners/proposals/{id}`, `POST .../accept` `.../decline` `.../withdraw` | 당사자만 제안 조회, 작성자의 수락·거절, 제안자의 철회 |
 | `GET /api/v1/me/proposals?box=received\|sent` | 받은·보낸 제안함과 대기 건수 |
 
@@ -945,10 +959,10 @@ planusage/
 ├── service               # 하루 한도 예약·되돌리기, 월 한도 확인, 삭제 시 사용량 보존
 │   ├── dto               # 요금제·기능별 사용량 결과
 │   └── exception         # 한도 초과 예외
-├── repository            # 요금제·사용량 행(MySQL)과 로그인 전 체험 횟수(Redis), 월 한도 기능의 작업 집계
+├── repository            # 요금제·사용량 행(MySQL)과 로그인 전 체험 횟수(Redis), 월 한도 기능의 작업 집계, 개수 한도 기능의 현재 개수
 │   ├── mapper            # MyBatis Mapper, DbRow
 │   └── exception         # 사용량 저장소 장애
-└── domain                # 요금제별 한도, 기능·기간, 서울 기준 집계 기간
+└── domain                # 요금제별 한도·동시 처리 건수, 기능·기간(하루·월·개수), 서울 기준 집계 기간
 _health                    # Core API Health
 _health_ai_service         # AI Service Health의 Controller → Service → Client
 _sampleitem                # 학습 예제

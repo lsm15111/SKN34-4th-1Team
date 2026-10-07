@@ -125,7 +125,7 @@ class ApiExceptionHandler {
             else -> HttpStatus.UNPROCESSABLE_CONTENT
         }
         val code = "APPLICATION_FORM_${exception.reason.name}"
-        return problemResponse(
+        val response = problemResponse(
             ProblemDefinition(
                 status,
                 URI.create("urn:govbiz:problem:${code.lowercase().replace('_', '-')}"),
@@ -135,6 +135,9 @@ class ApiExceptionHandler {
             ),
             request,
         )
+        // 동시 처리 한도에 걸렸으면 요금제의 동시 처리 건수를 함께 보낸다.
+        exception.limit?.let { response.body?.setProperty("limit", it) }
+        return response
     }
 
     @ExceptionHandler(ApplicationPreparationNotFoundException::class)
@@ -274,6 +277,8 @@ class ApiExceptionHandler {
         val response = problemResponse(ProblemDefinition(status, URI.create("urn:govbiz:problem:combination-review-run-failed"),
             "Combination Review Run Failed", "The review could not be completed. Inspect the saved run before retrying.", error.code.name), request)
         error.runId?.let { response.body?.setProperty("runId", it) }
+        // 계정 동시 처리 한도에 걸렸으면 요금제의 동시 처리 건수를 함께 보낸다. 공유 실행 슬롯 부족은 같은 코드에 limit 없이 나간다.
+        error.limit?.let { response.body?.setProperty("limit", it) }
         error.retryAfterSeconds?.let { seconds ->
             return ResponseEntity.status(status).headers(response.headers).header(HttpHeaders.RETRY_AFTER, seconds.toString()).body(response.body)
         }
@@ -359,7 +364,10 @@ class ApiExceptionHandler {
             .body(problem)
     }
 
-    /** 요금제 한도 초과는 분당 요청 제한과 다른 코드로 알리고, 다음 초기화 시각과 남은 초를 함께 보냅니다. */
+    /**
+     * 요금제 한도 초과는 분당 요청 제한과 다른 코드로 알리고, 다음 초기화 시각과 남은 초를 함께 보냅니다.
+     * 개수 한도(TOTAL)는 기다려도 다시 채워지지 않으므로 초기화 시각·남은 초·`Retry-After`를 보내지 않습니다.
+     */
     @ExceptionHandler(PlanQuotaExceededException::class)
     fun handlePlanQuotaExceeded(
         exception: PlanQuotaExceededException,
@@ -367,7 +375,8 @@ class ApiExceptionHandler {
     ): ResponseEntity<ProblemDetail> {
         val problem = ProblemDetail.forStatusAndDetail(
             HttpStatus.TOO_MANY_REQUESTS,
-            "The plan usage limit for this feature has been reached until the next reset.",
+            if (exception.resetsAt == null) "The plan limit for this feature has been reached. Remove or close items to continue."
+            else "The plan usage limit for this feature has been reached until the next reset.",
         )
         problem.type = URI.create("urn:govbiz:problem:plan-quota-exceeded")
         problem.title = "Plan Quota Exceeded"
@@ -378,13 +387,13 @@ class ApiExceptionHandler {
         problem.setProperty("plan", exception.plan?.name)
         problem.setProperty("limit", exception.limit)
         problem.setProperty("used", exception.used)
-        problem.setProperty("resetsAt", exception.resetsAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-        problem.setProperty("retryAfterSeconds", exception.retryAfterSeconds)
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+        exception.resetsAt?.let { problem.setProperty("resetsAt", it.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)) }
+        exception.retryAfterSeconds?.let { problem.setProperty("retryAfterSeconds", it) }
+        val response = ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
             .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-            .header(HttpHeaders.RETRY_AFTER, exception.retryAfterSeconds.toString())
             .header(HttpHeaders.CACHE_CONTROL, "no-store")
-            .body(problem)
+        exception.retryAfterSeconds?.let { response.header(HttpHeaders.RETRY_AFTER, it.toString()) }
+        return response.body(problem)
     }
 
     /** 사용량을 확인할 수 없으면 유료 기능을 실행하지 않고 정상 응답으로 숨기지 않습니다. */

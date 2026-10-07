@@ -20,8 +20,8 @@ import org.springframework.stereotype.Service
 
 /**
  * 요금제 한도를 집행합니다. 하루 한도 기능은 AI를 부르기 전에 한 번을 먼저 빼고 실패하면 돌려주고,
- * 월 한도 기능은 각 기능이 새 작업을 만든 DB transaction 안에서 그 작업까지 센 사용량을 확인합니다.
- * 사용량을 확인할 수 없으면 유료 기능을 실행하지 않고 오류로 끝냅니다.
+ * 월 한도 기능과 개수 한도 기능은 각 기능이 새 작업·행을 만든 DB transaction 안에서 그것까지 센 사용량을 확인합니다.
+ * 사용량을 확인할 수 없으면 기능을 실행하지 않고 오류로 끝냅니다.
  */
 @Service
 class PlanUsageService(
@@ -79,6 +79,25 @@ class PlanUsageService(
     }
 
     /**
+     * 개수 한도 기능(관심 공고·파트너 모집글)이 새 행을 만든 직후 같은 DB transaction에서 부릅니다. 기능 쪽이 계정 행을 잠근 상태라
+     * 같은 계정의 요청이 한 줄로 섭니다. 새 행까지 센 개수가 한도를 넘으면 예외를 던져 transaction을 되돌립니다.
+     * 신청 준비가 함께 담은 관심 공고처럼 한도를 확인하지 않고 늘어난 개수가 이미 한도 이상이면, 새로 담는 것만 계속 막힙니다.
+     */
+    fun requireHeldCapacity(accountId: Long, feature: PlanUsageFeature) {
+        require(feature.period == PlanUsagePeriod.TOTAL) { "$feature is not counted as items held now" }
+        val held = repository.countHeld(accountId, feature, now().toLocalDate())
+        val plan = repository.findPlan(accountId)
+        val limit = plan.limitOf(feature)
+        if (held > limit) throw PlanQuotaExceededException(feature, plan, limit, held - 1, resetsAt = null, retryAfterSeconds = null)
+    }
+
+    /**
+     * 계정이 작업 종류(중복 검토 실행·양식 분석·문서 생성)마다 동시에 대기·진행·결과 확인 상태로 둘 수 있는 작업 수입니다.
+     * 사용량이 아니라 요금제 속성이며, 각 기능의 접수 transaction이 계정 행을 잠근 뒤 이 값과 비교합니다.
+     */
+    fun concurrentJobLimit(accountId: Long): Int = repository.findPlan(accountId).concurrentJobs
+
+    /**
      * 신청 문서·중복 검토를 지우는 DB transaction 안에서 [delete]를 감쌉니다. 지운 작업이 이번 달에 쓴 횟수를 남겨
      * 삭제로 한도가 다시 늘지 않게 합니다.
      */
@@ -92,7 +111,10 @@ class PlanUsageService(
         return result
     }
 
-    /** 현재 요금제와 기능별 사용량입니다. 로그인하지 않았으면 접속 주소의 AI 대화 검색 체험 사용량만 돌려줍니다. */
+    /**
+     * 현재 요금제와 기능별 사용량입니다. 로그인하지 않았으면 접속 주소의 AI 대화 검색 체험 사용량만 돌려줍니다.
+     * 개수 한도 기능은 다시 채워지는 때가 없어 초기화 시각이 비어 있습니다.
+     */
     fun usage(account: Account?, clientAddress: String): PlanUsageResult {
         val now = now()
         if (account == null) {
@@ -107,14 +129,17 @@ class PlanUsageService(
             )
         }
         val plan = repository.findPlan(account.id)
-        val windows = PlanUsageFeature.entries.associateWith { PlanUsageWindow.current(it.period, now) }
+        // 개수 한도(TOTAL)는 기간이 없어 사용량 행을 읽지 않고 지금 가진 개수를 셉니다.
+        val windows = PlanUsageFeature.entries.filter { it.period != PlanUsagePeriod.TOTAL }
+            .associateWith { PlanUsageWindow.current(it.period, now) }
         val counts = repository.findCounts(account.id, windows.values.map { it.key })
         val items = PlanUsageFeature.entries.map { feature ->
-            val window = windows.getValue(feature)
+            val window = windows[feature]
+                ?: return@map PlanUsageItem(feature, plan.limitOf(feature), repository.countHeld(account.id, feature, now.toLocalDate()), null)
             val counted = counts[feature to window.key] ?: 0
             val used = when (feature.period) {
                 PlanUsagePeriod.DAY -> counted
-                PlanUsagePeriod.MONTH -> counted + repository.countJobs(account.id, feature, window)
+                else -> counted + repository.countJobs(account.id, feature, window)
             }
             PlanUsageItem(feature, plan.limitOf(feature), used, window.resetsAt)
         }

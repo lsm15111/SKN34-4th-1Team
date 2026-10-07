@@ -7,6 +7,7 @@ import { companyAgeYearsRange, ownPartnerRoles, partnerRoleLabels, recruitmentBo
   recruitmentCapabilityMaxCount, recruitmentCapabilityMaxLength, recruitmentTitleMaxLength, seekingCountRange,
   seekingPartnerRoles, type PartnerRecruitment, type PartnerRecruitmentContentInput, type PartnerRecruitmentInput, type PartnerRole } from '@govbiz/shared/domain/entities/PartnerRecruitment'
 import { catalogSourceLabels } from '@govbiz/shared/domain/entities/SupportProgramCatalog'
+import { findPlanUsageItem, isPlanLimitReached, planQuotaExceededMessage } from '@govbiz/shared/domain/entities/PlanUsage'
 import { regionNamesNationwideFirst } from '@govbiz/shared/domain/entities/Region'
 import type { SupportProgram } from '@govbiz/shared/domain/entities/SupportProgram'
 import { validatePartnerRecruitmentContent } from '@govbiz/shared/domain/usecases/PartnerRecruitmentUseCases'
@@ -16,6 +17,7 @@ import { listSavedPrograms } from '../api/savedPrograms'
 import { useAuth } from '../auth/session'
 import { ChoiceField } from '../components/ChoiceField'
 import { PartnerSheet } from '../components/PartnerSheet'
+import { PlanUsageLine, usePlanUsage } from '../components/PlanUsage'
 import { partnerDeadlineDay, partnerFullDate } from '../components/PartnerDates'
 import { Button, Card, Field, Notice, Page, StatusBadge, colors, styles } from '../ui'
 
@@ -87,6 +89,10 @@ function OwnedCreate({ token, companyName, recruitmentId, onCreated, onCancel, o
   const submitting = useRef(false)
   const exitApproved = useRef(false)
   const editing = recruitmentId !== undefined
+  // 지금 모집 중인 모집글 수입니다. 새로 쓸 때만 읽고, 요금제 한도에 닿았으면 쓰기 전에 알리고 등록을 보내지 않습니다.
+  const { usage, reload: reloadUsage } = usePlanUsage(token, !editing)
+  const recruitmentUsage = editing ? null : findPlanUsageItem(usage, 'PARTNER_RECRUITMENT')
+  const recruitmentLimitReached = recruitmentUsage !== null && isPlanLimitReached(recruitmentUsage)
   const programInfo = editingRecruitment ? { ...editingRecruitment.program,
     sourceName: catalogSourceLabels[editingRecruitment.program.sourceCode as keyof typeof catalogSourceLabels] ?? editingRecruitment.program.sourceCode } : program
   const maximumDeadline = latestDeadline(programInfo)
@@ -168,6 +174,7 @@ function OwnedCreate({ token, companyName, recruitmentId, onCreated, onCancel, o
   async function submit() {
     if (submitting.current || saveBlocked || editLoading) return
     if (editing && !editingRecruitment) return
+    if (recruitmentUsage && recruitmentLimitReached) { setError(planQuotaExceededMessage({ ...recruitmentUsage, plan: usage?.plan ?? null })); return }
     if (!editing && !program) { setError(fieldMessages.program); return }
     if (!editing && program && programBlocker(program)) { setError('선택한 공고는 모집글을 작성할 수 없어요. 다른 관심 공고를 선택해 주세요.'); return }
     const value = capabilityDraft.trim()
@@ -215,6 +222,8 @@ function OwnedCreate({ token, companyName, recruitmentId, onCreated, onCancel, o
       if (controller.signal.aborted) return
       if (cause instanceof ApiError && cause.status === 401) void invalidateSession().catch(() => undefined)
       if (cause instanceof ApiError && (cause.code === 'COMPANY_REQUIRED' || cause.code === 'ACTIVE_BUSINESS_REQUIRED')) setCompanyRequired(true)
+      // 그사이 한도에 닿아 거절됐으면 shared 안내가 오류 문구로 오고, 모집 중인 글 수를 다시 읽습니다.
+      if (cause instanceof ApiError && cause.code === 'PLAN_QUOTA_EXCEEDED') reloadUsage()
       setError(partnerErrorMessage(cause))
     } finally {
       if (request.current === controller) { submitting.current = false; setBusy(false); request.current = null }
@@ -231,6 +240,7 @@ function OwnedCreate({ token, companyName, recruitmentId, onCreated, onCancel, o
   return <View style={local.page}>
     <Page bottomSafeArea={false}>
       <Text style={styles.subtitle}>{editing ? '연결된 공고를 유지하고 모집 조건과 소개를 수정해요.' : '함께 지원사업을 준비할 기업을 모집해요.'}</Text>
+      {recruitmentUsage && usage && <PlanUsageLine item={recruitmentUsage} plan={usage.plan} />}
       <Card><Text style={styles.heading}>1. 연결할 공고</Text>
         <Text style={styles.muted}>작성 기업: {editingRecruitment?.company.companyName ?? companyName}</Text>
         {programInfo ? <View style={{ gap: 8 }}><View style={styles.row}><StatusBadge label={programInfo.sourceName} />
@@ -284,7 +294,7 @@ function OwnedCreate({ token, companyName, recruitmentId, onCreated, onCancel, o
       {companyRequired && <Button label="기업 정보 확인" variant="secondary" onPress={onCompany} />}
       {saveBlocked && <Button label="모집글 상세 다시 확인" variant="secondary" onPress={() => confirmExit(onCancel)} />}
       <View style={local.footerButtons}><Button label="취소" variant="secondary" disabled={busy} onPress={() => confirmExit(onCancel)} />
-        <Button label={editing ? '수정 내용 저장' : '모집글 등록'} busy={busy} disabled={busy || saveBlocked || editing && !dirty} style={{ flex: 1 }} onPress={() => void submit()} /></View>
+        <Button label={editing ? '수정 내용 저장' : '모집글 등록'} busy={busy} disabled={busy || saveBlocked || editing && !dirty || recruitmentLimitReached} style={{ flex: 1 }} onPress={() => void submit()} /></View>
     </View>
     <PartnerSheet visible={pickerOpen} title="관심 공고 선택" onClose={() => setPickerOpen(false)}
       actions={<Button label="닫기" variant="secondary" onPress={() => setPickerOpen(false)} />}>

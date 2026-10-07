@@ -7,12 +7,13 @@ import java.time.ZonedDateTime
 /**
  * 요금제 한도를 다 썼습니다. [plan]이 null이면 로그인하지 않은 체험 한도입니다.
  * [retryAfterSeconds]는 다음 초기화까지 남은 초이며 분당 요청 제한(`SUPPORT_PROGRAM_RATE_LIMITED`)과 다른 응답으로 나갑니다.
+ * 개수 한도(관심 공고·파트너 모집글)는 시간이 지나도 다시 채워지지 않아 [resetsAt]과 [retryAfterSeconds]가 null입니다.
  */
 class PlanQuotaExceededException(
     val feature: PlanUsageFeature,
     val plan: PlanCode?,
     val limit: Int,
     val used: Int,
-    val resetsAt: ZonedDateTime,
-    val retryAfterSeconds: Long,
+    val resetsAt: ZonedDateTime?,
+    val retryAfterSeconds: Long?,
 ) : RuntimeException("The $feature plan quota has been reached.")

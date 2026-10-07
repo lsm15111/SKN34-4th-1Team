@@ -25,8 +25,12 @@ class CombinationReviewRunRepository(
     private val mapper: CombinationReviewRunMapper, private val reviews: CombinationReviewRepository,
     private val json: ObjectMapper, @param:Qualifier("seoulClock") private val clock: Clock,
 ) {
+    /** 계정 행을 잠근 뒤 새 실행을 만듭니다. 계정의 대기·실행 중·결과 불명 실행이 [maxPending](요금제의 동시 처리 한도)에 닿았으면 만들지 않습니다. */
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    fun reserve(ownerId: Long, reviewId: Long, expectedRevision: Long, requestKey: String, additionalFacts: String, runnerInstanceId: String): ReviewRunReservation {
+    fun reserve(
+        ownerId: Long, reviewId: Long, expectedRevision: Long, requestKey: String, additionalFacts: String, runnerInstanceId: String,
+        maxPending: Int,
+    ): ReviewRunReservation {
         mapper.lockActiveAccount(ownerId) ?: throw CombinationReviewNotFoundException()
         val revision = mapper.lockOwnedReview(ownerId, reviewId) ?: throw CombinationReviewNotFoundException()
         val hash = CombinationReviewHashHelper.sha256("$expectedRevision\n$additionalFacts")
@@ -36,8 +40,8 @@ class CombinationReviewRunRepository(
         }
         if (revision != expectedRevision) throw CombinationReviewRevisionConflictException()
         if (mapper.countRunning(reviewId) != 0) throw CombinationReviewRunConflictException()
-        if (mapper.countAccountPending(ownerId) >= 3) {
-            throw CombinationReviewCapacityException()
+        if (mapper.countAccountPending(ownerId) >= maxPending) {
+            throw CombinationReviewCapacityException(maxPending)
         }
         val review = requireNotNull(reviews.findOwned(ownerId, reviewId))
         val row = CombinationReviewRunDbRow(

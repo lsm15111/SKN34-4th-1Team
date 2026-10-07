@@ -36,9 +36,11 @@ class PartnerRecruitmentRepository(
     /**
      * 모집글을 INSERT합니다. 같은 계정이 같은 공고에 두 번 쓰는 경우는 DB UNIQUE 제약이 막고,
      * 그때의 [org.springframework.dao.DuplicateKeyException]은 호출한 Service가 변환합니다.
+     * 먼저 작성 계정 행을 잠가 같은 계정의 작성이 한 줄로 서므로, 호출한 transaction은 작성 뒤 센 모집 중인 글 수로 요금제 한도를 확인할 수 있습니다.
      */
     @Transactional
     fun create(newRecruitment: NewPartnerRecruitment): PartnerRecruitment {
+        recruitmentMapper.lockAccount(newRecruitment.accountId)
         val now = LocalDateTime.now(clock)
         val content = newRecruitment.content
         val row = PartnerRecruitmentDbRow(

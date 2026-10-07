@@ -1,3 +1,4 @@
+import { readPlanQuotaProblem } from '@govbiz/shared/data/models/PlanUsageDto'
 import type { SupportProgramIdentity } from '../../domain/repositories/SupportProgramRepository'
 import { AccountApiError } from './accountApi'
 import { getCoreApiBaseUrl } from './coreApiConfig'
@@ -62,18 +63,20 @@ function identityParams(identity: SupportProgramIdentity): URLSearchParams {
   return new URLSearchParams({ sourceCode: identity.sourceCode, sourceProgramId: identity.sourceProgramId })
 }
 
-/** 실패는 계정 API와 같은 ProblemDetail이라 같은 오류 타입으로 던집니다. */
+/**
+ * 실패는 계정 API와 같은 ProblemDetail이라 같은 오류 타입으로 던집니다. 관심 공고 개수 한도(429 PLAN_QUOTA_EXCEEDED)와
+ * 이용량 확인 실패(503 QUOTA_UNAVAILABLE)는 화면이 shared 안내를 보이도록 shared 오류로 바꿉니다.
+ */
 async function rejectFailedResponse(response: Response): Promise<void> {
   if (response.ok) return
-  let code: string | null = null
+  let payload: unknown = null
   try {
-    const payload: unknown = await response.json()
-    if (typeof payload === 'object' && payload !== null) {
-      const record = payload as { code?: unknown }
-      code = typeof record.code === 'string' ? record.code : null
-    }
+    payload = await response.json()
   } catch {
-    code = null
+    payload = null
   }
-  throw new AccountApiError(response.status, code)
+  const quota = readPlanQuotaProblem(response.status, payload)
+  if (quota) throw quota
+  const record = typeof payload === 'object' && payload !== null ? payload as { code?: unknown } : {}
+  throw new AccountApiError(response.status, typeof record.code === 'string' ? record.code : null)
 }

@@ -12,6 +12,8 @@ import type { SendPartnerProposalUseCase } from '../../../../domain/usecases/Par
 import type { ClosePartnerRecruitmentUseCase } from '../../../../domain/usecases/PartnerRecruitmentUseCases'
 import { useAuthSession } from '../../../shared/auth/hooks/useAuthSession'
 import { useReceivedProposals } from '../../../shared/partner-proposal/useReceivedProposals'
+import { planQuotaFailureMessage, planUsageView } from '../../../shared/plan-usage/planUsageView'
+import { usePlanUsage } from '../../../shared/plan-usage/usePlanUsage'
 import { readRecruitmentId, usePartnerRecruitmentDetail } from '../../../shared/partner-recruitment/usePartnerRecruitmentBrowse'
 import { appPaths } from '../../../shared/routes/appPaths'
 
@@ -70,6 +72,10 @@ export function usePartnerRecruitmentDetailViewModel(
   const receivedBox = useReceivedProposals()
 
   const myProposal = sentProposal ?? recruitment?.myProposal ?? null
+  // 이번 달 보낸 제안 수입니다. 남의 모집 중인 글에 아직 제안하지 않았을 때만 제안 카드와 함께 읽습니다.
+  const canPropose = recruitment !== null && !recruitment.isMine && recruitment.status === 'OPEN' && myProposal === null
+  const planUsage = usePlanUsage(hasCompany && canPropose)
+  const proposalUsage = planUsageView(planUsage.usage, 'PARTNER_PROPOSAL')
   const receivedProposals = recruitment?.isMine
     ? receivedBox.proposals.filter((proposal) => proposal.recruitment.id === recruitment.id)
     : []
@@ -83,6 +89,10 @@ export function usePartnerRecruitmentDetailViewModel(
     }
     if (!proposalMessage.trim()) {
       setSendState({ status: 'failed', message: proposalSendMessages.empty })
+      return
+    }
+    if (proposalUsage?.isLimitReached) {
+      setSendState({ status: 'failed', message: proposalUsage.limitMessage })
       return
     }
     setSendState({ status: 'sending' })
@@ -110,8 +120,12 @@ export function usePartnerRecruitmentDetailViewModel(
           setSendState({ status: 'failed', message: proposalSendMessages.alreadySent })
           return
       }
-    } catch {
-      setSendState({ status: 'failed', message: proposalSendMessages.failed })
+    } catch (caught) {
+      // 그사이 이번 달 제안 수를 다 썼으면 shared 안내를 보여 줍니다.
+      setSendState({ status: 'failed', message: planQuotaFailureMessage(caught) ?? proposalSendMessages.failed })
+    } finally {
+      // 보냈든 한도로 거절됐든 이번 달 남은 제안 수를 다시 읽습니다.
+      planUsage.reload()
     }
   }
 
@@ -168,8 +182,10 @@ export function usePartnerRecruitmentDetailViewModel(
     /** 이미 보낸 제안이 있으면 폼 대신 상태를 보여 줍니다. */
     myProposal,
     myProposalLabel: myProposal === null ? null : partnerProposalStatusLabels[myProposal.status],
-    /** 모집이 끝났거나 이미 제안했으면 새 제안을 받지 않습니다. */
-    canSendProposal: recruitment !== null && !recruitment.isMine && recruitment.status === 'OPEN' && myProposal === null,
+    /** 모집이 끝났거나 이미 제안했거나 이번 달 제안 수를 다 썼으면 새 제안을 받지 않습니다. */
+    canSendProposal: canPropose && proposalUsage?.isLimitReached !== true,
+    /** 이번 달 보낸 제안 수와 요금제 한도 한 줄입니다. 읽지 못했으면 null입니다. */
+    proposalUsage,
     receivedProposals,
     receivedProposalsPhase: receivedBox.phase,
     /** 내 글이면서 모집 중일 때만 수정·마감할 수 있습니다. */

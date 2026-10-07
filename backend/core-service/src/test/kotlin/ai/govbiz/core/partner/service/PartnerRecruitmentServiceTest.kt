@@ -22,6 +22,13 @@ import ai.govbiz.core.partner.service.exception.RecruitmentDeadlineNotAllowedExc
 import ai.govbiz.core.partner.service.exception.RecruitmentNotFoundException
 import ai.govbiz.core.partner.service.exception.RecruitmentProgramClosedException
 import ai.govbiz.core.partner.service.exception.RecruitmentProgramNotFoundException
+import ai.govbiz.core.planusage.PlanUsageTestHelper
+import ai.govbiz.core.planusage.domain.PlanCode
+import ai.govbiz.core.planusage.domain.PlanUsageFeature
+import ai.govbiz.core.planusage.repository.GuestPlanUsageRepository
+import ai.govbiz.core.planusage.repository.PlanUsageRepository
+import ai.govbiz.core.planusage.service.PlanUsageService
+import ai.govbiz.core.planusage.service.exception.PlanQuotaExceededException
 import java.time.LocalDate
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -36,10 +43,13 @@ import org.mockito.Mock
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.junit.jupiter.MockitoExtension
 import org.springframework.dao.DuplicateKeyException
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.SimpleTransactionStatus
 
 @ExtendWith(MockitoExtension::class)
 class PartnerRecruitmentServiceTest {
@@ -59,7 +69,8 @@ class PartnerRecruitmentServiceTest {
 
     @BeforeEach
     fun setUp() {
-        service = PartnerRecruitmentService(recruitmentRepository, proposalRepository, AccountTestHelper.FIXED_CLOCK)
+        service = PartnerRecruitmentService(recruitmentRepository, proposalRepository, PlanUsageTestHelper.allowAll(AccountTestHelper.FIXED_CLOCK),
+            PlanUsageTestHelper.noTransactions(), AccountTestHelper.FIXED_CLOCK)
     }
 
     @Test
@@ -80,6 +91,31 @@ class PartnerRecruitmentServiceTest {
         assertEquals(3L, newRecruitment.companyId)
         assertEquals(11L, newRecruitment.supportProgramId)
         assertEquals("AI 실증 참여기관 구합니다", newRecruitment.content.title)
+    }
+
+    @Test
+    fun createRollsBackARecruitmentThatGoesOverThePlansOpenRecruitments() {
+        doReturn(program()).`when`(recruitmentRepository).findPresentProgram("BIZINFO", "PBLN-1")
+        doReturn(recruitment()).`when`(recruitmentRepository).create(AccountTestHelper.anyValue())
+        val plans = mock(PlanUsageRepository::class.java)
+        doReturn(PlanCode.FREE).`when`(plans).findPlan(7L)
+        // 방금 쓴 글까지 모집 중인 글이 2개면 FREE의 1개를 넘습니다.
+        doReturn(2).`when`(plans).countHeld(7L, PlanUsageFeature.PARTNER_RECRUITMENT, LocalDate.of(2026, 9, 6))
+        val transactions = mock(PlatformTransactionManager::class.java)
+        doReturn(SimpleTransactionStatus()).`when`(transactions).getTransaction(ArgumentMatchers.any())
+        val limited = PartnerRecruitmentService(recruitmentRepository, proposalRepository,
+            PlanUsageService(plans, mock(GuestPlanUsageRepository::class.java), AccountTestHelper.FIXED_CLOCK), transactions,
+            AccountTestHelper.FIXED_CLOCK)
+
+        val error = assertThrows(PlanQuotaExceededException::class.java) { limited.create(companyAccount, "BIZINFO", "PBLN-1", input()) }
+
+        assertEquals(PlanUsageFeature.PARTNER_RECRUITMENT, error.feature)
+        assertEquals(1, error.limit)
+        assertEquals(1, error.used)
+        assertNull(error.resetsAt)
+        // 작성과 개수 확인이 한 transaction이라 한도를 넘은 글은 되돌립니다.
+        verify(transactions).rollback(ArgumentMatchers.any())
+        verify(transactions, never()).commit(ArgumentMatchers.any())
     }
 
     @Test

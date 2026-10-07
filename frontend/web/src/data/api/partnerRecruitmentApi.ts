@@ -1,3 +1,4 @@
+import { readPlanQuotaProblem } from '@govbiz/shared/data/models/PlanUsageDto'
 import type { PartnerRecruitmentContentInput, PartnerRecruitmentInput } from '../../domain/entities/PartnerRecruitment'
 import { partnerRecruitmentPageSize, type PartnerRecruitmentQuery } from '../../domain/entities/PartnerRecruitmentQuery'
 import { AccountApiError } from './accountApi'
@@ -112,20 +113,22 @@ export class PartnerRecruitmentApiError extends AccountApiError {
   }
 }
 
+/** 모집 중인 모집글 개수 한도(429 PLAN_QUOTA_EXCEEDED)와 이용량 확인 실패(503 QUOTA_UNAVAILABLE)는 shared 오류로 바꿉니다. */
 async function rejectFailedResponse(response: Response): Promise<void> {
   if (response.ok) return
 
-  let code: string | null = null
-  let latestAllowedDeadline: string | null = null
+  let payload: unknown = null
   try {
-    const payload: unknown = await response.json()
-    if (typeof payload === 'object' && payload !== null) {
-      const record = payload as { code?: unknown; latestAllowedDeadline?: unknown }
-      code = typeof record.code === 'string' ? record.code : null
-      latestAllowedDeadline = typeof record.latestAllowedDeadline === 'string' ? record.latestAllowedDeadline : null
-    }
+    payload = await response.json()
   } catch {
     // 본문이 JSON이 아니면 상태 코드만으로 판단합니다.
   }
-  throw new PartnerRecruitmentApiError(response.status, code, latestAllowedDeadline)
+  const quota = readPlanQuotaProblem(response.status, payload)
+  if (quota) throw quota
+  const record = typeof payload === 'object' && payload !== null ? payload as { code?: unknown; latestAllowedDeadline?: unknown } : {}
+  throw new PartnerRecruitmentApiError(
+    response.status,
+    typeof record.code === 'string' ? record.code : null,
+    typeof record.latestAllowedDeadline === 'string' ? record.latestAllowedDeadline : null,
+  )
 }

@@ -5,4 +5,5 @@ class CombinationReviewNotFoundException : RuntimeException()
 class CombinationReviewRevisionConflictException : RuntimeException()
 class CombinationReviewRunConflictException : RuntimeException()
 class CombinationReviewDeleteConflictException : RuntimeException()
-class CombinationReviewCapacityException : RuntimeException()
+/** 계정의 대기·실행 중·결과 불명 실행이 요금제의 동시 처리 한도([limit]건)에 이미 닿았습니다. */
+class CombinationReviewCapacityException(val limit: Int) : RuntimeException()

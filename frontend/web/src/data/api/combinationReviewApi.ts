@@ -23,7 +23,9 @@ export async function combinationReviewRequest<T>(path: string, schema: z.ZodTyp
       if (quota) throw quota
       const problem = reviewProblemSchema.safeParse(body)
       const code = problem.success ? problem.data.code : response.status === 404 ? 'COMBINATION_REVIEW_API_UNAVAILABLE' : 'REQUEST_FAILED'
-      throw new CombinationReviewError(response.status, code, problem.success ? problem.data.runId ?? null : null, response.headers.get('Retry-After'))
+      // 계정 동시 처리 한도(RUN_CAPACITY_EXCEEDED)에는 요금제가 허용하는 진행 중 실행 수가 함께 옵니다.
+      throw new CombinationReviewError(response.status, code, problem.success ? problem.data.runId ?? null : null, response.headers.get('Retry-After'),
+        problem.success ? problem.data.limit ?? null : null)
     }
     if (schema === 'empty') {
       if (response.status !== 204) throw new CombinationReviewError(502, 'INVALID_RESPONSE')

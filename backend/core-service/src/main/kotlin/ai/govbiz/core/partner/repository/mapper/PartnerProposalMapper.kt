@@ -8,6 +8,9 @@ import org.apache.ibatis.annotations.Param
 @Mapper
 interface PartnerProposalMapper {
 
+    /** 같은 계정의 제안 보내기가 한 줄로 서도록 계정 행을 잠급니다. 계정이 없으면 null입니다. */
+    fun lockAccount(@Param("accountId") accountId: Long): Long?
+
     fun insertProposal(row: PartnerProposalDbRow): Int
 
     fun findProposalById(@Param("id") id: Long): PartnerProposalDbRow?

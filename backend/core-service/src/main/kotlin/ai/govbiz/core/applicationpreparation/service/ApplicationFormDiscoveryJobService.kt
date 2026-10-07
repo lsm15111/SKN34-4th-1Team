@@ -33,10 +33,12 @@ class ApplicationFormDiscoveryJobService(
     fun submit(account: Account, requestKey: String, sourceCode: String, programId: String) = run {
         if (!enabled) throw ApplicationFormDiscoveryException(Reason.QUEUE_UNAVAILABLE)
         discovery.validateIdentity(sourceCode, programId)
+        // 계정이 동시에 둘 수 있는 미완료 분석 작업 수는 요금제 속성이다.
+        val maxPending = planUsage.concurrentJobLimit(account.id)
         try {
             admission.execute("application-form-discovery-account:${account.id}") {
                 requireNotNull(transactions.execute { _ ->
-                    repository.reserve(account.id, requestKey.lowercase(), sourceCode, programId).also { job ->
+                    repository.reserve(account.id, requestKey.lowercase(), sourceCode, programId, maxPending).also { job ->
                         planUsage.requireMonthlyCapacity(account.id, PlanUsageJob.FormDiscovery(job.id))
                     }
                 })

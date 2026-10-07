@@ -156,6 +156,8 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [discoveryError, setDiscoveryError] = useState<Error | null>(null)
   const [capacityJobs, setCapacityJobs] = useState<ApplicationFormDiscoveryJob[] | null>(null)
+  // 동시 처리 한도에 걸렸을 때 요금제가 허용하는 진행 중 분석 수입니다. 서버가 보내지 않았으면 null입니다.
+  const [capacityLimit, setCapacityLimit] = useState<number | null>(null)
   const [discoveryWarnings, setDiscoveryWarnings] = useState<string[]>([])
   const [lastAnalysis, setLastAnalysis] = useState<LastFormAnalysis | null>(null)
   const [toast, setToast] = useState<WorkspaceToastNotice | null>(null)
@@ -237,6 +239,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
       if (controller.signal.aborted) return
       if (caught instanceof ApplicationPreparationError && caught.code === 'APPLICATION_FORM_JOB_CAPACITY') {
         // 계정의 진행 중·확인 필요 작업을 보여 주어 무엇이 자리를 차지하는지 알립니다. 목록을 못 읽어도 경고는 보입니다.
+        setCapacityLimit(caught.limit)
         const jobs = await useCase.discoveryJobs(controller.signal).catch(() => [] as ApplicationFormDiscoveryJob[])
         if (!controller.signal.aborted) setCapacityJobs(jobs.filter((job) => activeJobStatuses.includes(job.status)))
       } else {
@@ -419,6 +422,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
     elapsedSeconds,
     discoveryError,
     capacityJobs,
+    capacityLimit,
     discoveryWarnings,
     /** 이번 달 신청 문서 이용량 한 줄입니다. 읽지 못했으면 null입니다. */
     draftUsage: planUsageView(planUsage.usage, 'APPLICATION_DRAFT'),

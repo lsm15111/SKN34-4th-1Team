@@ -8,6 +8,7 @@ import ai.govbiz.core.account.helper.SignupTestHelper
 import jakarta.servlet.http.Cookie
 import java.time.LocalDate
 import java.time.ZoneId
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doReturn
@@ -23,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import tools.jackson.databind.ObjectMapper
@@ -240,6 +242,65 @@ class PartnerProposalFlowIntegrationTest {
         mockMvc.perform(post("/api/v1/partners/recruitments/$recruitmentId/proposals").cookie(proposer).origin().json(proposalBody()))
             .andExpect(status().isUnprocessableContent())
             .andExpect(jsonPath("$.code").value("RECRUITMENT_CLOSED"))
+    }
+
+    @Test
+    fun aFreeAccountSendsThreeProposalsAMonthAndWithdrawingDoesNotGiveOneBack() {
+        val owner = signUpWithCompany("owner@company.co.kr", "124-81-00998", "서울특별시")
+        // 모집글 네 개를 함께 모집하므로 작성자는 PLUS로 둡니다. 제안자는 FREE(월 3건)입니다.
+        jdbcTemplate.update(
+            "INSERT INTO account_plan (account_id, plan_code, assigned_at) SELECT id, 'PLUS', NOW(6) FROM account WHERE email = 'owner@company.co.kr'",
+        )
+        val proposer = signUpWithCompany("proposer@company.co.kr", "220-81-62517", "부산광역시")
+        val recruitmentIds = (1..4).map { index ->
+            jdbcTemplate.update(
+                """
+                INSERT INTO support_program (
+                    source_code, source_program_id, title, organization, summary, categories, regions,
+                    target_description, application_period_raw, application_start_date, application_end_date, source_url
+                ) VALUES ('TESTSRC', ?, '서울 AI 스타트업 실증 지원사업', '서울경제진흥원', '실증 과제를 지원합니다.', '["기술"]', '["서울"]',
+                    '서울 소재 AI 기업', ?, ?, ?, 'https://www.bizinfo.go.kr')
+                """.trimIndent(),
+                "program-$index", "${today.minusDays(30)} ~ ${today.plusDays(30)}", today.minusDays(30), today.plusDays(30),
+            )
+            objectMapper.readTree(
+                mockMvc.perform(
+                    post("/api/v1/partners/recruitments").cookie(owner).origin().json(
+                        """{"sourceCode":"TESTSRC","sourceProgramId":"program-$index","title":"모집 $index","body":"본문",
+                           "ownRole":"LEAD","seekingRole":"PARTICIPANT","seekingCount":1,"region":"서울","capabilities":[],
+                           "recruitmentDeadline":"${today.plusDays(10)}"}""",
+                    ),
+                ).andExpect(status().isCreated()).andReturn().response.contentAsString,
+            ).get("id").asLong()
+        }
+        val sent = recruitmentIds.take(3).map { recruitmentId ->
+            objectMapper.readTree(
+                mockMvc.perform(post("/api/v1/partners/recruitments/$recruitmentId/proposals").cookie(proposer).origin().json(proposalBody()))
+                    .andExpect(status().isCreated()).andReturn().response.contentAsString,
+            ).get("id").asLong()
+        }
+        mockMvc.perform(post("/api/v1/partners/proposals/${sent.first()}/withdraw").cookie(proposer).origin())
+            .andExpect(status().isOk())
+
+        // 철회한 제안도 보낸 달의 횟수에 남아 네 번째 제안은 보내지 않습니다.
+        mockMvc.perform(post("/api/v1/partners/recruitments/${recruitmentIds.last()}/proposals").cookie(proposer).origin().json(proposalBody()))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
+            .andExpect(jsonPath("$.feature").value("PARTNER_PROPOSAL"))
+            .andExpect(jsonPath("$.period").value("MONTH"))
+            .andExpect(jsonPath("$.limit").value(3))
+            .andExpect(jsonPath("$.used").value(3))
+            .andExpect(jsonPath("$.resetsAt").exists())
+            .andExpect(header().exists(HttpHeaders.RETRY_AFTER))
+        assertEquals(3, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM partner_proposal", Int::class.java))
+        mockMvc.perform(get("/api/v1/plan-usage").cookie(proposer))
+            .andExpect(jsonPath("$.items[6].feature").value("PARTNER_PROPOSAL"))
+            .andExpect(jsonPath("$.items[6].used").value(3))
+
+        // 지난달에 보낸 제안은 이번 달 횟수에 들지 않습니다.
+        jdbcTemplate.update("UPDATE partner_proposal SET created_at = ? WHERE id = ?", today.withDayOfMonth(1).minusDays(1).atStartOfDay(), sent.last())
+        mockMvc.perform(post("/api/v1/partners/recruitments/${recruitmentIds.last()}/proposals").cookie(proposer).origin().json(proposalBody()))
+            .andExpect(status().isCreated())
     }
 
     private fun proposalBody(shareProfile: Boolean = true) =

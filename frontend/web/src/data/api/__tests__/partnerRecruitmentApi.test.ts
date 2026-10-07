@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import { partnerRecruitmentDetail, partnerRecruitmentSummaries } from '../../fixtures/partnerRecruitments'
 import { PartnerRecruitmentRepositoryImpl } from '../../repositories/PartnerRecruitmentRepositoryImpl'
@@ -137,6 +138,16 @@ describe('partnerRecruitmentApi', () => {
     await expect(repository.create(input)).resolves.toEqual({ outcome: 'already-exists' })
     await expect(repository.create(input)).rejects.toMatchObject({ status: 401 })
     await expect(repository.getDetail(1)).rejects.toMatchObject({ status: 500 })
+  })
+
+  it('passes the open recruitment limit through as the shared plan error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(problemResponse(429, 'PLAN_QUOTA_EXCEEDED', {
+      status: 429, feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', plan: 'FREE', limit: 1, used: 1,
+    })))
+
+    const created = await new PartnerRecruitmentRepositoryImpl().create(input).catch((error: unknown) => error)
+    expect(created).toBeInstanceOf(PlanQuotaExceededError)
+    expect((created as Error).message).toBe('모집 중인 모집글은 1개까지 둘 수 있어요. 모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')
   })
 })
 

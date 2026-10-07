@@ -8,6 +8,9 @@ import org.apache.ibatis.annotations.Param
 @Mapper
 interface SavedSupportProgramMapper {
 
+    /** 같은 계정의 담기가 한 줄로 서도록 계정 행을 잠급니다. 계정이 없으면 null입니다. */
+    fun lockAccount(@Param("accountId") accountId: Long): Long?
+
     /** 현재 노출 중인 공고일 때만 담습니다. 이미 담긴 공고는 무시하므로 0 또는 1을 돌려줍니다. */
     fun insertIfPresent(
         @Param("accountId") accountId: Long,

@@ -171,8 +171,9 @@ export const applicationDocumentMigrationNoticeSchema = z.object({
   })).min(1).max(201),
 })
 
+/** limit은 동시 처리 한도(`*_JOB_CAPACITY`)에 걸렸을 때 요금제가 허용하는 진행 중 작업 수입니다. */
 export const applicationPreparationProblemSchema = z.object({
-  code: z.string(), mappingMigration: applicationDocumentMigrationNoticeSchema.optional(),
+  code: z.string(), mappingMigration: applicationDocumentMigrationNoticeSchema.optional(), limit: z.number().int().positive().optional(),
 })
 
 export const applicationInterpretationSchema = z.object({

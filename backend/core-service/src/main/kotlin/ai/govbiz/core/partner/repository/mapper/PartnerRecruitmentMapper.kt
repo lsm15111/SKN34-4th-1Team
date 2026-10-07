@@ -9,6 +9,9 @@ import org.apache.ibatis.annotations.Param
 @Mapper
 interface PartnerRecruitmentMapper {
 
+    /** 같은 계정의 모집글 작성이 한 줄로 서도록 계정 행을 잠급니다. 계정이 없으면 null입니다. */
+    fun lockAccount(@Param("accountId") accountId: Long): Long?
+
     fun findPresentProgram(
         @Param("sourceCode") sourceCode: String,
         @Param("sourceProgramId") sourceProgramId: String,

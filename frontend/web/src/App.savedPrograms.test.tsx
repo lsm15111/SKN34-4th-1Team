@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { Provider } from 'react-redux'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import App from './App'
 import { appContainer } from './app/appContainer'
@@ -169,6 +170,43 @@ describe('관심 공고함', () => {
     expect(screen.getByRole('link', { name: '이 공고로 신청 문서 작성' }).getAttribute('href')).toBe(
       `/app/application-preparations/new?${new URLSearchParams({ sourceCode: program.sourceCode, sourceProgramId: program.id })}`,
     )
+  })
+
+  it('담은 공고 수를 요금제 한도와 함께 보여 주고, 빼서 수가 바뀌면 다시 읽는다', async () => {
+    vi.spyOn(appContainer.resolve('browseSavedSupportProgramsUseCase'), 'execute').mockResolvedValue(saved)
+    const remove = vi.spyOn(appContainer.resolve('removeSavedSupportProgramUseCase'), 'execute').mockResolvedValue(undefined)
+    // 한도 숫자는 화면 동작만 보려고 담은 공고 수(2개)에 맞춰 줄였습니다.
+    const usage = vi.spyOn(appContainer.resolve('planUsageUseCase'), 'usage')
+      .mockResolvedValueOnce({ plan: 'FREE', items: [{ feature: 'SAVED_PROGRAM', period: 'TOTAL', limit: 2, used: 2, resetsAt: null }] })
+      .mockResolvedValue({ plan: 'FREE', items: [{ feature: 'SAVED_PROGRAM', period: 'TOTAL', limit: 2, used: 1, resetsAt: null }] })
+    renderApp('/app/saved-programs', memberAccount)
+
+    // 다 채웠으면 빼면 다시 담을 수 있다고 알리고 요금제 안내로 잇습니다.
+    const full = (await screen.findByText('관심 공고는 2개까지 담을 수 있어요. 담은 공고를 빼면 그만큼 새로 담을 수 있어요.')).closest('p')!
+    expect(within(full).getByRole('link', { name: '요금제 보기' }).getAttribute('href')).toBe('/app/pricing')
+    expect(usage).toHaveBeenCalledOnce()
+
+    fireEvent.click(within(screen.getByRole('table')).getAllByRole('button', { name: '관심 공고에서 빼기' })[0]!)
+    await waitFor(() => expect(remove).toHaveBeenCalledOnce())
+    expect((await screen.findByText('1/2개')).closest('p')!.textContent).toBe('관심 공고·1/2개')
+    expect(usage).toHaveBeenCalledTimes(2)
+  })
+
+  it('관심 공고를 다 채웠으면 상세에서 담을 때 빼면 다시 담을 수 있다고 알린다', async () => {
+    vi.spyOn(appContainer.resolve('getSupportProgramDetailUseCase'), 'execute').mockResolvedValue(supportProgramDetails[0]!)
+    vi.spyOn(appContainer.resolve('checkSavedSupportProgramUseCase'), 'execute').mockResolvedValue(false)
+    const save = vi.spyOn(appContainer.resolve('saveSupportProgramUseCase'), 'execute').mockRejectedValue(new PlanQuotaExceededError({
+      feature: 'SAVED_PROGRAM', period: 'TOTAL', plan: 'FREE', limit: 30, resetsAt: null,
+    }))
+    renderApp(detailPath, memberAccount)
+
+    // 담김 여부를 확인하는 동안은 버튼이 잠겨 있으므로 풀린 뒤 누릅니다.
+    const toggle = () => screen.getByRole('button', { name: '관심 공고에 담기' }) as HTMLButtonElement
+    await waitFor(() => expect(toggle().disabled).toBe(false))
+    fireEvent.click(toggle())
+    await waitFor(() => expect(save).toHaveBeenCalledOnce())
+    expect((await screen.findByRole('alert')).textContent).toContain('관심 공고는 30개까지 담을 수 있어요. 담은 공고를 빼면 그만큼 새로 담을 수 있어요.')
+    expect(screen.getByRole('button', { name: '관심 공고에 담기' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   it('작업 채팅에서 연 상세는 지원사업 찾기로 돌아간다', async () => {

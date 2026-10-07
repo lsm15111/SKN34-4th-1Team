@@ -105,6 +105,10 @@ test('plan limit rejections keep their review status for request-key rules and e
   jest.mocked(fetch).mockResolvedValueOnce(response({ code: 'RUN_CAPACITY_EXCEEDED' }, 429))
   expect(reviewErrorMessage(await repository.start(5, request).catch((error: unknown) => error)))
     .toBe('요청량 또는 진행 중인 분석 한도에 도달했어요. 잠시 후 다시 확인해 주세요.')
+  // 계정의 진행 중인 검토가 요금제의 동시 처리 한도에 닿았으면 그 건수를 알립니다.
+  jest.mocked(fetch).mockResolvedValueOnce(response({ code: 'RUN_CAPACITY_EXCEEDED', limit: 1 }, 429))
+  expect(reviewErrorMessage(await repository.start(5, request).catch((error: unknown) => error)))
+    .toBe('진행 중인 중복 검토가 이미 1건이에요. 끝난 뒤 다시 시도해 주세요.')
 })
 
 test('a deletion conflict retains its server code and explains that the review is protected', async () => {

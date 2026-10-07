@@ -11,18 +11,21 @@ data class PlanUsageResponse(val plan: String?, val items: List<PlanUsageItemRes
     }
 }
 
-/** 한 기능의 이번 기간 사용량입니다. `resetsAt`은 서울 시각(+09:00)의 다음 초기화 시각입니다. */
+/**
+ * 한 기능의 이번 기간 사용량입니다. `resetsAt`은 서울 시각(+09:00)의 다음 초기화 시각이고,
+ * 기간 없이 지금 가진 개수를 세는 기능(`period` TOTAL)은 다시 채워지지 않아 null입니다.
+ */
 data class PlanUsageItemResponse(
     val feature: String,
     val period: String,
     val limit: Int,
     val used: Int,
-    val resetsAt: String,
+    val resetsAt: String?,
 ) {
     companion object {
         fun from(item: PlanUsageItem) = PlanUsageItemResponse(
             item.feature.name, item.feature.period.name, item.limit, item.used,
-            item.resetsAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+            item.resetsAt?.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
         )
     }
 }

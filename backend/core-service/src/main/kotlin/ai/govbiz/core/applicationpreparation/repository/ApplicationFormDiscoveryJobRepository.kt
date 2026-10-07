@@ -28,8 +28,9 @@ class ApplicationFormDiscoveryJobRepository(
     init {
         require(unknownTtl >= Duration.ofMinutes(20)) { "app.application-form-discovery.unknown-ttl must be at least PT20M" }
     }
+    /** 계정 행을 잠근 뒤 새 분석 작업을 만듭니다. 계정의 미완료 작업이 [maxPending](요금제의 동시 처리 한도)에 닿았으면 429로 막습니다. */
     @Transactional
-    fun reserve(ownerId: Long, key: String, sourceCode: String, programId: String): ApplicationFormDiscoveryJob {
+    fun reserve(ownerId: Long, key: String, sourceCode: String, programId: String, maxPending: Int): ApplicationFormDiscoveryJob {
         mapper.lockActiveAccount(ownerId) ?: throw ApplicationFormDiscoveryException(Reason.JOB_NOT_FOUND)
         mapper.findRequest(ownerId, key)?.let {
             if (it.sourceCode != sourceCode || it.sourceProgramId != programId) throw ApplicationFormDiscoveryException(Reason.JOB_CONFLICT)
@@ -39,7 +40,7 @@ class ApplicationFormDiscoveryJobRepository(
             // 다른 키/다른 계정에 기존 작업 ID 또는 결과를 노출하지 않는다.
             throw ApplicationFormDiscoveryException(Reason.JOB_CONFLICT)
         }
-        if (mapper.countPending(ownerId) >= 3) throw ApplicationFormDiscoveryException(Reason.JOB_CAPACITY)
+        if (mapper.countPending(ownerId) >= maxPending) throw ApplicationFormDiscoveryException(Reason.JOB_CAPACITY, limit = maxPending)
         val row = ApplicationFormDiscoveryJobDbRow(ownerAccountId = ownerId, requestKey = key,
             sourceCode = sourceCode, sourceProgramId = programId, createdAt = now())
         check(mapper.insert(row) == 1 && row.id > 0)
@@ -65,7 +66,7 @@ class ApplicationFormDiscoveryJobRepository(
     fun markPublished(id: Long) { mapper.markPublished(id, now()) }
     /**
      * 만료 정리. QUEUED 1시간·계정 비활성 → FAILED, RUNNING 20분 → UNKNOWN. UNKNOWN은 같은 공고의 가용성이 AI 시작 이후 확정됐으면
-     * 바로, 아니면 TTL이 지나면 FAILED로 닫아 계정 한도(활성 3건)를 돌려준다. 어느 경우에도 AI를 다시 부르지 않는다.
+     * 바로, 아니면 TTL이 지나면 FAILED로 닫아 계정의 동시 처리 한도를 돌려준다. 어느 경우에도 AI를 다시 부르지 않는다.
      */
     @Transactional
     fun expireStaleWork() {

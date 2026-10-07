@@ -23,11 +23,14 @@ class ApplicationDocumentGenerationJobRepository(
     private val json: ObjectMapper,
     @param:Qualifier("seoulClock") private val clock: Clock,
 ) {
-    /** 같은 requestKey는 기존 작업을 돌려주고, 준비 건에 진행 중인 작업이 있으면 409, 계정당 3개를 넘으면 [capacity]가 true다. */
+    /**
+     * 같은 requestKey는 기존 작업을 돌려주고, 준비 건에 진행 중인 작업이 있으면 409, 계정의 미완료 작업이
+     * [reserve]의 maxPending(요금제의 동시 처리 한도)에 닿았으면 [capacityExceeded]가 true다.
+     */
     class Reservation(val job: ApplicationDocumentGenerationJob?, val capacityExceeded: Boolean)
 
     @Transactional
-    fun reserve(ownerId: Long, key: String, preparationId: Long, expectedRevision: Long): Reservation {
+    fun reserve(ownerId: Long, key: String, preparationId: Long, expectedRevision: Long, maxPending: Int): Reservation {
         mapper.lockActiveAccount(ownerId) ?: throw ApplicationPreparationNotFoundException()
         // 삭제가 먼저 끝났으면 404로 종료하고, 접수가 먼저 잠갔으면 삭제가 활성 작업을 확인하게 한다.
         preparations.findOwnedForUpdate(ownerId, preparationId) ?: throw ApplicationPreparationNotFoundException()
@@ -36,7 +39,7 @@ class ApplicationDocumentGenerationJobRepository(
             return Reservation(it.toDomain(), false)
         }
         if (mapper.findActive(preparationId) != null) throw ApplicationPreparationRunConflictException()
-        if (mapper.countPending(ownerId) >= 3) return Reservation(null, true)
+        if (mapper.countPending(ownerId) >= maxPending) return Reservation(null, true)
         val row = ApplicationDocumentGenerationJobDbRow(ownerAccountId = ownerId, preparationId = preparationId, requestKey = key,
             expectedRevision = expectedRevision, createdAt = now())
         check(mapper.insert(row) == 1 && row.id > 0)

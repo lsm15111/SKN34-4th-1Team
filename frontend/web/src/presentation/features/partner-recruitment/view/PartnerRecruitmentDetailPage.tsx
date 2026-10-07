@@ -21,6 +21,7 @@ import {
 import { RecruitmentDdayTag } from '../../../shared/partner-recruitment/RecruitmentDdayTag'
 import { appPaths } from '../../../shared/routes/appPaths'
 import { useSupportProgramSaveViewModel } from '../../../shared/support-program/useSupportProgramSaveViewModel'
+import { PlanUsageLine } from '../../../shared/plan-usage/PlanUsageLine'
 import { usePartnerRecruitmentDetailViewModel } from '../viewmodel/usePartnerRecruitmentDetailViewModel'
 import { partnerRecruitmentStyles } from './PartnerRecruitment.styles'
 
@@ -78,6 +79,7 @@ export function PartnerRecruitmentDetailPage() {
     myProposal,
     myProposalLabel,
     canSendProposal,
+    proposalUsage,
     receivedProposals,
     receivedProposalsPhase,
     canManage,
@@ -394,6 +396,8 @@ export function PartnerRecruitmentDetailPage() {
                 </label>
 
                 {proposalError ? <p id="proposal-error" className={workspacePageStyles.emptyNote} role="alert">{proposalError}</p> : null}
+                {/* 이번 달 보낸 제안 수입니다. 철회한 제안도 횟수에 들어가므로 보내기 버튼 바로 위에 둡니다. */}
+                {proposalUsage ? <PlanUsageLine view={proposalUsage} pricingPath={appPaths.pricing} className={partnerRecruitmentStyles.proposalUsage} /> : null}
                 <button
                   className={partnerRecruitmentStyles.proposalSubmit}
                   type="submit"

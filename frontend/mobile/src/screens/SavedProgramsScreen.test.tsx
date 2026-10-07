@@ -71,6 +71,22 @@ test('successful removal offers undo and restores the server returned saved date
     method: 'POST', accessToken: 'first-token', body: { sourceCode: 'BIZINFO', sourceProgramId: 'P/123' },
   }))
 })
+test('the saved count is shown against the plan limit and read again after a removal changes it', async () => {
+  let used = 30
+  jest.mocked(apiRequest).mockImplementation((path, options) => path === '/api/v1/plan-usage'
+    ? Promise.resolve({ plan: 'FREE', items: [{ feature: 'SAVED_PROGRAM', period: 'TOTAL', limit: 30, used, resetsAt: null }] })
+    : options?.method === 'DELETE' ? Promise.resolve(undefined) : respond(path))
+  render(<SavedProgramsScreen onLogin={jest.fn()} onOpenProgram={jest.fn()} />)
+  // 다 채웠으면 빼면 다시 담을 수 있다고 알리고, 앱에서는 요금제나 결제 안내로 잇지 않습니다.
+  expect(await screen.findByText('관심 공고는 30개까지 담을 수 있어요. 담은 공고를 빼면 그만큼 새로 담을 수 있어요.')).toBeTruthy()
+  expect(screen.queryByText(/요금제 보기|업그레이드|결제/)).toBeNull()
+  used = 29
+  fireEvent.press(screen.getByLabelText('테스트 지원사업 관심 공고에서 빼기'))
+  await screen.findByText('관심 공고에서 뺐어요')
+  // 80%를 넘으면 다시 쓰는 방법을 함께 붙입니다.
+  expect(await screen.findByText('관심 공고 29/30개 · 담은 공고를 빼면 그만큼 새로 담을 수 있어요.')).toBeTruthy()
+  expect(jest.mocked(apiRequest).mock.calls.filter(([path]) => path === '/api/v1/plan-usage')).toHaveLength(2)
+})
 test('failed removal retains the card and never offers a successful undo notice', async () => {
   jest.mocked(apiRequest).mockImplementation((path, options) => options?.method === 'DELETE' ? Promise.reject(new Error('offline')) : respond(path))
   render(<SavedProgramsScreen onLogin={jest.fn()} onOpenProgram={jest.fn()} />)

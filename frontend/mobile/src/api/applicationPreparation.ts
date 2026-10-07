@@ -51,7 +51,9 @@ export async function applicationRequest<T>(token: string, path: string, schema:
       const problemBody: unknown = await response.json().catch(() => null)
       const problem = applicationPreparationProblemSchema.safeParse(problemBody)
       const code = problem.success ? problem.data.code : response.status === 404 ? 'APPLICATION_PREPARATION_API_UNAVAILABLE' : 'REQUEST_FAILED'
-      const failure = new ApplicationPreparationError(response.status, code, problem.success ? problem.data.mappingMigration ?? null : null)
+      // 동시 처리 한도(*_JOB_CAPACITY)에는 요금제가 허용하는 진행 중 작업 수가 함께 옵니다.
+      const failure = new ApplicationPreparationError(response.status, code, problem.success ? problem.data.mappingMigration ?? null : null,
+        problem.success ? problem.data.limit ?? null : null)
       // 요금제 한도 문제 응답은 shared 안내 문구를 보여 줍니다. 상태 코드는 그대로 두어 미확인 요청 정리 규칙이 같게 동작합니다.
       const quota = readPlanQuotaProblem(response.status, problemBody)
       if (quota) failure.message = quota.message

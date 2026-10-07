@@ -105,6 +105,11 @@
         JOIN company owner_company ON owner_company.id = recruitment.company_id
     </sql>
 
+    <!-- 보낸 뒤 센 이번 달 제안 수로 요금제 한도를 확인하므로, 같은 계정의 동시 보내기가 서로의 행을 보도록 계정 행을 먼저 잠급니다. -->
+    <select id="lockAccount" resultType="long">
+        SELECT id FROM account WHERE id = #{accountId} FOR UPDATE
+    </select>
+
     <insert id="insertProposal"
             parameterType="ai.govbiz.core.partner.repository.mapper.PartnerProposalDbRow"
             useGeneratedKeys="true"

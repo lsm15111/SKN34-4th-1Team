@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { Provider } from 'react-redux'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import App from './App'
 import { appContainer } from './app/appContainer'
@@ -1439,6 +1440,61 @@ describe('파트너 모집 화면', () => {
 
     expect((await screen.findByRole('alert')).textContent).toContain('이미 내 모집글이 있습니다')
     expect(screen.getByRole('heading', { name: '모집글 작성', level: 1 })).toBeTruthy()
+  })
+
+  it('모집 중인 모집글이 요금제 한도에 닿으면 쓰기 전에 알리고 등록을 보내지 않는다', async () => {
+    vi.spyOn(appContainer.resolve('planUsageUseCase'), 'usage').mockResolvedValue({
+      plan: 'FREE', items: [{ feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 1, used: 1, resetsAt: null }],
+    })
+    const create = vi.spyOn(appContainer.resolve('createPartnerRecruitmentUseCase'), 'execute')
+    renderApp('/app/partners/new')
+
+    const line = (await screen.findByText('모집 중인 모집글은 1개까지 둘 수 있어요. 모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')).closest('p')!
+    expect(line.className).toContain('text-warning')
+    expect(within(line).getByRole('link', { name: '요금제 보기' }).getAttribute('href')).toBe('/app/pricing')
+    const form = screen.getByRole('form', { name: '모집글 작성' })
+    expect((within(form).getByRole('button', { name: '모집글 등록' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('한도 전에는 모집 중인 모집글 수를 보여 주고, 그사이 한도에 닿아 거절되면 같은 안내를 남긴다', async () => {
+    vi.spyOn(appContainer.resolve('planUsageUseCase'), 'usage').mockResolvedValue({
+      plan: 'PLUS', items: [{ feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 5, used: 2, resetsAt: null }],
+    })
+    vi.spyOn(appContainer.resolve('browseSavedSupportProgramsUseCase'), 'execute')
+      .mockResolvedValue([{ savedAt: '2026-09-01T09:00:00', program: supportPrograms[0]! }])
+    vi.spyOn(appContainer.resolve('createPartnerRecruitmentUseCase'), 'execute').mockRejectedValue(new PlanQuotaExceededError({
+      feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', plan: 'PLUS', limit: 5, resetsAt: null,
+    }))
+    renderApp('/app/partners/new')
+    expect((await screen.findByText('2/5개')).closest('p')!.textContent).toBe('모집 중인 모집글·2/5개')
+    const form = screen.getByRole('form', { name: '모집글 작성' })
+
+    await pickSavedProgram(form, supportPrograms[0]!.title)
+    fireEvent.change(within(form).getByLabelText('모집 마감일'), { target: { value: '2026-09-14' } })
+    fireEvent.change(within(form).getByLabelText('제목'), { target: { value: '제목' } })
+    fireEvent.change(within(form).getByLabelText('본문'), { target: { value: '본문' } })
+    fireEvent.click(within(form).getByRole('button', { name: '모집글 등록' }))
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toBe('모집 중인 모집글은 5개까지 둘 수 있어요. 모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')
+    expect(screen.getByRole('heading', { name: '모집글 작성', level: 1 })).toBeTruthy()
+  })
+
+  it('제안 보내기 버튼 위에 이번 달 보낸 제안 수를 보여 주고, 다 쓰면 보내지 않는다', async () => {
+    vi.spyOn(appContainer.resolve('planUsageUseCase'), 'usage').mockResolvedValue({
+      plan: 'FREE', items: [{ feature: 'PARTNER_PROPOSAL', period: 'MONTH', limit: 3, used: 3, resetsAt: '2026-10-01T00:00:00+09:00' }],
+    })
+    const send = vi.spyOn(appContainer.resolve('sendPartnerProposalUseCase'), 'execute')
+    renderApp('/app/partners/detail?recruitmentId=101')
+
+    const proposal = await screen.findByRole('form', { name: '참여 제안' })
+    expect(await within(proposal).findByText('이번 달 파트너 제안 3건을 모두 보냈어요. 철회한 제안도 횟수에 들어가요. 10월 1일에 다시 채워져요.')).toBeTruthy()
+    fireEvent.change(within(proposal).getByLabelText('제안 메시지'), { target: { value: '함께하고 싶습니다' } })
+    const submit = within(proposal).getByRole('button', { name: '참여 제안 보내기' }) as HTMLButtonElement
+    expect(submit.disabled).toBe(true)
+    fireEvent.submit(proposal)
+    expect(send).not.toHaveBeenCalled()
   })
 
   it('작성 화면은 세션 기업을 보여 주고 전국이 맨 앞인 지역 목록과 숫자 입력을 쓰며 제안 설정은 두지 않는다', () => {

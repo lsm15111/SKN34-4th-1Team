@@ -22,10 +22,15 @@ class SavedSupportProgramRepository(
     @param:Qualifier("seoulClock") private val clock: Clock,
 ) {
 
-    /** 노출 중인 공고면 담습니다. 이미 담겨 있거나 노출되지 않는 공고면 아무것도 바꾸지 않고 false입니다. */
+    /**
+     * 노출 중인 공고면 담습니다. 이미 담겨 있거나 노출되지 않는 공고면 아무것도 바꾸지 않고 false입니다.
+     * 먼저 계정 행을 잠가 같은 계정의 담기가 한 줄로 서므로, 호출한 transaction은 담은 뒤 센 개수로 요금제 한도를 확인할 수 있습니다.
+     */
     @Transactional
-    fun saveIfPresent(accountId: Long, sourceCode: String, sourceProgramId: String): Boolean =
-        savedSupportProgramMapper.insertIfPresent(accountId, sourceCode, sourceProgramId, LocalDateTime.now(clock)) == 1
+    fun saveIfPresent(accountId: Long, sourceCode: String, sourceProgramId: String): Boolean {
+        savedSupportProgramMapper.lockAccount(accountId)
+        return savedSupportProgramMapper.insertIfPresent(accountId, sourceCode, sourceProgramId, LocalDateTime.now(clock)) == 1
+    }
 
     @Transactional
     fun delete(accountId: Long, sourceCode: String, sourceProgramId: String): Boolean =

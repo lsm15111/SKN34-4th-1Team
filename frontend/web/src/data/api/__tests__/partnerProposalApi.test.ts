@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import { receivedProposalBox, sentPendingProposal } from '../../fixtures/partnerProposals'
 import { PartnerProposalRepositoryImpl } from '../../repositories/PartnerProposalRepositoryImpl'
@@ -66,6 +67,17 @@ describe('partnerProposalApi', () => {
     await expect(repository.respond(303, 'accept')).resolves.toEqual({ outcome: 'not-pending' })
     await expect(repository.respond(303, 'accept')).resolves.toEqual({ outcome: 'forbidden' })
     await expect(repository.respond(303, 'accept')).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('passes this month\'s proposal limit through as the shared plan error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      status: 429, code: 'PLAN_QUOTA_EXCEEDED', feature: 'PARTNER_PROPOSAL', period: 'MONTH', plan: 'FREE', limit: 3, used: 3,
+      resetsAt: '2026-11-01T00:00:00+09:00', retryAfterSeconds: 100,
+    }), { status: 429, headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '100' } })))
+
+    const sent = await new PartnerProposalRepositoryImpl().send(101, { message: '제안', shareProfile: true }).catch((error: unknown) => error)
+    expect(sent).toBeInstanceOf(PlanQuotaExceededError)
+    expect((sent as Error).message).toBe('이번 달 파트너 제안 3건을 모두 보냈어요. 철회한 제안도 횟수에 들어가요. 11월 1일에 다시 채워져요.')
   })
 })
 

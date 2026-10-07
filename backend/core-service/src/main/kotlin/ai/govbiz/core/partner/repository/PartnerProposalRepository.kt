@@ -25,9 +25,11 @@ class PartnerProposalRepository(
     /**
      * 제안을 INSERT합니다. 같은 모집글에 두 번 보내는 경우는 DB UNIQUE 제약이 막고,
      * 그때의 [org.springframework.dao.DuplicateKeyException]은 호출한 Service가 변환합니다.
+     * 먼저 제안 계정 행을 잠가 같은 계정의 보내기가 한 줄로 서므로, 호출한 transaction은 보낸 뒤 센 이번 달 제안 수로 요금제 한도를 확인할 수 있습니다.
      */
     @Transactional
     fun create(newProposal: NewPartnerProposal): PartnerProposal {
+        proposalMapper.lockAccount(newProposal.proposerAccountId)
         val now = LocalDateTime.now(clock)
         val row = PartnerProposalDbRow(
             recruitmentId = newProposal.recruitmentId,

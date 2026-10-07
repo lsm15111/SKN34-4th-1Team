@@ -38,6 +38,19 @@ describe('이용량 한 줄', () => {
     expect(screen.getByRole('link', { name: '요금제 보기' }).getAttribute('href')).toBe('/app/pricing')
   })
 
+  it('개수 한도는 지금 가진 개수를 적고, 다 채우면 빼면 다시 담을 수 있다고 알린다', () => {
+    const saved: PlanUsageItem = { feature: 'SAVED_PROGRAM', period: 'TOTAL', limit: 30, used: 12, resetsAt: null }
+    expect(renderLine(saved).textContent).toBe('관심 공고·12/30개')
+    cleanup()
+    const near = renderLine({ ...saved, used: 24 })
+    expect(near.className).toContain('text-warning')
+    expect(near.textContent).toContain('담은 공고를 빼면 그만큼 새로 담을 수 있어요.')
+    cleanup()
+    const full = renderLine({ feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 1, used: 1, resetsAt: null })
+    expect(full.textContent).toContain('모집 중인 모집글은 1개까지 둘 수 있어요. 모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')
+    expect(screen.getByRole('link', { name: '요금제 보기' })).toBeTruthy()
+  })
+
   it('다 쓰면 shared 안내로 다 쓴 사실과 다시 채워지는 때를 알린다', () => {
     const line = renderLine({ feature: 'COMBINATION_REVIEW', period: 'MONTH', limit: 2, used: 3, resetsAt: '2026-11-01T00:00:00+09:00' })
     expect(line.textContent).toContain('이번 달 중복 검토 2회를 모두 썼어요. 진행 중인 검토도 횟수에 들어가요. 11월 1일에 다시 채워져요.')

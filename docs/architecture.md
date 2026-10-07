@@ -202,7 +202,7 @@ Frontend는 `/app/application-preparations`의 목록(상태 칩 `?status=`, 필
 삭제와 문서 생성 접수는 같은 준비 건 행을 `FOR UPDATE`로 잠그고 활성 작업도 잠금 조회로 확인합니다.
 QUEUED·RUNNING·UNKNOWN 작업이 있으면 DELETE는 409 `APPLICATION_PREPARATION_RUN_CONFLICT`를 반환해 준비 건과 작업 기록을 보존합니다.
 삭제가 먼저 커밋되면 대기하던 생성 접수는 소유한 준비 건을 찾지 못해 404로 종료합니다. 완료·실패 작업만 있으면 기존 cascade 삭제를 허용합니다.
-`ApplicationDocumentGenerationJobController → ApplicationDocumentGenerationJobService`가 계정별 작업(V45 `application_document_generation_job`, 준비 건당 진행 중 1개·계정당 3개)을 접수하고,
+`ApplicationDocumentGenerationJobController → ApplicationDocumentGenerationJobService`가 계정별 작업(V45 `application_document_generation_job`, 준비 건당 진행 중 1개·계정당 요금제의 동시 처리 건수, 넘으면 429)을 접수하고,
 같은 프로세스의 `ApplicationDocumentGenerationJobWorker`(2초 폴링, 인스턴스당 동시 2개)가 QUEUED 행을 UPDATE 한 번으로 claim해
 `ApplicationDocumentService.generateNow → 공식 첨부 Client → ApplicationDocumentMappingService → ApplicationDocumentEditor → AiApplicationPreparationClient → AI Service Router → Service → 위치 선택 Agent → OpenAI`를 실행합니다.
 작업은 단계(PREPARING·MAPPING·WRITING·SAVING)를 기록하고 SUCCEEDED면 파일 ID를, FAILED면 사용자용 실패 문구와(입력 위치 변경이면) 승인 안내를 돌려줍니다.
@@ -249,7 +249,7 @@ V35·V37의 `(owner_account_id, demo_seed_key)` 유일 제약은 목업 중복�
 
 Frontend는 현재 공고의 활성 분석 작업을 3초마다 확인하며, 조회 재시도는 새 분석을 만들지 않습니다.
 AI Service의 명시적 근거 검증 실패(`422 / APPLICATION_FORM_AI_INVALID_RESPONSE`)는 Client의 전용 예외 → DiscoveryService의 업무 오류 → JobService의 FAILED 저장으로 연결됩니다. 공고 재선택 후 새 요청은 허용하되 자동 재호출하지 않으며, 통신 유실·시간 초과는 UNKNOWN으로 차단합니다.
-UNKNOWN은 Outbox 스케줄러의 만료 정리에서 같은 공고의 가용성이 AI 시작 이후 확정됐으면 즉시, 아니면 TTL(기본 30분) 뒤 FAILED로 닫혀 계정 활성 한도(3건)를 돌려주며, 이때도 AI를 다시 부르지 않습니다.
+UNKNOWN은 Outbox 스케줄러의 만료 정리에서 같은 공고의 가용성이 AI 시작 이후 확정됐으면 즉시, 아니면 TTL(기본 30분) 뒤 FAILED로 닫혀 계정의 동시 처리 한도(요금제별 1·3·5건)를 돌려주며, 이때도 AI를 다시 부르지 않습니다.
 관리자 큐 운영 조회는 `QueueOperationsController → QueueOperationsService → Repository/MyBatis/MySQL + QueueOperationsClient/RabbitMQ`
 로 생성·메일 발송·중복 검토·문서 분석·카카오 연결 해제의 다섯 큐 보관 상태·브로커 관측치를 읽습니다. 메시지 소비/재발행/DB 작업 상태 수정은 없습니다.
 [실행권·만료·결과 불명·관리자 지표·운영 한계](rabbitmq-application-form-discovery.md)를 참고하세요.
@@ -275,7 +275,7 @@ UNKNOWN은 Outbox 스케줄러의 만료 정리에서 같은 공고의 가용성
    코드가 정확한 원문과 근거 ID를 복원한다. 다른 사업쌍의 선택지나 범위 밖 번호는 실패 처리. 현재 입력은 덮어쓰지 않음.
 
 네트워크 호출은 DB transaction 밖에서 수행합니다. 같은 요청 키는 기존 실행을 반환하고 새 키의 동시 실행은 DB에서 막습니다.
-계정별 새 접수는 기존 공개 요청량 제한을 공유하며, 계정 전체 미완료 작업은 최대 3건입니다. 검토 큐 소비자는 1개이며
+계정별 새 접수는 기존 공개 요청량 제한을 공유하며, 계정 전체 미완료 작업은 요금제의 동시 처리 건수(1·3·5건)까지입니다. 검토 큐 소비자는 1개이며
 RUNNING과 UNKNOWN 재전달은 재실행하지 않습니다. 기존 Qdrant 검색은 사용하지 않습니다.
 자동 수집 원문은 사람 검수 전으로 표시합니다. 사용자 화면은 3단계 입력·분석 흐름으로 연결되어 있으며
 [비동기 접수·원문 관리·결과 불명·운영](rabbitmq-combination-review.md)을 참고하세요.
@@ -376,7 +376,11 @@ Core 내부 전용 소비자가 기존 검색·근거 답변을 재사용하며 
 월 한도는 `기능 Service(TransactionTemplate) → 기능 Repository.reserve(계정 행 잠금·작업 생성) → PlanUsageService.requireMonthlyCapacity
 → PlanUsageRepository → MyBatis → MySQL` 순서로 새 작업까지 센 사용량을 확인하고, 넘으면 작업을 남기지 않고 되돌립니다.
 사용량은 각 기능의 작업 표에서 실패하지 않은 작업으로 세므로 실패·만료는 별도 처리 없이 빠지고, 신청 문서·중복 검토 삭제는
-같은 transaction에서 그 달 사용분을 `plan_usage_counter`에 남깁니다. 화면은 `GET /api/v1/plan-usage`로 남은 횟수를 읽습니다.
+같은 transaction에서 그 달 사용분을 `plan_usage_counter`에 남깁니다. 파트너 제안 월 한도도 같은 경로로 이번 달 보낸 제안을 셉니다.
+관심 공고와 모집 중인 파트너 모집글은 기간 없는 개수 한도라 `기능 Service(TransactionTemplate) → 기능 Repository(계정 행 잠금·INSERT)
+→ PlanUsageService.requireHeldCapacity → PlanUsageRepository → MyBatis → MySQL` 순서로 지금 가진 개수를 세어 넘으면 되돌립니다.
+중복 검토 실행·양식 분석·문서 생성의 계정별 미완료 작업 수도 요금제 속성(동시 처리 1·3·5건)이며 넘으면 429입니다.
+화면은 `GET /api/v1/plan-usage`로 남은 횟수와 개수를 읽습니다.
 [한도·세는 규칙·판단 근거](plan-usage-limits.md)를 참고하세요.
 
 ## 검색·상세 조회·원문 근거 질문

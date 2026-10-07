@@ -55,8 +55,9 @@ export async function applicationPreparationRequest<T>(
       } else if (response.status === 404) {
         code = 'APPLICATION_PREPARATION_API_UNAVAILABLE'
       }
+      // 동시 처리 한도(*_JOB_CAPACITY)에는 요금제가 허용하는 진행 중 작업 수가 함께 옵니다.
       throw new ApplicationPreparationError(response.status, code,
-        problem.success ? problem.data.mappingMigration ?? null : null)
+        problem.success ? problem.data.mappingMigration ?? null : null, problem.success ? problem.data.limit ?? null : null)
     }
     const payload = response.status === 204 ? undefined : await response.json().catch(() => null)
     const parsed = schema.safeParse(payload)

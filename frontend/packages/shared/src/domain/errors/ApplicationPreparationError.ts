@@ -4,17 +4,20 @@ export class ApplicationPreparationError extends Error {
   readonly status: number
   readonly code: string
   readonly mappingMigration: ApplicationDocumentMigrationNotice | null
+  /** 동시 처리 한도(`*_JOB_CAPACITY`)에 걸렸을 때 요금제가 허용하는 진행 중 작업 수입니다. 서버가 보내지 않았으면 null입니다. */
+  readonly limit: number | null
 
-  constructor(status: number, code: string, mappingMigration: ApplicationDocumentMigrationNotice | null = null) {
-    super(mappingMigration ? '신청서 입력 위치가 변경됐습니다. 변경 내용을 확인한 뒤 새 위치를 적용할 수 있습니다.' : messageFor(code, status))
+  constructor(status: number, code: string, mappingMigration: ApplicationDocumentMigrationNotice | null = null, limit: number | null = null) {
+    super(mappingMigration ? '신청서 입력 위치가 변경됐습니다. 변경 내용을 확인한 뒤 새 위치를 적용할 수 있습니다.' : messageFor(code, status, limit))
     this.name = 'ApplicationPreparationError'
     this.status = status
     this.code = code
     this.mappingMigration = mappingMigration
+    this.limit = limit
   }
 }
 
-function messageFor(code: string, status: number): string {
+function messageFor(code: string, status: number, limit: number | null): string {
   if (code === 'APPLICATION_DOCUMENT_FORM_REANALYSIS_REQUIRED') return '여러 입력칸이 한 질문으로 묶인 이전 양식입니다. 기존 답변을 보관한 채 입력칸별로 다시 분석해 새 작성을 시작해 주세요.'
   if (code === 'APPLICATION_DOCUMENT_UNMAPPED_INPUT') return '입력한 답변 중 자동 기입할 수 없는 항목이 있습니다. 해당 항목은 원본에서 직접 작성해야 합니다.'
   if (code === 'APPLICATION_DOCUMENT_NO_WRITABLE_INPUT') return '자동 기입할 수 있는 답변이 없어 초안을 생성하지 않았습니다. 저장된 답변을 확인하며 원본 문서에서 직접 작성해 주세요.'
@@ -28,7 +31,9 @@ function messageFor(code: string, status: number): string {
   if (code === 'APPLICATION_FORM_QUEUE_UNAVAILABLE') return '공식 문서 분석 큐가 비활성화되어 있습니다. 관리자에게 문의해 주세요.'
   if (code === 'APPLICATION_FORM_JOB_NOT_FOUND') return '본인의 분석 작업을 찾을 수 없습니다.'
   if (code === 'APPLICATION_FORM_JOB_CONFLICT') return '같은 공고의 이전 분석이 진행 중이거나 결과 확인이 필요해 새 분석을 시작할 수 없습니다. 잠시 후에도 계속 표시되면 관리자에게 문의해 주세요.'
-  if (code === 'APPLICATION_FORM_JOB_CAPACITY') return '진행 중이거나 확인이 필요한 분석이 3건입니다. 기존 작업을 먼저 확인해 주세요.'
+  if (code === 'APPLICATION_FORM_JOB_CAPACITY') return limit === null
+    ? '진행 중이거나 확인이 필요한 분석이 있어 새 분석을 시작하지 못했어요. 기존 작업을 먼저 확인해 주세요.'
+    : `진행 중이거나 확인이 필요한 분석이 이미 ${limit}건이에요. 기존 작업을 먼저 확인해 주세요.`
   if (code === 'APPLICATION_PREPARATION_API_UNAVAILABLE') return '현재 연결된 서버가 신청 문서 작성 기능을 지원하지 않습니다. Core·AI Service 이미지를 갱신한 뒤 다시 시도해 주세요.'
   if (code === 'APPLICATION_PREPARATION_NOT_FOUND') return '신청 준비 건을 찾을 수 없습니다.'
   if (code === 'APPLICATION_FORM_NOT_SUPPORTED') return '현재 지원하지 않는 공고·양식·지원 분야입니다.'
@@ -54,7 +59,9 @@ function messageFor(code: string, status: number): string {
   if (code === 'APPLICATION_DOCUMENT_VALIDATION_FAILED') return '작성 결과가 검증을 통과하지 못해 파일을 공개하지 않았습니다.'
   if (code === 'APPLICATION_DOCUMENT_OVERFLOW') return '입력란에 답변 전체가 들어가지 않습니다. 답변을 수정하고 확인한 뒤 다시 생성해 주세요.'
   if (code === 'APPLICATION_DOCUMENT_UNRESOLVED_OPTION') return '선택한 답변과 원본 PDF의 선택지를 안전하게 연결할 수 없습니다. 해당 항목은 원본에서 직접 확인해 주세요.'
-  if (code === 'APPLICATION_DOCUMENT_JOB_CAPACITY') return '진행 중인 초안 만들기가 3건이에요. 끝난 뒤 다시 시도해 주세요.'
+  if (code === 'APPLICATION_DOCUMENT_JOB_CAPACITY') return limit === null
+    ? '진행 중인 문서 생성이 있어 새로 만들지 못했어요. 끝난 뒤 다시 시도해 주세요.'
+    : `진행 중인 문서 생성이 이미 ${limit}건이에요. 끝난 뒤 다시 시도해 주세요.`
   if (code === 'APPLICATION_DOCUMENT_RUN_CONFLICT') return '문서 편집 서버가 다른 작업을 처리 중입니다. 잠시 후 다시 시도해 주세요.'
   if (code === 'APPLICATION_DOCUMENT_OUTCOME_UNKNOWN') return '문서 작업의 종료 여부를 확인하지 못했습니다. 중복 실행을 피하려면 관리자 확인이 필요합니다.'
   if (code === 'APPLICATION_DOCUMENT_LIMIT_EXCEEDED') return '문서가 크기·페이지·편집 작업 수 제한을 초과했습니다.'

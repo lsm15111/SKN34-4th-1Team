@@ -21,23 +21,31 @@ import ai.govbiz.core.partner.service.exception.RecruitmentDeadlineNotAllowedExc
 import ai.govbiz.core.partner.service.exception.RecruitmentNotFoundException
 import ai.govbiz.core.partner.service.exception.RecruitmentProgramClosedException
 import ai.govbiz.core.partner.service.exception.RecruitmentProgramNotFoundException
+import ai.govbiz.core.planusage.domain.PlanUsageFeature
+import ai.govbiz.core.planusage.service.PlanUsageService
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 파트너 모집글 작성·수정·마감·조회입니다. 작성은 기업을 등록한 회원만 할 수 있고, 모집글은 제공처에 현재 있는 공고 하나에 묶입니다.
  * 모집 마감일은 오늘 이후이면서 공고 접수 마감 전날까지만 허용하며, 수정·마감은 작성자만 모집 중인 글에 할 수 있습니다.
+ * 동시에 모집 중인 글 수는 요금제 한도 안이어야 합니다.
  */
 @Service
 class PartnerRecruitmentService(
     private val recruitmentRepository: PartnerRecruitmentRepository,
     private val proposalRepository: PartnerProposalRepository,
+    private val planUsage: PlanUsageService,
+    transactionManager: PlatformTransactionManager,
     @param:Qualifier("seoulClock") private val clock: Clock,
 ) {
+    private val transactions = TransactionTemplate(transactionManager)
 
     fun create(account: Account, sourceCode: String, sourceProgramId: String, content: PartnerRecruitmentInput): PartnerRecruitmentView {
         val company = requireActiveCompany(account)
@@ -53,14 +61,17 @@ class PartnerRecruitmentService(
         }
 
         val recruitment = try {
-            recruitmentRepository.create(
-                NewPartnerRecruitment(
-                    accountId = account.id,
-                    companyId = company.id,
-                    supportProgramId = program.id,
-                    content = content,
-                ),
-            )
+            // 작성과 모집 중인 글 수 확인을 한 transaction으로 묶어 한도를 넘는 글은 남기지 않는다.
+            requireNotNull(transactions.execute { _ ->
+                recruitmentRepository.create(
+                    NewPartnerRecruitment(
+                        accountId = account.id,
+                        companyId = company.id,
+                        supportProgramId = program.id,
+                        content = content,
+                    ),
+                ).also { planUsage.requireHeldCapacity(account.id, PlanUsageFeature.PARTNER_RECRUITMENT) }
+            })
         } catch (exception: DuplicateKeyException) {
             throw RecruitmentAlreadyExistsException()
         }

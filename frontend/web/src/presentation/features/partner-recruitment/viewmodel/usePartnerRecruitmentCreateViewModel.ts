@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import { appContainer } from '../../../../app/appContainer'
 import type { SupportProgram } from '../../../../domain/entities/SupportProgram'
@@ -7,6 +8,8 @@ import { validatePartnerRecruitmentInput, type CreatePartnerRecruitmentUseCase }
 import type { BrowseSavedSupportProgramsUseCase } from '../../../../domain/usecases/SavedSupportProgramUseCases'
 import { useAuthSession } from '../../../shared/auth/hooks/useAuthSession'
 import { companyInitial } from '../../../shared/partner-recruitment/partnerRecruitmentLabels'
+import { planQuotaFailureMessage, planUsageView } from '../../../shared/plan-usage/planUsageView'
+import { usePlanUsage } from '../../../shared/plan-usage/usePlanUsage'
 import { appPaths } from '../../../shared/routes/appPaths'
 import { useSavedSupportProgramChoices } from '../../../shared/support-program/useSavedSupportProgramChoices'
 import {
@@ -76,6 +79,9 @@ export function usePartnerRecruitmentCreateViewModel(useCases?: Partial<ViewMode
   const [selectedProgram, setSelectedProgram] = useState<SupportProgram | null>(null)
   const form = useRecruitmentFormFields()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // 지금 모집 중인 모집글 수입니다. 요금제 한도에 닿았으면 다 쓰기 전에 알리고 등록을 보내지 않습니다.
+  const planUsage = usePlanUsage(hasCompany)
+  const recruitmentUsage = planUsageView(planUsage.usage, 'PARTNER_RECRUITMENT')
 
   const maximumRecruitmentDeadline = latestRecruitmentDeadlineFor(selectedProgram)
 
@@ -111,6 +117,10 @@ export function usePartnerRecruitmentCreateViewModel(useCases?: Partial<ViewMode
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isSubmitting) return
+    if (recruitmentUsage?.isLimitReached) {
+      form.setError({ field: null, message: recruitmentUsage.limitMessage })
+      return
+    }
     if (selectedProgram === null) {
       form.setError({ field: 'program', message: recruitmentCreateMessages.program })
       return
@@ -162,8 +172,10 @@ export function usePartnerRecruitmentCreateViewModel(useCases?: Partial<ViewMode
           form.setError({ field: 'program', message: recruitmentCreateMessages.alreadyExists })
           return
       }
-    } catch {
-      form.setError({ field: null, message: recruitmentCreateMessages.failed })
+    } catch (caught) {
+      // 그사이 다른 화면에서 모집글을 써 한도에 닿았으면 shared 안내를 보이고 이용량을 다시 읽습니다.
+      form.setError({ field: null, message: planQuotaFailureMessage(caught) ?? recruitmentCreateMessages.failed })
+      if (caught instanceof PlanQuotaExceededError) planUsage.reload()
     } finally {
       setIsSubmitting(false)
     }
@@ -177,6 +189,8 @@ export function usePartnerRecruitmentCreateViewModel(useCases?: Partial<ViewMode
     submit,
     /** 기업 등록 전에는 폼 대신 등록 안내를 보여 줍니다. */
     canCreate: hasCompany,
+    /** 모집 중인 모집글 수와 요금제 한도 한 줄입니다. 읽지 못했으면 null입니다. */
+    recruitmentUsage,
     profilePath: appPaths.profile,
     savedProgramsPath: appPaths.savedPrograms,
     /** 모집글에 표시되는 우리 기업입니다. 세션의 등록 기업 요약을 쓰고 상세 값은 프로필 API가 맡습니다. */

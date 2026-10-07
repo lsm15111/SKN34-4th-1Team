@@ -95,6 +95,11 @@
         JOIN support_program program ON program.id = recruitment.support_program_id
     </sql>
 
+    <!-- 작성 뒤 센 모집 중인 글 수로 요금제 한도를 확인하므로, 같은 계정의 동시 작성이 서로의 행을 보도록 계정 행을 먼저 잠급니다. -->
+    <select id="lockAccount" resultType="long">
+        SELECT id FROM account WHERE id = #{accountId} FOR UPDATE
+    </select>
+
     <select id="findPresentProgram" resultMap="partnerProgramDbRow">
         SELECT
             id,

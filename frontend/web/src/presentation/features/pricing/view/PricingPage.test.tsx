@@ -38,3 +38,17 @@ it('compares the limits for guests and each plan in one table', () => {
   expect(within(evidence).getAllByRole('cell')[0].textContent).toBe('로그인 필요')
   expect(screen.queryByText(/무제한/)).toBeNull()
 })
+
+it('lists the saved-program, partner and concurrent-job limits with the same numbers the server enforces', () => {
+  renderPage()
+  const table = screen.getByRole('table', { name: '로그인 전과 요금제별 기능 이용 한도' })
+  const cells = (name: RegExp) => within(within(table).getByRole('row', { name })).getAllByRole('cell').map((cell) => cell.textContent)
+  expect(cells(/^관심 공고/)).toEqual(['로그인 필요', '30개', '300개', '1,000개'])
+  expect(cells(/^파트너 모집글/)).toEqual(['로그인 필요', '동시 1개', '동시 5개', '동시 20개'])
+  expect(cells(/^파트너 제안 보내기/)).toEqual(['로그인 필요', '월 3건', '월 30건', '월 100건'])
+  expect(cells(/^동시 분석·초안/)).toEqual(['로그인 필요', '1건', '3건', '5건'])
+  const free = screen.getByRole('article', { name: '무료' })
+  expect(within(free).getByText('관심 공고 30개 · 동시 분석·초안 1건')).toBeTruthy()
+  expect(within(free).getByText('파트너 모집글 동시 1개 · 제안 월 3건')).toBeTruthy()
+  expect(within(screen.getByRole('article', { name: '프리미엄' })).getByText('파트너 모집글 동시 20개 · 제안 월 100건')).toBeTruthy()
+})

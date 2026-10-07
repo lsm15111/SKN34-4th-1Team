@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PlanQuotaExceededError, QuotaUnavailableError } from '@govbiz/shared/domain/errors/PlanQuotaError'
 
 import { supportPrograms } from '../../fixtures/supportPrograms'
 import { SavedSupportProgramRepositoryImpl } from '../../repositories/SavedSupportProgramRepositoryImpl'
@@ -90,6 +91,20 @@ describe('SavedSupportProgramRepositoryImpl', () => {
     })
     await expect(repository.save(identity)).resolves.toEqual({ outcome: 'not-found' })
     await expect(repository.save(identity)).rejects.toBeInstanceOf(AccountApiError)
+  })
+
+  it('turns the saved-program count limit into the shared plan error instead of an account error', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        status: 429, code: 'PLAN_QUOTA_EXCEEDED', feature: 'SAVED_PROGRAM', period: 'TOTAL', plan: 'FREE', limit: 30, used: 30,
+      }, 429))
+      .mockResolvedValueOnce(jsonResponse({ status: 503, code: 'QUOTA_UNAVAILABLE' }, 503)))
+    const repository = new SavedSupportProgramRepositoryImpl()
+
+    const limited = await repository.save(identity).catch((error: unknown) => error)
+    expect(limited).toBeInstanceOf(PlanQuotaExceededError)
+    expect((limited as Error).message).toBe('관심 공고는 30개까지 담을 수 있어요. 담은 공고를 빼면 그만큼 새로 담을 수 있어요.')
+    expect(await repository.save(identity).catch((error: unknown) => error)).toBeInstanceOf(QuotaUnavailableError)
   })
 })
 

@@ -6,7 +6,10 @@ import ai.govbiz.core.planusage.domain.PlanUsageJob
 import ai.govbiz.core.planusage.domain.PlanUsageWindow
 import ai.govbiz.core.planusage.repository.exception.PlanUsageStoreException
 import ai.govbiz.core.planusage.repository.mapper.PlanUsageMapper
+import ai.govbiz.core.supportprogram.domain.SupportProgramStatus
+import ai.govbiz.core.supportprogram.domain.SupportProgramStatusResolver
 import java.time.Clock
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import org.springframework.beans.factory.annotation.Qualifier
@@ -52,7 +55,7 @@ class PlanUsageRepository(
     }
 
     /**
-     * 월 한도 기능의 작업 표에서 이번 기간에 실패하지 않은 작업을 셉니다. [excluding]은 방금 만든 작업을 뺀 수를,
+     * 월 한도 기능의 작업 표에서 이번 기간에 실패하지 않은 작업(파트너 제안은 보낸 제안 전부)을 셉니다. [excluding]은 방금 만든 작업을 뺀 수를,
      * [including]은 아직 작업이 없는 공고를 더한 수를 셀 때 씁니다.
      */
     fun countJobs(
@@ -73,8 +76,28 @@ class PlanUsageRepository(
                 (excluding as? PlanUsageJob.DocumentGeneration)?.jobId,
                 including?.sourceCode, including?.sourceProgramId,
             )
+            PlanUsageFeature.PARTNER_PROPOSAL ->
+                mapper.countSentPartnerProposals(accountId, from, to, (excluding as? PlanUsageJob.PartnerProposal)?.proposalId)
             PlanUsageFeature.AI_SEARCH, PlanUsageFeature.EVIDENCE_QUESTION ->
                 throw IllegalArgumentException("$feature is counted per request, not from jobs")
+            PlanUsageFeature.SAVED_PROGRAM, PlanUsageFeature.PARTNER_RECRUITMENT ->
+                throw IllegalArgumentException("$feature is counted as items held now, not per period")
+        }
+    }
+
+    /**
+     * 개수 한도 기능이 지금 가진 개수입니다. 관심 공고는 관심 공고함 목록에 보이는 공고 수, 파트너 모집글은 서울 날짜 [today] 기준으로
+     * 모집 중인 글 수입니다. 모집글 상태는 저장하지 않으므로 모집글 화면과 같은 규칙(수동 마감·모집 마감일·공고 접수 마감)으로 셉니다.
+     */
+    fun countHeld(accountId: Long, feature: PlanUsageFeature, today: LocalDate): Int = store {
+        when (feature) {
+            PlanUsageFeature.SAVED_PROGRAM -> mapper.countSavedPrograms(accountId)
+            PlanUsageFeature.PARTNER_RECRUITMENT -> mapper.findOpenRecruitmentPrograms(accountId, today).count { program ->
+                SupportProgramStatusResolver.resolve(
+                    program.applicationPeriodRaw, program.applicationStartDate, program.applicationEndDate, today,
+                ) != SupportProgramStatus.CLOSED
+            }
+            else -> throw IllegalArgumentException("$feature is counted per period, not as items held now")
         }
     }
 

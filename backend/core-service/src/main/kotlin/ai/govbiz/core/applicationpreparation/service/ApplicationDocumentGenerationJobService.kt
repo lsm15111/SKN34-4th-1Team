@@ -9,6 +9,7 @@ import ai.govbiz.core.applicationpreparation.domain.exception.ApplicationPrepara
 import ai.govbiz.core.applicationpreparation.repository.ApplicationDocumentGenerationJobRepository
 import ai.govbiz.core.applicationpreparation.service.dto.ApplicationDocumentMigrationNoticeResult
 import ai.govbiz.core.applicationpreparation.service.exception.ApplicationDocumentException
+import ai.govbiz.core.applicationpreparation.service.exception.ApplicationDocumentJobCapacityException
 import ai.govbiz.core.planusage.domain.PlanUsageJob
 import ai.govbiz.core.planusage.service.PlanUsageService
 import ai.govbiz.core.supportprogram.service.admission.SupportProgramRequestAdmissionService
@@ -39,18 +40,19 @@ class ApplicationDocumentGenerationJobService(
     fun submit(account: Account, preparationId: Long, requestKey: String, expectedRevision: Long): ApplicationDocumentGenerationJob {
         val detail = preparations.findOwned(account, preparationId)
         if (detail.preparation.inputRevision != expectedRevision) throw ApplicationPreparationRevisionConflictException()
+        // 계정이 동시에 둘 수 있는 미완료 생성 작업 수는 요금제 속성이다.
+        val maxPending = planUsage.concurrentJobLimit(account.id)
         val reservation = try {
             // 접수와 신청 문서 월 한도 확인을 한 transaction으로 묶는다. 같은 공고를 다시 만들면 사용량이 늘지 않는다.
             requireNotNull(transactions.execute { _ ->
-                repository.reserve(account.id, requestKey.lowercase(), preparationId, expectedRevision).also { reserved ->
+                repository.reserve(account.id, requestKey.lowercase(), preparationId, expectedRevision, maxPending).also { reserved ->
                     reserved.job?.let { planUsage.requireMonthlyCapacity(account.id, PlanUsageJob.DocumentGeneration(it.id)) }
                 }
             })
         } catch (error: DuplicateKeyException) {
             throw ApplicationPreparationRunConflictException()
         }
-        if (reservation.capacityExceeded) throw ApplicationDocumentException("APPLICATION_DOCUMENT_JOB_CAPACITY",
-            "진행 중인 문서 생성이 이미 3건입니다. 끝난 뒤 다시 시도해 주세요.")
+        if (reservation.capacityExceeded) throw ApplicationDocumentJobCapacityException(maxPending)
         return requireNotNull(reservation.job)
     }
 

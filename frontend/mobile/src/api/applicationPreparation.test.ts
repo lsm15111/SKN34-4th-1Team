@@ -102,10 +102,10 @@ test('plan limit rejections keep their preparation status for pending-request ru
   fetchApi.mockResolvedValue(response({ status: 503, code: 'QUOTA_UNAVAILABLE' }, 503))
   await expect(api.submitDocumentJob(9, 1, undefined, requestKey)).rejects.toMatchObject({ status: 503, code: 'QUOTA_UNAVAILABLE',
     message: '지금은 이용량을 확인할 수 없어 실행하지 않았어요. 잠시 후 다시 시도해 주세요.' })
-  // 동시에 진행 중인 작업 수 제한은 요금제 안내로 바꾸지 않습니다.
-  fetchApi.mockResolvedValue(response({ code: 'APPLICATION_DOCUMENT_JOB_CAPACITY' }, 429))
-  await expect(api.submitDocumentJob(9, 1, undefined, requestKey)).rejects.toMatchObject({ status: 429,
-    message: '진행 중인 초안 만들기가 3건이에요. 끝난 뒤 다시 시도해 주세요.' })
+  // 동시에 진행 중인 작업 수 제한은 요금제의 월 한도 안내와 다른 응답이고, 서버가 알려 준 요금제의 동시 처리 건수를 씁니다.
+  fetchApi.mockResolvedValue(response({ code: 'APPLICATION_DOCUMENT_JOB_CAPACITY', limit: 1 }, 429))
+  await expect(api.submitDocumentJob(9, 1, undefined, requestKey)).rejects.toMatchObject({ status: 429, limit: 1,
+    message: '진행 중인 문서 생성이 이미 1건이에요. 끝난 뒤 다시 시도해 주세요.' })
 })
 
 test('binary download authentication failure retains the domain error used to clear expired sessions', async () => {

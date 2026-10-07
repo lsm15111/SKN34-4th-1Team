@@ -2,9 +2,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { Alert } from 'react-native'
 import type { SupportProgram } from '@govbiz/shared/domain/entities/SupportProgram'
 import type { PartnerRecruitment } from '@govbiz/shared/domain/entities/PartnerRecruitment'
+import type { PlanUsage } from '@govbiz/shared/domain/entities/PlanUsage'
 import { ApiError } from '../api/client'
 import { createRecruitment } from '../api/partners'
 import { listSavedPrograms } from '../api/savedPrograms'
+import { planUsageUseCase } from '../api/planUsage'
 import { useAuth } from '../auth/session'
 import { RecruitmentCreateScreen } from './RecruitmentCreateScreen'
 
@@ -16,6 +18,14 @@ jest.mock('expo-router/react-navigation', () => ({ usePreventRemove: jest.fn() }
 jest.mock('../auth/session', () => ({ useAuth: jest.fn() }))
 jest.mock('../api/partners', () => ({ ...jest.requireActual('../api/partners'), createRecruitment: jest.fn() }))
 jest.mock('../api/savedPrograms', () => ({ listSavedPrograms: jest.fn() }))
+jest.mock('../api/planUsage', () => ({ planUsageUseCase: jest.fn() }))
+
+/** 이용량 줄을 확인하는 테스트만 응답을 정합니다. 나머지 흐름에서는 응답이 오지 않아 아무것도 보이지 않습니다. */
+function usageResponse(usage?: PlanUsage) {
+  const read = jest.fn<Promise<PlanUsage>, [AbortSignal?]>(() => usage ? Promise.resolve(usage) : new Promise<PlanUsage>(() => undefined))
+  jest.mocked(planUsageUseCase).mockReturnValue({ usage: read } as unknown as ReturnType<typeof planUsageUseCase>)
+  return read
+}
 
 const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)
 const after = (days: number) => new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
@@ -35,6 +45,7 @@ beforeEach(() => {
   jest.mocked(useAuth).mockReturnValue(auth)
   jest.mocked(listSavedPrograms).mockReset().mockResolvedValue([{ savedAt: '', program }])
   jest.mocked(createRecruitment).mockReset().mockResolvedValue({ outcome: 'created', recruitment: { id: 19 } as PartnerRecruitment })
+  usageResponse()
 })
 afterEach(() => jest.restoreAllMocks())
 
@@ -139,6 +150,23 @@ test('invalid form never posts, while explicit submit preserves roles, condition
     minimumCompanyAgeYears: 3, recruitmentDeadline: today, title: '제조 과제 참여기업 모집',
     body: '우리는 총괄을 맡고 AI 기술을 보유한 참여기업을 찾습니다.' }, 'owner-token', expect.any(AbortSignal)))
   expect(callbacks.onCreated).toHaveBeenCalledWith(19)
+})
+
+test('a plan that already keeps its open recruitments says so before writing and never posts', async () => {
+  usageResponse({ plan: 'FREE', items: [{ feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 1, used: 1, resetsAt: null }] })
+  render(<RecruitmentCreateScreen {...callbacks} />)
+  expect(await screen.findByText('모집 중인 모집글은 1개까지 둘 수 있어요. 모집글을 마감하거나 모집 기간이 끝나면 새로 쓸 수 있어요.')).toBeTruthy()
+  expect(screen.queryByText(/요금제 보기|업그레이드|결제/)).toBeNull()
+  await fillRequired()
+  expect(screen.getByLabelText('모집글 등록').props.accessibilityState.disabled).toBe(true)
+  expect(createRecruitment).not.toHaveBeenCalled()
+})
+
+test('below the plan limit the open recruitment count is shown quietly', async () => {
+  usageResponse({ plan: 'PLUS', items: [{ feature: 'PARTNER_RECRUITMENT', period: 'TOTAL', limit: 5, used: 2, resetsAt: null }] })
+  render(<RecruitmentCreateScreen {...callbacks} />)
+  expect(await screen.findByText('모집 중인 모집글 2/5개')).toBeTruthy()
+  expect(screen.getByLabelText('모집글 등록').props.accessibilityState.disabled).toBe(false)
 })
 
 test('double submit is guarded and a server conflict keeps all typed content', async () => {

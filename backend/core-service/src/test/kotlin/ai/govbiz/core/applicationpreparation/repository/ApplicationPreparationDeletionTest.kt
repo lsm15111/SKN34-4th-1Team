@@ -50,7 +50,7 @@ class ApplicationPreparationDeletionTest {
     fun reservationAfterDeletionReturnsNotFoundWithoutInsertingAJob() {
         `when`(jobs.lockActiveAccount(1)).thenReturn(1)
         assertThrows(ApplicationPreparationNotFoundException::class.java) {
-            jobRepository.reserve(1, "11111111-1111-4111-8111-111111111111", 7, 1)
+            jobRepository.reserve(1, "11111111-1111-4111-8111-111111111111", 7, 1, 3)
         }
         verify(jobs, never()).insert(any(ApplicationDocumentGenerationJobDbRow::class.java) ?: ApplicationDocumentGenerationJobDbRow())
     }

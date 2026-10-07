@@ -20,22 +20,30 @@ import ai.govbiz.core.partner.service.exception.ProposalNotPendingException
 import ai.govbiz.core.partner.service.exception.ProposalToOwnRecruitmentException
 import ai.govbiz.core.partner.service.exception.RecruitmentClosedException
 import ai.govbiz.core.partner.service.exception.RecruitmentNotFoundException
+import ai.govbiz.core.planusage.domain.PlanUsageJob
+import ai.govbiz.core.planusage.service.PlanUsageService
 import java.time.Clock
 import java.time.LocalDateTime
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 파트너 제안 보내기·수락·거절·철회입니다. 제안은 기업을 등록한 회원만 모집 중인 남의 모집글에 한 번 보낼 수 있고,
  * 수락·거절은 모집글 작성자가, 철회는 제안자가 대기 중일 때만 합니다. 이메일 인증 조건은 인증 기능이 생길 때 더합니다.
+ * 한 달에 보낼 수 있는 제안 수는 요금제 한도 안이어야 하며, 철회·거절된 제안도 보낸 달의 횟수에 남습니다.
  */
 @Service
 class PartnerProposalService(
     private val proposalRepository: PartnerProposalRepository,
     private val recruitmentRepository: PartnerRecruitmentRepository,
+    private val planUsage: PlanUsageService,
+    transactionManager: PlatformTransactionManager,
     @param:Qualifier("seoulClock") private val clock: Clock,
 ) {
+    private val transactions = TransactionTemplate(transactionManager)
 
     fun send(account: Account, recruitmentId: Long, content: PartnerProposalInput): PartnerProposalView {
         val company = account.company ?: throw CompanyRequiredException()
@@ -48,14 +56,17 @@ class PartnerProposalService(
         }
 
         val proposal = try {
-            proposalRepository.create(
-                NewPartnerProposal(
-                    recruitmentId = recruitment.id,
-                    proposerAccountId = account.id,
-                    proposerCompanyId = company.id,
-                    content = content,
-                ),
-            )
+            // 보내기와 이번 달 제안 수 확인을 한 transaction으로 묶어 한도를 넘는 제안은 남기지 않는다.
+            requireNotNull(transactions.execute { _ ->
+                proposalRepository.create(
+                    NewPartnerProposal(
+                        recruitmentId = recruitment.id,
+                        proposerAccountId = account.id,
+                        proposerCompanyId = company.id,
+                        content = content,
+                    ),
+                ).also { planUsage.requireMonthlyCapacity(account.id, PlanUsageJob.PartnerProposal(it.id)) }
+            })
         } catch (exception: DuplicateKeyException) {
             throw ProposalAlreadySentException()
         }

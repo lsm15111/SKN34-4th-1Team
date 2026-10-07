@@ -67,6 +67,9 @@ export const partnerRecruitmentStyles = {
   pillLink:
     'rounded-[0.55rem] bg-brand-soft px-[0.7rem] py-[0.55rem] text-[0.74rem] font-extrabold text-brand-primary no-underline hover:bg-[#d7efdf]',
   saveNotice: 'text-[0.78rem] font-semibold text-brand-primary',
+  // 요금제의 모집글·제안 이용량 한 줄입니다. 작성 폼 위 안내와 제안 카드 안 안내 글씨 크기에 맞춥니다.
+  usage: 'text-[0.78rem]',
+  proposalUsage: 'text-[0.72rem]',
   bodyParagraph: 'm-0 text-[0.88rem] leading-[1.7] text-ink',
   disclaimer: 'm-0 text-[0.72rem] leading-[1.55] text-ink-muted',
   matchRow:
