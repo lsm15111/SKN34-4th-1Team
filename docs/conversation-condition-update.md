@@ -208,6 +208,20 @@ Web C02 소비자 105건이 통과했다. AI 수치는 최초 통과 범위와 �
 미확정 제안·검색 요약을 사용하려면 Frontend·Core API·AI Service를 함께 반영해야 한다.
 자동 테스트는 계약·상태 전달·고정 모델 응답을 검증한다. 실제 자연어 해석 품질은 별도 실모델 평가로 확인해야 한다.
 
+### 해석 평가 세트와 대리 검증 도구 (2026-10-08)
+
+실모델 사례가 3건뿐이던 해석 평가를 [대화 조건 해석 평가 세트](../evaluation/support-program-conversation/README.md)로
+넓혔다. 단일 턴 188문항(설계 문서의 14개 범주)과 여러 턴 25시나리오 76턴이 이 문서의 내부 요청 계약을 그대로 쓰며,
+기대 상태·변경 필드·질문/안내 종류·금지 변경과 이후 라우팅 기대값(route·대상 공고 번호·의도)을 담는다.
+라벨은 **AI가 작성한 기대 동작이며 사람 검토 정답이 아니다**. 현재 스키마로 표현할 수 없는 의도(공고 지역,
+대상·규모·금액, 마감 기간, 제외, 결과 참조·비교 등)는 가장 가까운 현재 동작을 라벨로 두고 `v2-gap` 태그로 구분한다.
+
+`export_proxy_inputs.py`는 실제 Agent가 만든 모델 입력(시스템 지침·사용자 입력·strict 출력 스키마)을 라벨 없이
+내보내고, `replay.py`는 모델 출력을 `HTTP API → Service → Agent → (고정 HTTP 응답) → 검증 → Response` 경로로
+재생해 채점하고 Core가 받을 응답을 기록한다. Claude가 운영 모델 대신 답한 결과는 Claude 대리 검증이며 OpenAI
+측정이 아니다. 이 작업에서는 유료 모델 호출을 하지 않았다. Core 쪽은 기록된 예시 응답을 실제 Client·Service에 넣는
+`SupportProgramConversationEvaluationReplayTest`로 수락·거부와 지역 표기 유지를 확인한다.
+
 ## 검증·문자·실패 규칙
 
 - 새 계약의 길이 제한은 UTF-16 코드 단위다. message/query 최대 500, region 50, industry/supportPurpose 100,

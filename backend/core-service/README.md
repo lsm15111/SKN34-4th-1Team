@@ -1085,6 +1085,9 @@ C02 회귀는 공개 HTTP의 nullable 필수 키·엄격한 타입·문자/날�
 현재 발화 인용·미변경 조건 보존·직전 초안 병합·CLEAR 기본값·변경 목록 순서·기존 검색과의 공유 요청 제한을
 검증합니다. `SupportProgramConversationServiceTest`, `SupportProgramConversationControllerTest`,
 `AiSupportProgramConversationClientTest`는 외부 모델과 DB를 사용하지 않습니다.
+`SupportProgramConversationEvaluationReplayTest`는 [대화 조건 해석 평가](../../evaluation/support-program-conversation/README.md)의
+예시 재생 응답(`src/test/resources/support-program-conversation/`)을 실제 Client·Service로 받아 Core의 수락·거부와
+지역 표기 유지를 확인합니다. 손 작성 예시이며 모델 품질 측정이 아닙니다.
 
 2026-09-07 C02 검증은 Temurin JDK 21.0.12와 실제 MySQL 8.4.11(Testcontainers `mysql:8.4`)에서 전체
 `clean test`를 실행해 47개 스위트·508개 테스트가 통과했습니다(실패·오류·건너뜀 0). 신규 C02 75개와
