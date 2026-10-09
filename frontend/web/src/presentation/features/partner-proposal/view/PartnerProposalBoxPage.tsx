@@ -182,6 +182,7 @@ export function PartnerProposalBoxPage() {
                       <span className={s.rowTitle}>
                         {proposal.counterpart.companyName}
                         <StatusBadge proposal={proposal} label={statusLabel} />
+                        {proposal.counterpart.isWithdrawn ? <span className={workspaceTagClassName('muted')}>탈퇴한 기업</span> : null}
                         {/* 남은 응답 기한은 모집글 카드처럼 상태 배지 옆 D-day 배지로 알립니다. */}
                         {dueDday !== null && <span className={`${workspacePageStyles.tag} ${ddayToneClassNames[dueDday.tone]}`}><span className="sr-only">응답 기한 </span>{dueDday.label}</span>}
                       </span>
@@ -296,19 +297,23 @@ function ProposalPanel({ proposal, boxLabel, statusLabel, actions, recruitmentPa
           <span className="min-w-0">
             <span className={s.counterpartName}>{proposal.counterpart.companyName}</span>
             <span className={s.counterpartSummary}>
-              {profile
-                ? `${toRegionName(profile.region)} · ${profile.industry} · 설립 ${profile.foundedYear}`
-                : '기업 기본정보는 수락 뒤에 공개돼요'}
+              {proposal.counterpart.isWithdrawn
+                ? '탈퇴한 기업이라 기본정보와 연락처를 볼 수 없어요'
+                : profile
+                  ? `${toRegionName(profile.region)} · ${profile.industry} · 설립 ${profile.foundedYear}`
+                  : '기업 기본정보는 수락 뒤에 공개돼요'}
             </span>
           </span>
         </div>
 
         <div className={s.tagRow}>
           <StatusBadge proposal={proposal} label={statusLabel} />
-          {proposal.counterpart.isBusinessVerified ? <span className={workspaceTagClassName('ok')}>사업자 확인됨</span> : null}
-          <span className={workspaceTagClassName(proposal.counterpart.isEmailVerified ? 'ok' : 'muted')}>
-            {proposal.counterpart.isEmailVerified ? '이메일 인증됨' : '이메일 인증 전'}
-          </span>
+          {proposal.counterpart.isWithdrawn ? <span className={workspaceTagClassName('muted')}>탈퇴한 기업</span> : <>
+            {proposal.counterpart.isBusinessVerified ? <span className={workspaceTagClassName('ok')}>사업자 확인됨</span> : null}
+            <span className={workspaceTagClassName(proposal.counterpart.isEmailVerified ? 'ok' : 'muted')}>
+              {proposal.counterpart.isEmailVerified ? '이메일 인증됨' : '이메일 인증 전'}
+            </span>
+          </>}
         </div>
 
         <dl className={s.kv}>

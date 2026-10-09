@@ -23,7 +23,7 @@ const recruitment = {
 const received = {
   id: 15, status: 'PENDING' as const, message: '현장 실증에 함께 참여하고 싶습니다.', shareProfile: false, isSent: false,
   recruitment: { id: 9, title: recruitment.title, status: 'OPEN' as const, recruitmentDeadline: '2026-10-07' },
-  counterpart: { companyName: '데이터브릿지', isEmailVerified: true, isBusinessVerified: true, profile: null,
+  counterpart: { companyName: '데이터브릿지', isEmailVerified: true, isBusinessVerified: true, isWithdrawn: false, profile: null,
     contact: null }, createdAt: '2026-09-28T10:00:00+09:00', expiresAt: '2026-10-05T10:00:00+09:00', respondedAt: null,
 }
 const onPendingCount = jest.fn()
@@ -69,6 +69,24 @@ test('received proposal defaults to pending, hides unshared company data, and re
   await waitFor(() => expect(respondProposal).toHaveBeenCalledWith(15, 'accept', 'my-token'))
   await screen.findByText('partner@example.test', { exact: false })
   alert.mockRestore()
+})
+
+test('a proposal with a withdrawn company opens from the list without contact or actions', async () => {
+  jest.mocked(useAuth).mockReturnValue({ status: 'signedIn', session: { accessToken: 'my-token' },
+    invalidateSession: jest.fn() } as unknown as ReturnType<typeof useAuth>)
+  const withdrawn = { ...received, status: 'ACCEPTED' as const, respondedAt: '2026-09-29T10:00:00+09:00',
+    counterpart: { ...received.counterpart, isWithdrawn: true, isEmailVerified: false, isBusinessVerified: false } }
+  jest.mocked(browseProposals).mockResolvedValue({ box: 'received', proposals: [withdrawn], pendingCount: 0 })
+  render(<CollaborationScreen view="box" onViewChange={jest.fn()} onPendingCount={onPendingCount}
+    onOpenRecruitment={onOpenRecruitment} onLogin={onLogin} />)
+  await screen.findByText('전체 1')
+  expect(screen.getByText('탈퇴한 기업')).toBeTruthy()
+  fireEvent.press(screen.getByText('열기'))
+  await screen.findByText('제안 메시지')
+  expect(getProposal).not.toHaveBeenCalled()
+  expect(screen.getByText('탈퇴한 기업이라 연락처를 볼 수 없어요')).toBeTruthy()
+  expect(screen.queryByText('메일 앱 열기')).toBeNull()
+  expect(screen.queryAllByRole('button', { name: '수락' })).toHaveLength(0)
 })
 
 test('account switch never leaves the previous account proposal open', async () => {

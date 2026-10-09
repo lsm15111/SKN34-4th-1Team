@@ -20,6 +20,8 @@ export const partnerProposalDtoSchema = z.object({
     companyName: z.string().trim().min(1),
     isEmailVerified: z.boolean(),
     isBusinessVerified: z.boolean(),
+    // 이전 Core 응답에는 없던 값이라 없으면 탈퇴하지 않은 상대로 봅니다.
+    isWithdrawn: z.boolean().optional().transform((value) => value ?? false),
     profile: z.object({
       region: z.string().min(1),
       industry: z.string().min(1),
@@ -58,6 +60,7 @@ export function toPartnerProposal(dto: PartnerProposalDto): PartnerProposal {
       companyName: dto.counterpart.companyName,
       isEmailVerified: dto.counterpart.isEmailVerified,
       isBusinessVerified: dto.counterpart.isBusinessVerified,
+      isWithdrawn: dto.counterpart.isWithdrawn,
       profile: dto.counterpart.profile === null ? null : { ...dto.counterpart.profile },
       contact: dto.counterpart.contact === null ? null : { ...dto.counterpart.contact },
     },

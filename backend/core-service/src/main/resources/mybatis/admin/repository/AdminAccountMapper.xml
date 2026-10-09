@@ -115,7 +115,7 @@
         SELECT
             <include refid="accountColumns" />
         FROM account
-        LEFT JOIN company ON company.account_id = account.id
+        LEFT JOIN company ON company.account_id = account.id AND company.deleted_at IS NULL
         <include refid="accountFilters" />
         <choose>
             <when test="sort == 'OLDEST'">
@@ -134,7 +134,7 @@
     <select id="countAccounts" resultType="long">
         SELECT COUNT(*)
         FROM account
-        LEFT JOIN company ON company.account_id = account.id
+        LEFT JOIN company ON company.account_id = account.id AND company.deleted_at IS NULL
         <include refid="accountFilters" />
     </select>
 
@@ -142,7 +142,7 @@
         SELECT
             <include refid="accountColumns" />
         FROM account
-        LEFT JOIN company ON company.account_id = account.id
+        LEFT JOIN company ON company.account_id = account.id AND company.deleted_at IS NULL
         WHERE account.id = #{id}
           AND account.deleted_at IS NULL
     </select>
@@ -158,7 +158,7 @@
             COALESCE(SUM(account.role = 'ADMIN'), 0) AS admins,
             COALESCE(SUM(account.created_at &gt;= #{joinedSince}), 0) AS joined_recently
         FROM account
-        LEFT JOIN company ON company.account_id = account.id
+        LEFT JOIN company ON company.account_id = account.id AND company.deleted_at IS NULL
         WHERE account.deleted_at IS NULL
     </select>
 
@@ -171,6 +171,7 @@
             company.founded_year
         FROM company
         WHERE company.account_id = #{accountId}
+          AND company.deleted_at IS NULL
     </select>
 
     <select id="countRecruitments" resultType="int">

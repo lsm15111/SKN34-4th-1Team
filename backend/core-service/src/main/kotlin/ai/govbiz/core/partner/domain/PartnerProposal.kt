@@ -57,7 +57,7 @@ data class NewPartnerProposal(
     val content: PartnerProposalInput,
 )
 
-/** 제안의 한쪽 당사자입니다. 이메일은 수락된 뒤에만 상대에게 보여 줍니다. */
+/** 제안의 한쪽 당사자입니다. 이메일은 수락된 뒤에만 상대에게 보여 줍니다. 탈퇴한 당사자는 기업명만 남깁니다. */
 data class PartnerProposalParty(
     val accountId: Long,
     val email: String,
@@ -68,6 +68,7 @@ data class PartnerProposalParty(
     val foundedYear: Int,
     val homepageUrl: String?,
     val isEmailVerified: Boolean,
+    val isWithdrawn: Boolean = false,
 )
 
 /** 제안이 묶인 모집글의 요약입니다. 모집이 끝나면 대기 중 제안도 만료로 봅니다. */

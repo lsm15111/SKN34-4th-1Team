@@ -1751,6 +1751,23 @@ describe('제안함 화면', () => {
     expect(browse.mock.calls.filter(([box]) => box === 'received')).toHaveLength(1)
   })
 
+  it('탈퇴한 기업과의 수락된 제안은 기업명과 탈퇴 표시만 남기고 연락처를 보여 주지 않는다', async () => {
+    const withdrawn = { ...receivedAcceptedProposal, counterpart: { ...receivedAcceptedProposal.counterpart,
+      isWithdrawn: true, isEmailVerified: false, isBusinessVerified: false, profile: null, contact: null } }
+    const browse = appContainer.resolve('browsePartnerProposalsUseCase').execute as ReturnType<typeof vi.fn>
+    browse.mockImplementation(async (box) => (box === 'sent' ? sentProposalBox : { box: 'received', proposals: [withdrawn], pendingCount: 0 }))
+    renderApp('/app/proposals', companyAccount)
+    const row = await screen.findByRole('article', { name: '그린푸드랩 제안' })
+    expect(within(row).getByText('탈퇴한 기업')).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button'))
+    const detail = screen.getByRole('region', { name: '받은 제안 상세' })
+    expect(within(detail).getByText('탈퇴한 기업이라 기본정보와 연락처를 볼 수 없어요')).toBeTruthy()
+    expect(within(detail).queryByText('사업자 확인됨')).toBeNull()
+    expect(within(detail).queryByText('수락됨 · 담당자 연락처')).toBeNull()
+    expect(within(detail).queryByRole('link', { name: /@/ })).toBeNull()
+    expect(within(detail).queryByRole('button', { name: '수락' })).toBeNull()
+  })
+
   it('받은 제안함은 사이드바·제안함·모집글 상세가 같은 상자를 공유해 한 번만 조회한다', async () => {
     vi.spyOn(appContainer.resolve('getPartnerRecruitmentDetailUseCase'), 'execute')
       .mockResolvedValue({ ...partnerRecruitmentDetail, id: 104, isMine: true, proposalCount: 2 })

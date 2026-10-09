@@ -303,9 +303,10 @@ Cookie: govbiz_session=<JWT>
 | `WITHDRAWN` | 제안자가 철회 |
 | `EXPIRED` | 응답 없이 7일이 지났거나 모집글이 마감됨 |
 
-`counterpart`는 조회한 회원의 상대 기업입니다. `companyName` `isEmailVerified` `isBusinessVerified`는 항상 있고,
+`counterpart`는 조회한 회원의 상대 기업입니다. `companyName` `isEmailVerified` `isBusinessVerified` `isWithdrawn`은 항상 있고,
 `profile`(`region` `industry` `foundedYear` `homepageUrl`)은 제안자가 프로필 공유를 켰거나 제안이 수락됐을 때, `contact`(`email`
-`businessNumber`)는 수락됐을 때만 양쪽에 실립니다. 모집글 상세 응답의 `proposalCount`는 철회하지 않은 제안 수이고,
+`businessNumber`)는 수락됐을 때만 양쪽에 실립니다. 상대가 탈퇴했으면 `isWithdrawn=true`이고 제안함에는 기업명만 남으며,
+수락된 제안이어도 `profile` `contact`는 비고 그 제안의 상세 조회·응답·철회는 404입니다. 모집글 상세 응답의 `proposalCount`는 철회하지 않은 제안 수이고,
 로그인한 회원에게는 `myProposal`(`id` `status`)이 붙습니다. 같은 모집글에는 제안을 한 번만 보낼 수 있습니다
 (`uq_partner_proposal_recruitment_proposer`). 거절·만료·철회된 뒤에도 다시 보낼 수 없습니다.
 
@@ -370,8 +371,10 @@ Origin: http://127.0.0.1:5173
 ```
 
 성공은 204와 `Max-Age=0` 쿠키입니다. 한 transaction에서 내가 보낸 대기 제안 철회, 내 모집글 수동 마감(받은 제안은
-만료로 계산), 기업 행 삭제, Google 연결 삭제, 모든 세션 삭제, `deleted_at` 표시와 카카오 연결 해제 작업 저장을 합니다.
-계정 행은 모집글·제안이 참조하므로 남기되 이메일을 `deleted+<id>+<시각>@deleted.invalid`로 바꿉니다.
+만료로 계산), 기업 탈퇴 표시(협업 설정·홈페이지 삭제), Google 연결 삭제, 모든 세션 삭제, `deleted_at` 표시와 카카오 연결 해제 작업 저장을 합니다.
+계정 행은 모집글·제안이 참조하므로 남기되 이메일을 `deleted+<id>+<시각>@deleted.invalid`로 바꿉니다. 기업 행도 지우지 않고
+`company.deleted_at`만 남겨(V61) 다른 회원이 보낸 제안이 FK CASCADE로 함께 지워지지 않게 합니다. 사업자번호 UNIQUE는
+탈퇴하지 않은 기업에만 걸리므로 같은 사업자번호로 다시 가입해 등록할 수 있습니다.
 같은 이메일로 다시 가입하면 새 계정이 되고, 옛 계정으로는 로그인할 수 없습니다. 같은 카카오 계정은 외부 연결 해제 성공
 확인 전까지 identity UNIQUE를 유지해 재가입을 막습니다. 204는 로컬 탈퇴 완료이며 외부 연결 해제 완료는 아닙니다.
 커밋 뒤 DB 작업을 RabbitMQ 또는 전용 직접 worker가 처리합니다. 어드민 키 누락은 FAILED, 불명확한 결과는 UNKNOWN으로

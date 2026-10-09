@@ -75,6 +75,7 @@
             <include refid="companyColumns" />
         FROM company
         WHERE company.account_id = #{accountId}
+          AND company.deleted_at IS NULL
     </select>
 
     <update id="updateCompanyProfile">
@@ -85,10 +86,23 @@
             homepage_url = #{homepageUrl},
             updated_at = #{updatedAt}
         WHERE account_id = #{accountId}
+          AND deleted_at IS NULL
     </update>
 
-    <delete id="deleteCompanyByAccountId">
-        DELETE FROM company
-        WHERE account_id = #{accountId}
+    <!-- 협업 설정은 탈퇴 뒤 쓸 곳이 없어 지웁니다. 기업 행은 모집글·제안이 참조하므로 남깁니다. -->
+    <delete id="deletePartnerProfileByAccountId">
+        DELETE profile
+        FROM company_partner_profile profile
+        JOIN company ON company.id = profile.company_id
+        WHERE company.account_id = #{accountId}
     </delete>
+
+    <update id="softDeleteCompanyByAccountId">
+        UPDATE company
+        SET deleted_at = #{deletedAt},
+            homepage_url = NULL,
+            updated_at = #{deletedAt}
+        WHERE account_id = #{accountId}
+          AND deleted_at IS NULL
+    </update>
 </mapper>

@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 
-/** 계정에 등록된 기업을 MySQL에 저장하고 읽습니다. 한 계정은 기업 하나, 한 사업자번호는 기업 하나입니다. */
+/** 계정에 등록된 기업을 MySQL에 저장하고 읽습니다. 한 계정은 기업 하나, 한 사업자번호는 탈퇴하지 않은 기업 하나입니다. */
 @Repository
 class CompanyRepository(
     private val companyMapper: CompanyMapper,
@@ -62,10 +62,15 @@ class CompanyRepository(
         return findByAccountId(accountId)
     }
 
-    /** 계정 삭제와 함께 기업 행을 지워 사업자번호를 다시 등록할 수 있게 합니다. */
+    /**
+     * 계정 삭제와 함께 기업을 탈퇴 처리합니다. 행을 지우면 FK CASCADE로 모집글과 다른 회원이 보낸 제안까지 지워지므로
+     * 행은 남기고 deleted_at만 기록합니다. 사업자번호 UNIQUE는 탈퇴하지 않은 기업에만 걸려 같은 번호로 다시 등록할 수 있습니다.
+     */
     @Transactional
-    fun deleteByAccountId(accountId: Long): Boolean =
-        companyMapper.deleteCompanyByAccountId(accountId) == 1
+    fun softDeleteByAccountId(accountId: Long): Boolean {
+        companyMapper.deletePartnerProfileByAccountId(accountId)
+        return companyMapper.softDeleteCompanyByAccountId(accountId, LocalDateTime.now(clock)) == 1
+    }
 
     private fun CompanyDbRow.toCompany(): Company =
         Company(

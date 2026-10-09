@@ -117,7 +117,7 @@ class AccountProfileServiceTest {
 
         verify(proposalRepository).withdrawAllPendingByProposer(7L, NOW)
         verify(recruitmentRepository).closeAllByAccountId(7L, NOW)
-        verify(companyRepository).deleteByAccountId(7L)
+        verify(companyRepository).softDeleteByAccountId(7L)
         verify(accountRepository).deleteNonKakaoIdentities(7L)
         verify(accountRepository).deleteAllSessionsByAccountId(7L)
         verify(accountRepository).markDeleted(7L, NOW)
@@ -145,7 +145,7 @@ class AccountProfileServiceTest {
         stubCredential()
         assertThrows(CurrentPasswordMismatchException::class.java) { service.deleteAccount(account, "wrong-password") }
 
-        verify(companyRepository, never()).deleteByAccountId(anyLong())
+        verify(companyRepository, never()).softDeleteByAccountId(anyLong())
         verify(recruitmentRepository, never()).closeAllByAccountId(anyLong(), AccountTestHelper.anyValue())
         verify(accountRepository, never()).markDeleted(anyLong(), AccountTestHelper.anyValue())
     }

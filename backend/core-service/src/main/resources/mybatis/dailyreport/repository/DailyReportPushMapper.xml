@@ -35,7 +35,7 @@
     </select>
     <select id="dueAccounts" resultType="long">
         SELECT DISTINCT d.account_id FROM daily_report_push_device d JOIN account_session s ON s.id = d.session_id
-            JOIN account a ON a.id = d.account_id JOIN company c ON c.account_id = d.account_id
+            JOIN account a ON a.id = d.account_id JOIN company c ON c.account_id = d.account_id AND c.deleted_at IS NULL
             LEFT JOIN daily_report r ON r.account_id = d.account_id AND r.report_date = #{date}
         WHERE <include refid="active" /> AND (r.id IS NULL OR (r.status = 'FAILED' AND r.generation_attempts &lt; 2))
             AND NOT EXISTS(SELECT 1 FROM daily_report_generation_job j WHERE j.report_id = r.id AND j.status = 'UNKNOWN')
@@ -46,7 +46,7 @@
         SELECT r.id, d.device_id, d.session_id, d.expo_token, #{now}
         FROM daily_report r JOIN daily_report_push_device d ON d.account_id = r.account_id
             JOIN account_session s ON s.id = d.session_id JOIN account a ON a.id = d.account_id
-            JOIN company c ON c.account_id = d.account_id
+            JOIN company c ON c.account_id = d.account_id AND c.deleted_at IS NULL
         WHERE r.status = 'READY' AND r.report_date = #{date} AND <include refid="active" />
         ON DUPLICATE KEY UPDATE report_id = daily_report_push_delivery.report_id
     </insert>
@@ -63,14 +63,14 @@
     <update id="claim">
         UPDATE daily_report_push_delivery p JOIN daily_report_push_device d ON d.device_id = p.device_id
             JOIN account_session s ON s.id = d.session_id JOIN account a ON a.id = d.account_id
-            JOIN daily_report r ON r.id = p.report_id JOIN company c ON c.account_id = d.account_id
+            JOIN daily_report r ON r.id = p.report_id JOIN company c ON c.account_id = d.account_id AND c.deleted_at IS NULL
         SET p.status = 'SENDING', p.started_at = #{now}
         WHERE p.id = #{id} AND p.status = 'PENDING' AND <include refid="validDelivery" />
     </update>
     <select id="valid" resultType="boolean">
         SELECT EXISTS(SELECT 1 FROM daily_report_push_delivery p JOIN daily_report_push_device d ON d.device_id = p.device_id
             JOIN account_session s ON s.id = d.session_id JOIN account a ON a.id = d.account_id
-            JOIN daily_report r ON r.id = p.report_id JOIN company c ON c.account_id = d.account_id
+            JOIN daily_report r ON r.id = p.report_id JOIN company c ON c.account_id = d.account_id AND c.deleted_at IS NULL
             WHERE p.id = #{id} AND <include refid="validDelivery" />)
     </select>
     <update id="finish">

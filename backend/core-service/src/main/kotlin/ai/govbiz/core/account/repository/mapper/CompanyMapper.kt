@@ -21,5 +21,7 @@ interface CompanyMapper {
         @Param("updatedAt") updatedAt: LocalDateTime,
     ): Int
 
-    fun deleteCompanyByAccountId(@Param("accountId") accountId: Long): Int
+    fun deletePartnerProfileByAccountId(@Param("accountId") accountId: Long): Int
+
+    fun softDeleteCompanyByAccountId(@Param("accountId") accountId: Long, @Param("deletedAt") deletedAt: LocalDateTime): Int
 }

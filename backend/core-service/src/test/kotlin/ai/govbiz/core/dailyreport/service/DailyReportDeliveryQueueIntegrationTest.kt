@@ -158,7 +158,7 @@ class DailyReportDeliveryQueueIntegrationTest {
             { repository.saveSettings(it.accountId, requireNotNull(accounts.findById(it.accountId)).email, "AI", false, false) },
             { jdbc.update("UPDATE account SET suspended_at = CURRENT_TIMESTAMP(6) WHERE id = ?", it.accountId) },
             { jdbc.update("UPDATE account SET email = 'changed@delivery-queue.test' WHERE id = ?", it.accountId) },
-            { companies.deleteByAccountId(it.accountId) },
+            { companies.softDeleteByAccountId(it.accountId) },
             { jdbc.update("UPDATE account SET deleted_at = CURRENT_TIMESTAMP(6) WHERE id = ?", it.accountId) },
         )
         changes.forEachIndexed { index, change ->
