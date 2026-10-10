@@ -76,6 +76,10 @@ export const chatPageStyles = {
   messageActions: 'mt-3 flex flex-wrap items-center gap-2',
   messageRetryButton: 'min-h-10 cursor-pointer rounded-full border border-brand-primary bg-white px-4 py-2 text-xs font-semibold text-brand-primary hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
   suggestedQuestions: 'mt-[0.85rem] flex flex-wrap gap-2',
+  zeroResultHelp: 'mt-[0.85rem] flex flex-col gap-2',
+  zeroResultExplanation: 'm-0 text-sm leading-relaxed text-ink-muted [overflow-wrap:anywhere]',
+  zeroResultActions: 'flex flex-wrap gap-2',
+  zeroResultCount: 'font-semibold text-ink-muted',
   suggestedQuestionButton: classes(
     'cursor-pointer rounded-full border bg-white px-[0.78rem] py-[0.6rem] text-left text-[0.78rem]',
     'border-[#b4ddc7] text-ink-muted hover:border-brand-primary hover:bg-[#eef8f2] hover:text-[#115b3c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',

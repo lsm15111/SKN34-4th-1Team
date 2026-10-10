@@ -1,5 +1,7 @@
 package ai.govbiz.core.supportprogram.service.search
 
+import ai.govbiz.core.supportprogram.domain.SupportProgramRankingExclusions
+import ai.govbiz.core.supportprogram.facade.SupportProgramRanking
 import ai.govbiz.core.supportprogram.domain.CatalogSupportProgram
 import ai.govbiz.core.supportprogram.domain.SupportProgram
 import ai.govbiz.core.supportprogram.domain.SupportProgramCompanyConditions
@@ -131,6 +133,36 @@ class SupportProgramSearchServiceTest {
 
         assertEquals(emptyList<SupportProgram>(), result.programs)
         assertEquals(1, ranking.calls.size)
+        // 수를 알려 주지 않은 순위 매기기는 모름(null)으로 둡니다.
+        assertEquals(null, result.exclusionCounts)
+    }
+
+    @Test
+    fun carriesTheRankingExclusionCountsIntoTheSearchResult() {
+        val query = "서울 AI 창업기업이 받을 지원사업"
+        val open = catalogProgram(id = "open", summary = "AI 창업 지원")
+        Mockito.doReturn(listOf(open)).`when`(retrieval).retrieve(query, listOf(open))
+        Mockito.doReturn(listOf(open)).`when`(supportProgramRepository).findSearchablePresent()
+        ranking.exclusions = SupportProgramRankingExclusions(candidateCount = 1, lowRelevance = 0, target = 0, region = 1)
+
+        val result = service().search(query, true)
+
+        assertEquals(emptyList<SupportProgram>(), result.programs)
+        assertEquals(SupportProgramRankingExclusions(1, 0, 0, 1), result.exclusionCounts)
+    }
+
+    @Test
+    fun reportsNoCandidatesWithoutCallingRankingWhenRetrievalFindsNothing() {
+        val query = "우주 관광 지원"
+        val open = catalogProgram(id = "open", summary = "AI 창업 지원")
+        Mockito.doReturn(emptyList<CatalogSupportProgram>()).`when`(retrieval).retrieve(query, listOf(open))
+        Mockito.doReturn(listOf(open)).`when`(supportProgramRepository).findSearchablePresent()
+
+        val result = service().search(query, true)
+
+        assertEquals(emptyList<SupportProgram>(), result.programs)
+        assertEquals(SupportProgramRankingExclusions.NO_CANDIDATES, result.exclusionCounts)
+        assertEquals(0, ranking.calls.size)
     }
 
     @Test
@@ -639,6 +671,7 @@ class SupportProgramSearchServiceTest {
     private class RecordingSupportProgramRankingFacade : SupportProgramRankingFacade {
         val calls = mutableListOf<RankingCall>()
         var response: (List<CatalogSupportProgram>) -> List<SupportProgram> = { emptyList() }
+        var exclusions: SupportProgramRankingExclusions? = null
 
         override fun rank(
             query: String,
@@ -650,5 +683,13 @@ class SupportProgramSearchServiceTest {
             calls += RankingCall(query, candidates, limit, companyConditions, referenceDate)
             return response(candidates)
         }
+
+        override fun rankWithExclusions(
+            query: String,
+            candidates: List<CatalogSupportProgram>,
+            limit: Int,
+            companyConditions: SupportProgramCompanyConditions?,
+            referenceDate: LocalDate?,
+        ) = SupportProgramRanking(rank(query, candidates, limit, companyConditions, referenceDate), exclusions)
     }
 }

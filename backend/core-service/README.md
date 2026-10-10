@@ -753,6 +753,9 @@ v1을 사용하던 환경은 **새 v2 인덱스 이름으로 전환하고 재색
   (정규화 제목·기관·마감일이 모두 같고 제목 머리말 지역이 서로 다르지 않음)를 순위가 높은 한 칸으로 묶어 `alsoPostedBy`에 다른 게시물의 원문 주소를 담습니다.
   랭킹 입력 후보는 바꾸지 않고, 결과에 오르지 못한 같은 공고도 이번 검색 대상에서 찾아 붙이며, 빠진 칸은 채우지 않습니다.
   검색 결과·목록·저장 공고 응답의 `evidenceQuestionSupported`는 상세와 같은 기준(`SupportProgramEvidenceService.supportsQuestions`)입니다.
+  검색 응답의 `exclusionCounts`는 Ranking Facade의 `rankWithExclusions`가 AI Service 응답의 사유별 제외 후보 수를 보낸 후보 수와
+  맞춰 검증한 `domain/SupportProgramRankingExclusions`입니다(관련도 → 지원 대상 → 지역 순으로 한 사유만 셈). 검색어에 맞는 후보가
+  없으면 순위 매기기를 부르지 않고 모두 0, 수를 모르면 `null`이며 웹·앱의 결과 없음 안내와 조건 빼기에 씁니다.
   자연어 검색 결과의 `eligibilityReview`는 전체 상태 `MATCH`/`REVIEW_REQUIRED`, 기준 `OFFICIAL_API_TEXT`,
   대상·지역별 `status`, `explanation`, `evidence[{field,quote}]`를 추천 이유와 별도로 반환합니다.
   이는 HTML을 정리한 **공식 API 본문 기준**의 검토이며 상세 페이지 전체·첨부 PDF/HWP를 확인했다는 뜻이 아닙니다.

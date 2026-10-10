@@ -128,12 +128,26 @@ export const supportProgramDtoSchema = z.object({
   }
 })
 
+const exclusionCount = z.number().int().min(0).max(20)
+
+/** 순위 매기기 후보 수와 사유별 제외 수입니다. 뺀 후보는 보낸 후보를 넘을 수 없습니다. */
+export const supportProgramExclusionCountsDtoSchema = z.object({
+  candidateCount: exclusionCount,
+  lowRelevance: exclusionCount,
+  target: exclusionCount,
+  region: exclusionCount,
+}).refine((counts) => counts.lowRelevance + counts.target + counts.region <= counts.candidateCount, {
+  message: '추천에서 뺀 후보 수가 살펴본 후보 수를 넘을 수 없습니다.',
+})
+
 export const supportProgramSearchResponseDtoSchema = z.object({
   query: z.string(),
   programs: z.array(supportProgramDtoSchema).max(5),
   totalCount: z.number().int().min(0).max(5),
   resultToken: z.uuid().refine((value) => value === value.toLowerCase()).nullable(),
   expiresAt: z.iso.datetime().nullable(),
+  // 이 필드를 보내기 전 Core 응답도 열리도록 없으면 모름으로 받습니다.
+  exclusionCounts: supportProgramExclusionCountsDtoSchema.nullable().optional(),
 }).superRefine((response, context) => {
   const locked = response.resultToken !== null
   if (locked !== (response.expiresAt !== null)

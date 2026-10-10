@@ -12,6 +12,7 @@ import { companyConditionFields } from '../viewmodel/chatConversationProposal'
 import { ConversationProposal } from './ConversationProposal'
 import { ProgramResults } from './ProgramResults'
 import { EvidenceQuestionFeedback } from '../../support-program-detail/view/EvidenceQuestionFeedback'
+import { ZeroResultHelp } from './ZeroResultHelp'
 import { SearchIntroTitle } from './SearchIntroTitle'
 import { SearchProgress } from './SearchProgress'
 import type { ChatSearchOptions } from '../state/chatSlice'
@@ -42,6 +43,8 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
     handleRetryInterpretation,
     handleClarificationInput,
     handleQuickReply,
+    zeroResultHelp,
+    handleSearchRelaxation,
     canRetrySearch,
     cancelSearch,
     composerInputRef,
@@ -286,6 +289,9 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
                     selectGovProgram({ sourceCode: program.sourceCode, sourceProgramId: program.id, title: program.title })
                     composerInputRef.current?.focus()
                   } : undefined} />
+              ) : zeroResultHelp?.messageId === message.id ? (
+                <ZeroResultHelp explanation={zeroResultHelp.explanation} relaxations={zeroResultHelp.relaxations}
+                  disabled={isBusy} onRelax={handleSearchRelaxation} onRephrase={handleClarificationInput} />
               ) : null}
             </div>
           </article>

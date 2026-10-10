@@ -8,6 +8,10 @@ import {
 } from 'react'
 
 import {
+  supportProgramSearchRelaxations, supportProgramZeroResultExplanation, type SupportProgramSearchRelaxation,
+} from '@govbiz/shared/domain/entities/SupportProgramSearchRelaxation'
+
+import {
   supportProgramChatSuggestions,
   useSupportProgramChat,
 } from '../hooks/useSupportProgramChat'
@@ -44,6 +48,17 @@ export function useChatPageViewModel() {
   const composerInputRef = useRef<HTMLTextAreaElement>(null)
   const focusComposerAfterAction = useRef(false)
   const latestMessage = chat.messages.at(-1)
+  // 결과가 없던 마지막 검색에만 다시 찾기 도움을 둡니다. 수는 그 결과 메시지에 남긴 서버 값을 씁니다.
+  const latestResult = useMemo(() => chat.messages.findLast((message) => message.role === 'assistant' && message.programs !== undefined),
+    [chat.messages])
+  const zeroResultHelp = useMemo(() => {
+    if (!chat.lastSearch || chat.lastSearch.resultCount !== 0 || !latestResult || latestResult.programs?.length) return null
+    return {
+      messageId: latestResult.id,
+      explanation: supportProgramZeroResultExplanation(latestResult.exclusionCounts),
+      relaxations: supportProgramSearchRelaxations(chat.lastSearch.context, latestResult.exclusionCounts),
+    }
+  }, [chat.lastSearch, latestResult])
   const previousTimelineState = useRef({
     isInitial: true,
     latestMessageId: latestMessage?.id,
@@ -156,6 +171,11 @@ export function useChatPageViewModel() {
     composerInputRef.current?.focus()
   }
 
+  function handleSearchRelaxation(relaxation: SupportProgramSearchRelaxation) {
+    if (chat.isBusy) return
+    chat.proposeSearchRelaxation(relaxation.kind, relaxation.label)
+  }
+
   function handleQuickReply(reply: string) {
     void chat.submitQuickReply(reply)
   }
@@ -206,6 +226,8 @@ export function useChatPageViewModel() {
     handleRetryInterpretation,
     handleClarificationInput,
     handleQuickReply,
+    zeroResultHelp,
+    handleSearchRelaxation,
     searchOptions: chat.searchOptions,
     canSearch: readiness.canSearch,
     canRetrySearch: readiness.canSearch && chat.canRetrySearch && !searchLimitMessage,

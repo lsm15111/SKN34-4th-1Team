@@ -3,6 +3,7 @@ import type { GovAgentProgram } from '@govbiz/shared/domain/entities/GovAgent'
 import { GovAgentApiError } from '@govbiz/shared/data/api/govAgentApi'
 import { supportProgramClient } from '../../../../data/api/supportProgramClient'
 
+import type { SupportProgramSearchRelaxationKind } from '@govbiz/shared/domain/entities/SupportProgramSearchRelaxation'
 import { appContainer } from '../../../../app/appContainer'
 import { useAppDispatch, useAppSelector } from '../../../../app/hooks'
 import type { AppDispatch, AppThunkExtra, RootState } from '../../../../app/store'
@@ -35,6 +36,7 @@ import {
   maximumSupportProgramSearchQueryLength,
   searchCancelled,
   searchFailed,
+  searchRelaxationProposed,
   searchStarted,
   searchSucceeded,
   searchTimedOut,
@@ -89,6 +91,7 @@ export function useSupportProgramChat(
   const searchOptions = useAppSelector((state) => state.chat.searchOptions)
   const interpretation = useAppSelector((state) => state.chat.interpretation)
   const pendingClarification = useAppSelector((state) => state.chat.pendingClarification)
+  const lastSearch = useAppSelector((state) => state.chat.lastSearch)
   const conversationQuery = useAppSelector((state) => state.chat.conversationQuery)
   const confirmedContext: SupportProgramConversationContext = {
     query: conversationQuery, acceptingOnly: searchOptions.acceptingOnly,
@@ -215,6 +218,8 @@ export function useSupportProgramChat(
           totalCount: searchResult.totalCount,
           resultToken: searchResult.resultToken,
           expiresAt: searchResult.expiresAt,
+          // 결과가 없을 때의 사유·조건 빼기에 쓰는 서버 값입니다. 로그인 뒤 복원한 결과에는 없습니다.
+          exclusionCounts: searchResult.exclusionCounts ?? null,
           requestId,
         })
         dispatchAction(searchSucceededAction)
@@ -353,6 +358,11 @@ export function useSupportProgramChat(
     })
   }
 
+  /** 결과가 없던 검색에서 고른 조건만 뺀 확인 카드를 만듭니다. AI를 부르지 않고 검색도 하지 않습니다. */
+  function proposeSearchRelaxation(kind: SupportProgramSearchRelaxationKind, label: string) {
+    dispatchToStore(searchRelaxationProposed(kind, label))
+  }
+
   function retrySearch() {
     return dispatchToStore((_dispatch: AppDispatch, getState: () => RootState): Promise<void> => {
       const state = getState().chat
@@ -369,6 +379,7 @@ export function useSupportProgramChat(
     confirmedContext,
     interpretation,
     pendingClarification,
+    lastSearch,
     conversationQuery,
     isInterpreting,
     isBusy: isSearching || isInterpreting,
@@ -391,6 +402,7 @@ export function useSupportProgramChat(
     startNewConversation,
     submitMessage,
     submitQuickReply,
+    proposeSearchRelaxation,
     updateDraft,
   }
 }

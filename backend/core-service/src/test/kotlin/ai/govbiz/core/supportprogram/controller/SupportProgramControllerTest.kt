@@ -202,6 +202,21 @@ class SupportProgramControllerTest {
             .andExpect(jsonPath("$.programs").isEmpty())
     }
 
+    @Test
+    fun reportsZeroCandidatesWhenTheSearchFindsNoRelatedProgram() {
+        val programs = listOf(catalogProgram())
+        Mockito.doReturn(programs).`when`(supportProgramRepository).findSearchablePresent()
+        Mockito.doReturn(emptyList<CatalogSupportProgram>()).`when`(retrieval).retrieve("우주 관광", programs)
+
+        mockMvc.perform(get(PATH).queryParam("query", "우주 관광"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.programs").isEmpty())
+            .andExpect(jsonPath("$.exclusionCounts.candidateCount").value(0))
+            .andExpect(jsonPath("$.exclusionCounts.lowRelevance").value(0))
+            .andExpect(jsonPath("$.exclusionCounts.target").value(0))
+            .andExpect(jsonPath("$.exclusionCounts.region").value(0))
+    }
+
     @ParameterizedTest
     @ValueSource(strings = ["서울\u0000AI", "서울\u200BAI", "서울\uE000AI", "서울\uD800AI"])
     fun rejectsUnreadableSearchQueriesBeforeCallingTheDatabaseOrAi(query: String) {
