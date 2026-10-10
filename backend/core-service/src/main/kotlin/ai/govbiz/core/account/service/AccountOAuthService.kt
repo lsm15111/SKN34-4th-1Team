@@ -8,6 +8,7 @@ import ai.govbiz.core.account.domain.Account
 import ai.govbiz.core.account.domain.NewAccount
 import ai.govbiz.core.account.domain.OAuthProfile
 import ai.govbiz.core.account.domain.OAuthProvider
+import ai.govbiz.core.account.domain.WithdrawnIdentity
 import ai.govbiz.core.account.helper.OAuthStateCookieHelper
 import ai.govbiz.core.account.helper.OneTimeTokenHelper
 import ai.govbiz.core.account.helper.normalizeEmail
@@ -27,6 +28,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 카카오·Google 계정으로 가입하고 로그인합니다(OAuth 2.0 인가 코드 흐름 + OpenID Connect).
@@ -45,8 +48,10 @@ class AccountOAuthService(
     private val sessionService: AccountSessionService,
     private val attemptGuard: AccountLoginAttemptGuard,
     @param:Qualifier("seoulClock") private val clock: Clock,
+    private val withdrawalMarks: WithdrawalMarkService,
+    transactionManager: PlatformTransactionManager,
 ) {
-
+    private val transactions = TransactionTemplate(transactionManager)
     private val log = LoggerFactory.getLogger(javaClass)
 
     /** 로그인 화면의 버튼 순서입니다. */
@@ -145,12 +150,17 @@ class AccountOAuthService(
         val now = LocalDateTime.now(clock)
         return try {
             Resolution.Found(
-                repository.createAccountWithOAuthIdentity(
-                    // 약관 동의는 가입 화면 안내로 갈음하고 가입 시각을 기록합니다. 이메일은 공급자가 인증했습니다.
-                    NewAccount(email = email, passwordHash = null, termsAgreedAt = now, emailVerifiedAt = now),
-                    profile.provider,
-                    profile.subject,
-                ),
+                // 같은 이메일·소셜 계정으로 1년 안에 탈퇴한 계정이 있으면 체험 이력과 이번 하루·달 사용량을 같은 transaction에서 이어받습니다.
+                requireNotNull(transactions.execute { _ ->
+                    repository.createAccountWithOAuthIdentity(
+                        // 약관 동의는 가입 화면 안내로 갈음하고 가입 시각을 기록합니다. 이메일은 공급자가 인증했습니다.
+                        NewAccount(email = email, passwordHash = null, termsAgreedAt = now, emailVerifiedAt = now),
+                        profile.provider,
+                        profile.subject,
+                    ).also {
+                        withdrawalMarks.inherit(it.id, listOf(WithdrawnIdentity.email(email), WithdrawnIdentity.oauth(profile.provider, profile.subject)))
+                    }
+                }),
             )
         } catch (_: DuplicateKeyException) {
             // 같은 공급자 계정의 동시 콜백이면 먼저 만든 계정을 쓰고, 같은 이메일의 동시 가입이면 연결하지 않습니다.

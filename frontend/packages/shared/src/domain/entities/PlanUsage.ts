@@ -41,6 +41,12 @@ export const planLabels: Record<PlanCode, string> = { FREE: '무료', PLUS: '플
 /** 출시 전 무료 체험 기간입니다. Core `PlanTrial.DAYS`와 같습니다. */
 export const PLAN_TRIAL_DAYS = 14
 
+/**
+ * 탈퇴 전에 알리는 재가입 안내입니다. Core는 탈퇴할 때 이메일·소셜 계정·사업자등록번호를 되돌릴 수 없는 값으로 1년(`WithdrawnIdentity.RETENTION_DAYS`)
+ * 보관하고, 같은 값으로 다시 가입하거나 기업을 등록하면 쓴 체험과 오늘·이번 달 이용량을 새 계정에 이어 적용합니다.
+ */
+export const withdrawalCarryOverNotice = '탈퇴 후 1년 안에 같은 이메일·소셜 계정·사업자등록번호로 다시 가입하면 이미 쓴 무료 체험과 오늘·이번 달 이용량이 이어져요.'
+
 /** 지금 요금제 이름입니다. 체험 중이면 "플러스 체험"처럼 적습니다. 로그인 전이면 null입니다. */
 export function planNameText(usage: Pick<PlanUsage, 'plan' | 'planSource'>): string | null {
   if (usage.plan === null) return null

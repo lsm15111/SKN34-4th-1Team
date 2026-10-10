@@ -7,6 +7,7 @@ import ai.govbiz.core.account.helper.SessionTokenHelper
 import ai.govbiz.core.account.repository.AccountRepository
 import ai.govbiz.core.account.repository.CompanyRepository
 import ai.govbiz.core.account.domain.OAuthProvider
+import ai.govbiz.core.account.domain.WithdrawnIdentity
 import ai.govbiz.core.account.repository.AccountOAuthUnlinkRepository
 import ai.govbiz.core.account.service.dto.AccountDeletedEvent
 import ai.govbiz.core.account.service.dto.AccountDeletionPreview
@@ -38,6 +39,7 @@ class AccountProfileService(
     private val unlinkRepository: AccountOAuthUnlinkRepository,
     private val eventPublisher: ApplicationEventPublisher,
     @param:Qualifier("seoulClock") private val clock: Clock,
+    private val withdrawalMarks: WithdrawalMarkService,
 ) {
 
     /** 새 비밀번호를 저장하고 지금 쓰는 세션만 남긴 채 다른 기기의 세션을 끝냅니다. 본인 확인은 세션이 맡고 현재 비밀번호는 다시 묻지 않습니다. */
@@ -72,6 +74,9 @@ class AccountProfileService(
         if (account.isAdmin && accountRepository.countActiveAdmins() <= 1) throw LastAdminDeletionException()
         val now = LocalDateTime.now(clock)
         val oauthLinks = accountRepository.findOAuthLinks(account.id)
+        // 이메일·소셜 연결·사업자등록번호를 지우기 전에 재가입 남용 방지용 표식(HMAC)으로 남깁니다.
+        val businessNumber = companyRepository.findByAccountId(account.id)?.businessNumber
+        withdrawalMarks.record(account.id, WithdrawnIdentity.of(account.email, oauthLinks, businessNumber), now)
 
         proposalRepository.withdrawAllPendingByProposer(account.id, now)
         recruitmentRepository.closeAllByAccountId(account.id, now)

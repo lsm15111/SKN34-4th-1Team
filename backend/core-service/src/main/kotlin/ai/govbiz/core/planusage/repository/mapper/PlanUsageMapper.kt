@@ -36,6 +36,9 @@ data class PlanUsageDraftProgramDbRow(
 interface PlanUsageMapper {
     fun findPlan(@Param("accountId") accountId: Long): AccountPlanDbRow?
 
+    /** 탈퇴 계정의 체험 기록을 새 계정에 복사합니다. 새 계정에 이미 있는 요금제는 그대로 둡니다. */
+    fun copyTrials(@Param("fromAccountId") fromAccountId: Long, @Param("toAccountId") toAccountId: Long): Int
+
     /** 이 계정이 체험을 시작한 적 있는 요금제 코드입니다. */
     fun findTrialPlanCodes(@Param("accountId") accountId: Long): List<String>
 

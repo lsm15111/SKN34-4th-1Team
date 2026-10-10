@@ -451,7 +451,10 @@ V59 `account_plan.ends_at`이 지나면 FREE 기준으로 돌아갑니다. 사�
 공고를 V58 `plan_usage_draft_program`에 기록하고, 실패하면 그 기록만 지웁니다. 화면은 `GET /api/v1/plan-usage`로 남은 횟수와
 이용권이 끝나는 때를 읽습니다. 출시 전 무료 체험은 `PlanTrialController → PlanUsageService.startTrial → PlanUsageRepository → MyBatis → MySQL`
 순서로 계정 행을 잠근 짧은 transaction에서 V60 `plan_trial`에 (계정, 요금제)마다 한 번 기록하고 `account_plan`에 `source = TRIAL`인
-14일 이용권을 배정합니다. 결제 수단을 받지 않아 끝나면 무료로 돌아갑니다.
+14일 이용권을 배정합니다. 결제 수단을 받지 않아 끝나면 무료로 돌아갑니다. 탈퇴는 같은 transaction에서
+`AccountProfileService → WithdrawalMarkService → WithdrawalMarkRepository → MyBatis → MySQL(V62)`로 이메일·소셜 연결·사업자등록번호의 HMAC을
+1년 남기고, 이메일·소셜 가입과 기업 등록은 계정·기업을 만드는 transaction에서 맞는 표식을 잠가 `PlanUsageService.inherit`로 탈퇴 계정의
+체험 기록과 무료 기준 오늘·이번 달 사용량을 새 계정에 한 번 이어 적용합니다. 사업자등록번호 조회 같은 외부 호출은 그 transaction 밖에서 끝냅니다.
 [한도·세는 규칙·판단 근거](plan-usage-limits.md)를 참고하세요.
 
 ## 검색·상세 조회·원문 근거 질문

@@ -1,3 +1,4 @@
+import { withdrawalCarryOverNotice } from '@govbiz/shared/domain/entities/PlanUsage'
 import { workspacePageStyles } from '../../../shared/workspace/WorkspacePage.styles'
 import { WorkspaceModal } from '../../../shared/workspace/WorkspaceModal'
 import { workspaceModalStyles } from '../../../shared/workspace/WorkspaceModal.styles'
@@ -113,6 +114,8 @@ export function DeleteAccountModal({ vm, email }: { vm: SecurityViewModel['delet
           {vm.preview.status === 'failed' ? <p className="m-0 mt-1 text-ink-muted">건수는 지금 확인하지 못했습니다.</p> : null}
         </div>
         */}
+
+        <p className={workspaceModalStyles.hint}>{withdrawalCarryOverNotice}</p>
 
         {/* 소셜 로그인으로만 가입한 계정은 비밀번호가 없어 확인 칸 없이 삭제합니다. */}
         {vm.requiresPassword ? (
