@@ -10,6 +10,7 @@ import { completeSearchResult } from '../../../../data/fixtures/supportProgramSe
 import { emptyConversationContext, readyConversationProposal } from '../../../../data/fixtures/supportProgramConversation'
 import { chatConversationSnapshotSchema } from '../../../../data/models/ChatConversationDto'
 import type { GovAgentResult } from '@govbiz/shared/domain/entities/GovAgent'
+import type { Company } from '../../../../domain/entities/Company'
 import { signedIn, signedOut } from '../../../shared/auth/state/authSlice'
 import { conversationHistoryOpened, createChatConversationSnapshot } from '../state/chatSlice'
 import { useSupportProgramChat } from './useSupportProgramChat'
@@ -22,17 +23,18 @@ const proposal = readyConversationProposal({ ...emptyConversationContext, query:
 const evidence = { answer: '온라인으로 신청하세요.', answerStatus: 'ANSWERED' as const,
   citations: [{ excerpt: '온라인 신청', sourceUrl: supportPrograms[0].sourceUrl, sourceLabel: '기업마당 상세 본문', chunkOrder: 0 }] }
 
-function setup(admin = true) {
+function setup(admin = true, company: Company | null = null) {
   const store = createAppStore()
-  store.dispatch(signedIn(admin ? account : { ...account, role: 'USER', tier: 'MEMBER' }))
+  store.dispatch(signedIn(admin ? { ...account, company } : { ...account, role: 'USER', tier: 'MEMBER' }))
   const search = vi.fn().mockResolvedValue(completeSearchResult({ query: 'AI 사업', programs: [supportPrograms[0]] }))
   const interpret = vi.fn().mockResolvedValue(proposal)
   const gov = vi.spyOn(supportProgramClient, 'sendGovAgentMessage').mockResolvedValue({ outcome: 'SEARCH', interpretation: proposal })
+  const loadCompany = vi.fn().mockResolvedValue(company)
   const StoreProvider = Provider as unknown as ComponentType<PropsWithChildren<{ store: typeof store }>>
-  const hook = renderHook(() => useSupportProgramChat({ execute: search }, { execute: interpret }), {
+  const hook = renderHook(() => useSupportProgramChat({ execute: search }, { execute: interpret }, undefined, { execute: loadCompany }), {
     wrapper: ({ children }: PropsWithChildren) => createElement(StoreProvider, { store }, children),
   })
-  return { ...hook, store, search, interpret, gov }
+  return { ...hook, store, search, interpret, gov, loadCompany }
 }
 
 async function searchAndSelect(hook: ReturnType<typeof setup>) {
@@ -44,6 +46,67 @@ async function searchAndSelect(hook: ReturnType<typeof setup>) {
 }
 
 describe('관리자 Gov 에이전트 대화', () => {
+  it('preserves a new application message while loading company defaults without inventing search context or a program', async () => {
+    const company: Company = {
+      businessNumber: '1208734519', companyName: '테스트 기업', businessStatus: '계속사업자', businessStatusCode: '01',
+      region: '서울특별시', industry: '정보통신업', foundedYear: 2021, homepageUrl: null,
+      businessVerifiedAt: '2026-09-01T00:00:00', updatedAt: '2026-09-01T00:00:00',
+    }
+    const hook = setup(true, company)
+    hook.gov.mockResolvedValue({ outcome: 'NEEDS_PROGRAM', message: '공고를 선택해 주세요.' })
+    const message = '신청서 작성을 준비하고 싶어요'
+    act(() => hook.result.current.updateDraft(message))
+    await act(async () => hook.result.current.submitMessage())
+    expect(hook.gov).toHaveBeenCalledOnce()
+    expect(hook.gov.mock.calls[0][0]).toEqual({
+      conversation: { message, context: { ...emptyConversationContext, companyConditions: {
+        region: company.region, industry: company.industry, foundedYear: company.foundedYear,
+        establishedOn: null, supportPurpose: null,
+      } }, pendingClarification: null },
+      selectedProgram: null,
+    })
+    expect(hook.loadCompany).toHaveBeenCalledOnce()
+    expect(hook.interpret).not.toHaveBeenCalled()
+    expect(hook.search).not.toHaveBeenCalled()
+  })
+
+  it('preserves restored search context and selection for the current application message, then clears them for a new conversation', async () => {
+    const hook = setup()
+    await searchAndSelect(hook)
+    const question = '검색할 지역을 하나로 정해 알려 주세요.'
+    hook.gov.mockResolvedValue({ outcome: 'SEARCH', interpretation: {
+      status: 'CLARIFICATION_REQUIRED', proposedContext: proposal.proposedContext,
+      clarificationQuestion: question, answer: null, changedFields: [],
+    } })
+    act(() => hook.result.current.updateDraft('지역 조건을 바꾸고 싶어요'))
+    await act(async () => hook.result.current.submitMessage())
+    const snapshot = chatConversationSnapshotSchema.parse(createChatConversationSnapshot(hook.store.getState().chat))
+    const previousCalls = hook.gov.mock.calls.length
+    act(() => hook.result.current.startNewConversation())
+    act(() => hook.store.dispatch(conversationHistoryOpened({ accountEmail: account.email, snapshot })))
+    expect(hook.gov).toHaveBeenCalledTimes(previousCalls)
+    const message = '신청서 작성을 준비하고 싶어요'
+    hook.gov.mockResolvedValue({ outcome: 'APPLICATION', program, message: '신청 준비를 시작해 주세요.' })
+    act(() => hook.result.current.updateDraft(message))
+    await act(async () => hook.result.current.submitMessage())
+    expect(hook.gov.mock.calls.at(-1)?.[0]).toEqual({
+      conversation: { message, context: proposal.proposedContext,
+        pendingClarification: { question, draftContext: proposal.proposedContext }, lastSearch: snapshot.lastSearch },
+      selectedProgram: { sourceCode: program.sourceCode, sourceProgramId: program.sourceProgramId },
+    })
+    expect(hook.interpret).not.toHaveBeenCalled()
+    expect(hook.search).toHaveBeenCalledOnce()
+    expect(hook.loadCompany).not.toHaveBeenCalled()
+    act(() => hook.result.current.startNewConversation())
+    hook.gov.mockResolvedValue({ outcome: 'NEEDS_PROGRAM', message: '공고를 선택해 주세요.' })
+    act(() => hook.result.current.updateDraft(message))
+    await act(async () => hook.result.current.submitMessage())
+    expect(hook.gov.mock.calls.at(-1)?.[0]).toEqual({
+      conversation: { message, context: emptyConversationContext, pendingClarification: null }, selectedProgram: null,
+    })
+    expect(hook.search).toHaveBeenCalledOnce()
+  })
+
   it('searches only after confirmation, then asks evidence in the same saved conversation', async () => {
     const hook = setup()
     await searchAndSelect(hook)
