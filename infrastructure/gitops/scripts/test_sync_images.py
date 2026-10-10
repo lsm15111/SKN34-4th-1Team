@@ -403,7 +403,7 @@ class WorkflowContractTests(unittest.TestCase):
                 else:
                     names.append(name)
             with self.subTest(workflow=filename):
-                self.assertCountEqual(names, required)
+                self.assertCountEqual(names, (*required, gate.SCOPE_NAMES[filename]))
 
     def test_results_always_run_read_only_and_selection_controls_writes(self):
         for filename, dependencies in (("msa-images.yml", ["gate", "package-preflight", "publish"]),):

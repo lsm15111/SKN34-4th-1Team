@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import quote
 
-from ci_policy import WORKFLOWS
+from ci_policy import SCOPE_NAMES, WORKFLOW_JOBS, WORKFLOWS, plan
 from repository import from_ci, validate_branch
 
 # Merge protection and publication share the mandatory names, including summaries.
@@ -145,15 +145,29 @@ def ci_blocked_reason(sha, fork, get=api, *, evidence=None):
         jobs_response = get(f"repos/{fork.repository}/actions/runs/{run['id']}/jobs"
                             "?filter=latest&per_page=100")
         jobs = jobs_response.get("jobs", [])
-        # Current workflows have at most seven jobs. Reject incomplete/paginated results
-        # instead of treating the first page or a successful gate-only run as complete CI.
+        # Keep existing check names, but require scope evidence before allowing an
+        # unaffected job to be skipped. Legacy all-success runs remain valid.
+        scoped = isinstance(jobs, list) and any(
+            isinstance(job, dict) and job.get("name") == SCOPE_NAMES[filename] for job in jobs)
+        expected_names = set(required_jobs) | ({SCOPE_NAMES[filename]} if scoped else set())
+        selected_names = set(required_jobs)
+        if scoped and any(isinstance(job, dict) and job.get("conclusion") == "skipped" for job in jobs):
+            scope = plan(filename, fork.repository, fork.branch, sha, run["id"], get)
+            selected_names = {name for identity in scope["selected"]
+                              for name in WORKFLOW_JOBS[filename][identity]}
+            selected_names.add(required_jobs[-1])  # the always-running summary
+        selected_names.add(SCOPE_NAMES[filename])
+        # Reject missing/extra jobs and incomplete pagination. A successful summary
+        # alone never excuses a skipped job selected by the independent release check.
         if (not isinstance(jobs, list)
                 or type(jobs_response.get("total_count")) is not int
                 or jobs_response["total_count"] != len(jobs)
-                or len(jobs) != len(required_jobs)
+                or len(jobs) != len(expected_names)
                 or any(not isinstance(job, dict) for job in jobs)
-                or {job.get("name") for job in jobs} != set(required_jobs)
-                or any(job.get("status") != "completed" or job.get("conclusion") != "success"
+                or {job.get("name") for job in jobs} != expected_names
+                or any(job.get("status") != "completed"
+                       or not (job.get("conclusion") == "success"
+                               or scoped and job.get("conclusion") == "skipped" and job.get("name") not in selected_names)
                        or job.get("head_sha") != sha or job.get("run_id") != run["id"]
                        for job in jobs)):
             return "ci_jobs_not_successful_or_incomplete:" + filename

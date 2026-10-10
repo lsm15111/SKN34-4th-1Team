@@ -111,6 +111,51 @@ class ReleaseGateTests(unittest.TestCase):
                         {"run_attempt": 2, "conclusion": "failure"}):
             self.assertFalse(gate.eligible(SHA, FORK, self.responses([run_record(), run_record(**changes)])))
 
+    def scoped_responses(self, paths, *, scope_state="success", summary_state="success", prior_state="success"):
+        filename = "llmops-ci.yml"
+        def scoped_jobs(response):
+            response["jobs"][0]["conclusion"] = "skipped"
+            response["jobs"][-1]["conclusion"] = summary_state
+            response["jobs"].append({**response["jobs"][-1],
+                                     "name": gate.SCOPE_NAMES[filename], "conclusion": scope_state})
+            response["total_count"] += 1
+            return response
+        original = self.responses(jobs={filename: scoped_jobs})
+        baseline = run_record(filename, id=1, head_sha=TREE, conclusion=prior_state)
+        def get(path):
+            if f"workflows/{filename}/runs?branch=" in path:
+                return {"workflow_runs": [run_record(filename), baseline]}
+            if "/compare/" in path:
+                return {"status": "ahead", "base_commit": {"sha": TREE},
+                        "merge_base_commit": {"sha": TREE},
+                        "files": [{"filename": name, "status": "modified"} for name in paths]}
+            if "/runs/1/jobs?" in path:
+                jobs = [{"name": name, "run_id": 1, "head_sha": TREE,
+                         "status": "completed", "conclusion": "success"}
+                        for name in gate.WORKFLOWS[filename]]
+                return {"total_count": len(jobs), "jobs": jobs}
+            if path.endswith("/runs/1"):
+                return baseline
+            return original(path)
+        return get
+
+    def test_scope_proven_unaffected_llmops_skip_can_publish_current_sha(self):
+        self.assertTrue(gate.eligible(SHA, FORK, self.scoped_responses([
+            "backend/ai-service/app/gov_agent/agent.py",
+            "frontend/web/src/presentation/features/chat/hooks/useGovAgentChat.test.tsx"])))
+
+    def test_successful_scope_and_summary_do_not_excuse_skipped_required_work(self):
+        self.assertFalse(gate.eligible(SHA, FORK, self.scoped_responses([
+            "backend/ops-service/apps/evaluations/execution_spec.py"])))
+        self.assertFalse(gate.eligible(SHA, FORK, self.scoped_responses(["README.md"], prior_state="failure")))
+
+    def test_scope_and_summary_must_succeed_even_for_unaffected_work(self):
+        for field in ("scope_state", "summary_state"):
+            for state in ("skipped", "failure", "cancelled"):
+                with self.subTest(field=field, state=state):
+                    self.assertFalse(gate.eligible(SHA, FORK, self.scoped_responses(
+                        ["README.md"], **{field: state})))
+
     def test_superseded_sha_is_rejected_before_workflow_queries(self):
         queries = []
         def get(path):

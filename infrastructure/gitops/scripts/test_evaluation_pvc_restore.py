@@ -1012,7 +1012,7 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(len(checks), 1)
         self.assertNotIn("if", checks[0])
         self.assertNotIn("continue-on-error", checks[0])
-        self.assertEqual(workflow["jobs"]["merge-readiness"]["needs"], ["integration"])
+        self.assertEqual(workflow["jobs"]["merge-readiness"]["needs"], ["changes", "integration"])
 
     def test_only_store_data_and_db_verified_links_reach_kubernetes(self):
         events = []

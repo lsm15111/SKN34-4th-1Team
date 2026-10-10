@@ -187,16 +187,18 @@ class WorkflowPolicyTests(unittest.TestCase):
                     (ROOT / ".github/workflows" / filename).read_text(),
                     Loader=yaml.BaseLoader,
                 )
-                self.assertEqual(set(workflow["on"]), {"push", "pull_request"})
+                self.assertEqual(
+                    set(workflow["on"]), {"push", "pull_request", "workflow_dispatch"}
+                )
                 self.assertTrue(
                     all(value in (None, "", {}) for value in workflow["on"].values())
                 )
                 jobs = workflow["jobs"]
-                self.assertEqual(set(jobs), {*expected, "merge-readiness"})
+                self.assertEqual(set(jobs), {*expected, "changes", "merge-readiness"})
                 summary = jobs["merge-readiness"]
                 self.assertEqual(summary["if"], "${{ always() }}")
                 self.assertEqual(summary["name"], SUMMARY_NAMES[filename])
-                self.assertEqual(set(summary["needs"]), set(expected))
+                self.assertEqual(set(summary["needs"]), {*expected, "changes"})
                 self.assertNotIn("continue-on-error", summary)
                 self.assertEqual(summary["defaults"]["run"]["working-directory"], ".")
                 step = summary["steps"][-1]
@@ -219,6 +221,71 @@ class WorkflowPolicyTests(unittest.TestCase):
                         names.append(name)
                     self.assertNotIn("continue-on-error", job)
                 self.assertEqual(tuple(names) + (summary["name"],), WORKFLOWS[filename])
+
+    def test_scope_planner_is_read_only_and_exposes_selection_to_existing_jobs(self):
+        names = {
+            "ci.yml": "GovBiz",
+            "catalog-ci.yml": "Catalog",
+            "ops-ci.yml": "Ops",
+            "infra-ci.yml": "Infra",
+            "llmops-ci.yml": "LLMOps",
+        }
+        # Keep the existing execution prerequisites as well as the scope job.
+        prerequisites = {
+            ("ci.yml", "container-integration"): {"frontend", "core-service", "ai-service"},
+            ("catalog-ci.yml", "catalog-integration"): {"catalog-service"},
+            ("ops-ci.yml", "docker"): {"checks"},
+        }
+        for filename, expected in WORKFLOW_JOBS.items():
+            with self.subTest(filename=filename):
+                workflow = yaml.load(
+                    (ROOT / ".github/workflows" / filename).read_text(),
+                    Loader=yaml.BaseLoader,
+                )
+                self.assertEqual(
+                    workflow["permissions"], {"contents": "read", "actions": "read"}
+                )
+                jobs = workflow["jobs"]
+                planner = jobs["changes"]
+                self.assertEqual(planner["name"], "CI scope / " + names[filename])
+                self.assertEqual(planner["runs-on"], "ubuntu-24.04")
+                self.assertEqual(planner["timeout-minutes"], "5")
+                self.assertEqual(planner["defaults"]["run"]["working-directory"], ".")
+                self.assertEqual(
+                    planner["outputs"], {"selected": "${{ steps.scope.outputs.selected }}"}
+                )
+                self.assertNotIn("if", planner)
+                self.assertNotIn("needs", planner)
+                self.assertNotIn("continue-on-error", planner)
+                checkout, plan = planner["steps"]
+                self.assertEqual(
+                    checkout["uses"],
+                    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                )
+                self.assertEqual(checkout["with"], {"persist-credentials": "false"})
+                self.assertEqual(plan["id"], "scope")
+                self.assertEqual(plan["env"], {"GH_TOKEN": "${{ github.token }}"})
+                self.assertEqual(
+                    plan["run"],
+                    f"python3 -B infrastructure/release/ci_policy.py --plan {filename}",
+                )
+                self.assertNotIn("continue-on-error", plan)
+                for identity in expected:
+                    with self.subTest(job=identity):
+                        job = jobs[identity]
+                        needs = job["needs"]
+                        if isinstance(needs, str):
+                            needs = [needs]
+                        self.assertEqual(
+                            set(needs),
+                            {"changes"} | prerequisites.get((filename, identity), set()),
+                        )
+                        self.assertEqual(
+                            job["if"],
+                            "${{ contains(fromJSON(needs.changes.outputs.selected), '"
+                            + identity
+                            + "') }}",
+                        )
 
 
 if __name__ == "__main__":

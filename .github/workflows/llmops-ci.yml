@@ -1,14 +1,16 @@
 name: LLMOps CI
 
 on:
-  # Every push starts exact-SHA validation, including docs-only/empty commits.
+  # Every push checks exact-SHA validation scope, including docs-only/empty commits.
   # A newer run of the same ref may cancel its superseded validation.
   # Publication separately restricts the default branch, upstream merge and fork opt-in.
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 # Fixtures belong to each GitHub-hosted job, never to the personal cluster.
 concurrency:
@@ -16,7 +18,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: CI scope / LLMOps
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      selected: ${{ steps.scope.outputs.selected }}
+    steps:
+      - name: Check out CI policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select required validation from verified changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B infrastructure/release/ci_policy.py --plan llmops-ci.yml
+
   integration:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'integration') }}
     name: Saved capture pipeline with local servers
     runs-on: ubuntu-24.04
     # Retain Core tracing and the expanded Kubernetes evaluation/restart checks.
@@ -361,7 +385,7 @@ jobs:
   merge-readiness:
     name: Required CI / LLMOps
     if: ${{ always() }}
-    needs: [integration]
+    needs: [changes, integration]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:
