@@ -1028,7 +1028,7 @@
     {
       "id": "S033",
       "categories": ["establishment"],
-      "tags": ["style:numeric", "known-weak:dotted-date", "v2-gap:date-format"],
+      "tags": ["style:numeric", "known-weak:dotted-date"],
       "request": {
         "schemaVersion": "govbiz-support-program-conversation-v1",
         "referenceDate": "2026-10-08",
@@ -1043,23 +1043,13 @@
         "lastSearch": null
       },
       "route": "pipeline",
-      "routeAlternatives": ["clarify"],
       "expected": {
         "status": "READY",
-        "updates": [{"field": "FOUNDED_YEAR", "operation": "SET", "value": "2021", "evidence": "2021"}],
+        "updates": [{"field": "ESTABLISHED_ON", "operation": "SET", "value": "2021-03-15", "evidence": "2021.3.15"}],
         "answerKind": null,
         "clarificationKind": null
       },
-      "alternatives": [
-        {
-          "status": "CLARIFICATION_REQUIRED",
-          "updates": [],
-          "answerKind": null,
-          "clarificationKind": ["ESTABLISHMENT"]
-        }
-      ],
-      "mustNot": [{"type": "unchanged", "field": "ESTABLISHED_ON"}],
-      "rationale": "점 표기 날짜는 설립일 인용 형식이 아니다. 연도만 인용해 설립연도로 두거나 형식을 다시 묻는다."
+      "rationale": "한글 맞춤법 문장 부호 규정의 숫자 날짜(2021.3.15.)는 완전한 날짜이므로 정규화해 설립일로 둔다."
     },
     {
       "id": "S034",
@@ -7204,7 +7194,7 @@
     },
     {
       "id": "M07",
-      "title": "두 자리 연도·점 날짜·ISO 날짜 순서로 설립 정보 정정",
+      "title": "두 자리 연도·점 날짜·ISO 날짜 순서로 설립 정보 확인",
       "tags": ["style:numeric"],
       "userGoal": {
         "persona": "부산 수출 기업 실무자",
@@ -7249,7 +7239,7 @@
         {
           "turn": 2,
           "categories": ["establishment"],
-          "tags": ["known-weak:dotted-date", "v2-gap:date-format"],
+          "tags": ["known-weak:dotted-date"],
           "request": {
             "schemaVersion": "govbiz-support-program-conversation-v1",
             "referenceDate": "2026-10-08",
@@ -7271,23 +7261,13 @@
             "lastSearch": null
           },
           "route": "pipeline",
-          "routeAlternatives": ["clarify"],
           "expected": {
             "status": "READY",
-            "updates": [{"field": "FOUNDED_YEAR", "operation": "SET", "value": "2021", "evidence": "2021"}],
+            "updates": [{"field": "ESTABLISHED_ON", "operation": "SET", "value": "2021-03-15", "evidence": "2021.3.15"}],
             "answerKind": null,
             "clarificationKind": null
           },
-          "alternatives": [
-            {
-              "status": "CLARIFICATION_REQUIRED",
-              "updates": [],
-              "answerKind": null,
-              "clarificationKind": ["ESTABLISHMENT"]
-            }
-          ],
-          "mustNot": [{"type": "unchanged", "field": "ESTABLISHED_ON"}],
-          "rationale": "점 표기는 설립일 형식이 아니어서 연도만 쓴다. 형식을 다시 묻는 것도 허용한다.",
+          "rationale": "마침표 숫자 날짜는 완전한 날짜이므로 정규화해 설립일로 둔다.",
           "after": {"action": "continue"}
         },
         {
@@ -7307,26 +7287,18 @@
             "pendingProposal": {
               "query": "수출 지원",
               "acceptingOnly": true,
-              "companyConditions": {
-                "region": "부산",
-                "industry": null,
-                "establishedOn": null,
-                "supportPurpose": null,
-                "foundedYear": 2021
-              }
+              "companyConditions": {"region": "부산", "industry": null, "establishedOn": "2021-03-15", "supportPurpose": null}
             },
             "lastSearch": null
           },
           "route": "pipeline",
           "expected": {
             "status": "READY",
-            "updates": [
-              {"field": "ESTABLISHED_ON", "operation": "SET", "value": "2021-03-15", "evidence": "2021-03-15"}
-            ],
+            "updates": [],
             "answerKind": null,
             "clarificationKind": null
           },
-          "rationale": "더 정밀한 설립일로 바꾸면 연도 값은 서버가 지운다."
+          "rationale": "제안에 이미 같은 설립일이 있어 ISO로 다시 말해도 바뀌는 조건이 없다."
         }
       ]
     },

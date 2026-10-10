@@ -147,7 +147,9 @@ AI는 전체 상태를 재작성하지 않고 변경 목록만 반환한다.
 - updates 최대 7개, 동일 field 중복 금지. 위 changedFields와 같은 7개 field만 허용한다.
 - SET은 비어 있지 않은 value, CLEAR는 null이다. ACCEPTING_ONLY의 SET은 문자열 true/false만 허용한다.
   CLEAR는 문자열 필드를 null로, ACCEPTING_ONLY를 기본 true로 되돌린다. KEEP은 목록에 넣지 않는다.
-- 각 변경의 evidence는 현재 message의 정확한 연속 부분 문자열이며 필수다. 짧은 동의의 대상이 직전 제안·질문에서
+- 각 변경의 evidence는 현재 message의 정확한 연속 부분 문자열이며 필수다. AI Service와 Core는 둘 다 NFC로 맞추고
+  서식 문자(Cf)를 빼고 연속 공백을 하나로 줄이고 소문자로 바꾼 뒤 비교한다. 띄어쓰기·유니코드 형태(NFD 한글)·
+  대소문자·붙여 넣은 폭 없는 공백 차이만 허용하고 낱말과 순서는 같아야 한다. 짧은 동의의 대상이 직전 제안·질문에서
   하나로 분명하면 그 맥락으로 뜻을 해석하고 `설정해` 같은 현재 발화를 근거로 인용할 수 있다.
   대상이 불명확하면 추측하지 않는다. 설립일 SET에는 아래의 완전한 날짜 인용 규칙을 그대로 적용한다.
 - pendingClarification이 있으면 draftContext, 아니면 pendingProposal, 둘 다 없으면 context를 기준으로 변경 목록을 병합한다.
@@ -155,9 +157,11 @@ AI는 전체 상태를 재작성하지 않고 변경 목록만 반환한다.
 - REGION SET 값이 확정 context 또는 병합 기준의 지역과 표기만 다르면(`서울특별시`↔`서울`, `서울시 강남구`↔`서울 강남구`,
   `강남`↔`강남구`) Core가 지역 사전으로 판별해 기존 표기를 유지한다. 등록 기업의 정식 시·도 명칭이 대화의 약칭으로
   바뀌는 헛 변경 제안을 막으며, `서울`→`서울 강남구`처럼 범위가 달라지는 값은 그대로 변경이다.
-- ESTABLISHED_ON SET은 evidence 자체가 완전한 날짜여야 한다. YYYY-MM-DD 또는 YYYY년 M월 D일
-  (년·월 뒤 공백 허용)만 인용하고 ISO 날짜로 정규화한 값이 value와 같아야 한다. 날짜 앞뒤의 다른 문구는
-  이 인용에 넣지 않으며 상대 업력으로 날짜를 생성할 수 없다.
+- ESTABLISHED_ON SET은 evidence 자체가 완전한 날짜여야 한다. YYYY-MM-DD, YYYY년 M월 D일(년·월 뒤 공백 허용)
+  또는 한글 맞춤법 문장 부호 규정의 숫자 날짜 YYYY. M. D.(`2021.3.15`, `2021. 3. 15.`; 마지막 마침표와 마침표 뒤
+  공백 생략 가능)만 인용하고 ISO 날짜로 정규화한 값이 value와 같아야 한다. 날짜 앞뒤의 다른 문구는
+  이 인용에 넣지 않으며 상대 업력으로 날짜를 생성할 수 없다. `21년`·`이천이십일년`처럼 연도가 네 자리 숫자가
+  아니면 업력(`21년 된`)과 구별되지 않으므로 FOUNDED_YEAR로 두지 않고 ESTABLISHMENT로 묻는다(해석 스키마 v2 과제).
 - CLARIFICATION_REQUIRED에서도 명확한 항목은 초안에 넣을 수 있지만 모호한 필드는 바꾸지 않는다.
   형식이 맞아도 의미 정확도를 보증하지 않으므로 모든 READY 결과는 사용자가 확인한다.
   [OpenAI Docs](https://developers.openai.com/api/docs/guides/structured-outputs#handling-mistakes)의 구조화 출력에도
@@ -226,8 +230,11 @@ Web C02 소비자 105건이 통과했다. AI 수치는 최초 통과 범위와 �
 
 - 새 계약의 길이 제한은 UTF-16 코드 단위다. message/query 최대 500, region 50, industry/supportPurpose 100,
   날짜 10, question/evidence 160. question/evidence는 공백뿐인 값과 Unicode C 문자를 거부한다.
-- message는 비어 있으면 안 된다. query는 null 또는 비어 있지 않은 값이다. message/query는 기존 검색처럼
-  LF/CR/tab 외 Unicode C 문자를 거부한다. 조건 문자열은 모든 Unicode C를 거부한다.
+- message는 비어 있으면 안 된다. query는 null 또는 비어 있지 않은 값이다. query는 기존 검색처럼
+  LF/CR/tab 외 Unicode C 문자를 거부한다. 사용자가 직접 쓴 message는 `👩‍💻`의 결합 문자(ZWJ)나 웹에서 붙여 넣은
+  폭 없는 공백 같은 서식 문자(Cf)와 아직 배정되지 않은 새 이모지(Cn)를 받는다. 그 밖의 제어 문자, 양방향 제어
+  (U+061C·200E·200F·202A~202E·2066~2069, Trojan Source), 대리 쌍·사용자 정의·비문자 코드 포인트와 서식 문자만
+  있는 메시지는 거부한다. 조건 문자열은 모든 Unicode C를 거부한다.
 - 날짜는 실제 달력 날짜이며 1900-01-01부터 서울 기준 오늘까지다. boolean은 문자열/숫자로 강제 변환하지 않는다.
 - AI 필드 누락·지원하지 않는 값·허위 인용·날짜 창작·잘못된 READY는 명시적 상위 응답 오류다.
   사용자 정보 부족 응답이나 검색 0건으로 숨기지 않는다. 요청 검증 실패는 400, 기존 요청 제한/AI 오류 정책을 유지한다.

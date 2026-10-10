@@ -23,6 +23,7 @@ AI 대화 검색의 조건 해석(`POST /internal/v1/support-program-conversatio
 | `proxy/` | `INSTRUCTIONS.md`(대리 모델 지침), `system-instructions.txt`, `response-format.json`, `inputs.jsonl`, `manifest.json` |
 | `replay.py` | `runs/<run>/outputs.jsonl`을 실제 AI Service HTTP 경로로 재생·채점 |
 | `runs/example/` | 도구 테스트용 손 작성 출력 3건(측정 결과 아님) |
+| `runs/claude-proxy-*/` | Claude 대리 검증 실행(Haiku `v1`, Sonnet `sonnet-v1`·`sonnet-v2`). 각 폴더 README에 방법·비교 |
 | `test_*.py` | 도구 테스트(모델·네트워크 없음) |
 
 ## 문항 구성

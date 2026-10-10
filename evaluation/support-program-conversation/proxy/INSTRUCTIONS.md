@@ -6,7 +6,7 @@
 
 ## 읽을 파일
 
-- `system-instructions.txt`: 시스템 지침 원문 (SHA-256 `4d72d2f13668a989fce90448b8c04ef5cb2d131ca91e58db2c789973be14c6c2`)
+- `system-instructions.txt`: 시스템 지침 원문 (SHA-256 `ccbb549dfbcce787e5cdfc46901f6c8ca443ceb094122170254f7bd145b2ea27`)
 - `response-format.json`: 반드시 따를 구조화 출력 형식(strict JSON Schema) (SHA-256 `03121efbe169017bc58ffbfe66db27045059a358946dbbf3c57c0f360caaf9d6`)
 - `inputs.jsonl`: 입력 264줄. 각 줄은 `{"caseId", "turn", "user"}`이며 `user` 문자열 전체가 모델이 받는 사용자 메시지다.
 
