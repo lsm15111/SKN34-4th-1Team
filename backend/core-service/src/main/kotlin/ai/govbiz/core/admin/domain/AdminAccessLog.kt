@@ -15,6 +15,8 @@ enum class AdminAccessAction {
     ACCOUNT_ADMIN_REVOKE,
     /** 감사 기록 조회입니다. 기록에도 관리자 이메일과 접속지가 있으므로 이 조회도 남깁니다. */
     AUDIT_LOG_LIST,
+    /** AI 비용 화면 조회입니다. 사용량이 많은 회원의 이메일이 있어 기간과 회원 수를 남깁니다. */
+    AI_COST_VIEW,
 }
 
 /**

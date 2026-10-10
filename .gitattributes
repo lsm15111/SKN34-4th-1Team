@@ -8,6 +8,7 @@ infrastructure/seed/application-form-openai-analysis-20260915-v2.json -text
 backend/ai-service/app/bootstrap.py text eol=lf
 backend/ai-service/app/config.py text eol=lf
 backend/ai-service/app/main.py text eol=lf
+backend/ai-service/app/openai_usage.py text eol=lf
 backend/ai-service/app/support_program_embedding.py text eol=lf
 backend/ai-service/app/tracing.py text eol=lf
 backend/ai-service/app/support_program_evidence/agent.py text eol=lf

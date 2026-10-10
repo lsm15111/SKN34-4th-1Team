@@ -33,5 +33,8 @@ class WithdrawalMarkRepository(private val mapper: WithdrawalMarkMapper) {
         if (accountIds.isNotEmpty()) mapper.markInherited(accountIds, successorId, now.truncatedTo(ChronoUnit.MICROS))
     }
 
+    /** 이 계정이 이어받은 탈퇴 계정입니다. 관리자 계정 상세가 씁니다. */
+    fun findInheritedAccountIds(successorId: Long): List<Long> = mapper.findInheritedAccountIds(successorId)
+
     fun deleteExpired(now: LocalDateTime, limit: Int): Int = mapper.deleteExpired(now, limit)
 }

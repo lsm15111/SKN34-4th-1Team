@@ -34,6 +34,12 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import ai.govbiz.core.admin.domain.AdminAccountPlan
+import ai.govbiz.core.aiusage.domain.AiUsageTotals
+import ai.govbiz.core.planusage.domain.AccountPlan
+import ai.govbiz.core.planusage.domain.PlanCode
+import ai.govbiz.core.planusage.domain.PlanSource
+import ai.govbiz.core.planusage.service.dto.PlanUsageResult
 
 /** 관리자 계정 Controller가 요청의 접속지를 처리자와 함께 넘기고, 권한 변경 본문과 거절·기록 실패를 어떻게 응답하는지 봅니다. */
 @ExtendWith(MockitoExtension::class)
@@ -90,6 +96,20 @@ class AdminAccountControllerTest {
     }
 
     @Test
+    fun theDetailShowsThePlanPanelWithTrialsInheritanceAndThisMonthsAiCost() {
+        doReturn(detail(11, AccountRole.USER)).`when`(service).detail(actor, 11)
+
+        mvc.perform(asAdmin(get("$ACCOUNTS/11")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.plan.plan").value("PLUS"))
+            .andExpect(jsonPath("$.plan.assignedSource").value("OPERATOR"))
+            .andExpect(jsonPath("$.plan.usedTrials[0]").value("PLUS"))
+            .andExpect(jsonPath("$.plan.inheritedFromAccountIds[0]").value(7))
+            .andExpect(jsonPath("$.plan.aiUsageThisMonth.estimatedUsd").value("0.000031"))
+            .andExpect(jsonPath("$.plan.aiUsageThisMonth.unpricedCalls").value(1))
+    }
+
+    @Test
     fun theLastActiveAdminRefusalHasItsOwnCode() {
         doThrow(AdminLastActiveAdminException()).`when`(service).changeRole(actor, 2, AccountRole.USER, "퇴사")
 
@@ -138,6 +158,15 @@ class AdminAccountControllerTest {
             company = null,
             activity = AdminAccountActivity(0, 0, 0, 1),
             actions = emptyList(),
+            plan = AdminAccountPlan(
+                assignment = AccountPlan(
+                    PlanCode.PLUS, NOW.atZone(AccountTestHelper.SEOUL), NOW.plusDays(30).atZone(AccountTestHelper.SEOUL), source = PlanSource.OPERATOR,
+                ),
+                usage = PlanUsageResult(PlanCode.PLUS, NOW.plusDays(30).atZone(AccountTestHelper.SEOUL), emptyList(), PlanSource.OPERATOR),
+                usedTrials = setOf(PlanCode.PLUS),
+                inheritedFrom = listOf(7L),
+                aiUsageThisMonth = AiUsageTotals(2, 100, 0, 10, java.math.BigDecimal("0.0000312"), 1),
+            ),
         )
 
     private companion object {

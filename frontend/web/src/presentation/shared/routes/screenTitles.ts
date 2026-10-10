@@ -41,6 +41,7 @@ export const screenTitles = {
   adminAccounts: '회원 관리',
   adminAccountDetail: '계정 상세',
   adminAuditLogs: '감사 기록',
+  adminAiCosts: 'AI 비용',
   sampleItemHook: '상태관리 예제(Hook)',
   sampleItemRedux: '상태관리 예제(Redux)',
 } as const
@@ -70,6 +71,7 @@ const routeTitles: readonly (readonly [pattern: string, title: string])[] = [
   [appPaths.adminAccounts, screenTitles.adminAccounts],
   [appPaths.adminAccountDetail, screenTitles.adminAccountDetail],
   [appPaths.adminAuditLogs, screenTitles.adminAuditLogs],
+  [appPaths.adminAiCosts, screenTitles.adminAiCosts],
   [appPaths.supportProgramDetail, screenTitles.supportProgramDetail],
   [appPaths.supportProgramQuestion, screenTitles.supportProgramQuestion],
   [publicPaths.pricing, screenTitles.pricing],

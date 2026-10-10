@@ -23,6 +23,10 @@ import java.time.LocalDateTime
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import ai.govbiz.core.account.service.WithdrawalMarkService
+import ai.govbiz.core.admin.domain.AdminAccountPlan
+import ai.govbiz.core.aiusage.service.AiUsageService
+import ai.govbiz.core.planusage.service.PlanUsageService
 
 /**
  * 관리자가 계정을 찾아보고 정지·정지 해제·강제 로그아웃·권한 변경을 합니다. 관리자 확인은 Controller 파라미터
@@ -41,6 +45,9 @@ class AdminAccountService(
     private val accountRepository: AccountRepository,
     private val accessLog: AdminAccessLogService,
     @param:Qualifier("seoulClock") private val clock: Clock,
+    private val planUsage: PlanUsageService,
+    private val withdrawalMarks: WithdrawalMarkService,
+    private val aiUsage: AiUsageService,
 ) {
 
     /** 요약 수치는 건수뿐이라 접속기록을 남기지 않습니다. */
@@ -135,6 +142,13 @@ class AdminAccountService(
             company = repository.findCompany(accountId),
             activity = repository.findActivity(accountId, now.toLocalDate(), now),
             actions = repository.findActions(accountId, ACTION_HISTORY_LIMIT),
+            plan = AdminAccountPlan(
+                assignment = planUsage.assignment(accountId),
+                usage = planUsage.memberUsage(accountId),
+                usedTrials = planUsage.usedTrials(accountId),
+                inheritedFrom = withdrawalMarks.inheritedFrom(accountId),
+                aiUsageThisMonth = aiUsage.monthTotals(accountId),
+            ),
         )
     }
 

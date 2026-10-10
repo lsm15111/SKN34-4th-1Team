@@ -46,6 +46,7 @@ class CombinationReviewRepositoryIntegrationTest {
     @Autowired private lateinit var repository: CombinationReviewRepository
     @Autowired private lateinit var accounts: AccountRepository
     @Autowired private lateinit var jdbc: JdbcTemplate
+    @Autowired private lateinit var runs: CombinationReviewRunRepository
     private var ownerId: Long = 0
     private var otherId: Long = 0
 
@@ -180,6 +181,18 @@ class CombinationReviewRepositoryIntegrationTest {
         assertEquals(replacement.title, updated.draft.title)
         assertEquals(replacement.input.programs, updated.draft.input.programs)
         assertEquals(2, programCount(created.id))
+    }
+
+    @Test
+    fun aRunKnowsItsReviewOwnerForAiUsageRecords() {
+        val review = repository.create(ownerId, draft())
+        val requestKey = java.util.UUID.randomUUID().toString()
+        jdbc.update("""INSERT INTO combination_review_run (review_id, input_revision, request_key, request_hash, status, input_json, runner_instance_id, started_at)
+            VALUES (?, 1, ?, ?, 'QUEUED', JSON_OBJECT(), 'runner', NOW(6))""", review.id, requestKey, "d".repeat(64))
+        val runId = requireNotNull(jdbc.queryForObject("SELECT id FROM combination_review_run WHERE request_key = ?", Long::class.java, requestKey))
+
+        assertEquals(ownerId, runs.findOwnerId(runId))
+        assertNull(runs.findOwnerId(Long.MAX_VALUE))
     }
 
     @Test

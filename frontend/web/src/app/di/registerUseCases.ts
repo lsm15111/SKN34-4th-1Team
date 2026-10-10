@@ -36,6 +36,12 @@ import {
 } from '../../domain/usecases/AdminAccountUseCases'
 import { BrowseAdminAuditLogsUseCase } from '../../domain/usecases/AdminAuditLogUseCases'
 import {
+  AddAdminAiModelPriceUseCase,
+  GetAdminAiCostSummaryUseCase,
+  GetAdminAiModelPricesUseCase,
+  SyncAdminAiCostsUseCase,
+} from '../../domain/usecases/AdminAiCostUseCases'
+import {
   BrowseSavedSupportProgramsUseCase,
   CheckSavedSupportProgramUseCase,
   RemoveSavedSupportProgramUseCase,
@@ -127,6 +133,18 @@ export function registerUseCases(container: AppContainer) {
     ).singleton(),
     takeAdminAccountActionUseCase: asFunction(
       ({ adminAccountRepository }: Pick<AppCradle, 'adminAccountRepository'>) => new TakeAdminAccountActionUseCase(adminAccountRepository),
+    ).singleton(),
+    getAdminAiCostSummaryUseCase: asFunction(
+      ({ adminAiCostRepository }: Pick<AppCradle, 'adminAiCostRepository'>) => new GetAdminAiCostSummaryUseCase(adminAiCostRepository),
+    ).singleton(),
+    syncAdminAiCostsUseCase: asFunction(
+      ({ adminAiCostRepository }: Pick<AppCradle, 'adminAiCostRepository'>) => new SyncAdminAiCostsUseCase(adminAiCostRepository),
+    ).singleton(),
+    getAdminAiModelPricesUseCase: asFunction(
+      ({ adminAiCostRepository }: Pick<AppCradle, 'adminAiCostRepository'>) => new GetAdminAiModelPricesUseCase(adminAiCostRepository),
+    ).singleton(),
+    addAdminAiModelPriceUseCase: asFunction(
+      ({ adminAiCostRepository }: Pick<AppCradle, 'adminAiCostRepository'>) => new AddAdminAiModelPriceUseCase(adminAiCostRepository),
     ).singleton(),
     browseAdminAuditLogsUseCase: asFunction(
       ({ adminAuditLogRepository }: Pick<AppCradle, 'adminAuditLogRepository'>) => new BrowseAdminAuditLogsUseCase(adminAuditLogRepository),

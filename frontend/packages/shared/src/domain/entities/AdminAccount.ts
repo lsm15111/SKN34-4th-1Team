@@ -1,4 +1,5 @@
 import type { AccountRole, AccountTier } from './Account'
+import type { PlanCode, PlanSource, PlanUsageFeature, PlanUsagePeriod } from './PlanUsage'
 
 /** 관리자 목록에서 계정을 나누는 상태입니다. 삭제된 계정은 목록과 상세에 나오지 않습니다. */
 export type AdminAccountStatus = 'ACTIVE' | 'SUSPENDED'
@@ -9,11 +10,14 @@ export type AdminAccountLoginMethod = 'EMAIL' | 'KAKAO' | 'GOOGLE'
 /** 목록 정렬입니다. 최근 로그인순은 로그인한 적 없는 계정을 뒤에 둡니다. */
 export type AdminAccountSort = 'RECENT' | 'OLDEST' | 'LAST_LOGIN'
 
-/** 관리자 조치 기록의 종류입니다. 권한 부여·해제는 회원↔관리자 역할 변경입니다. */
+/** 관리자 조치 기록의 종류입니다. 권한 부여·해제는 회원↔관리자 역할 변경입니다(지난 기록을 읽기 위해 부여도 남겨 둡니다). */
 export type AdminAccountActionType = 'SUSPEND' | 'UNSUSPEND' | 'SESSIONS_REVOKE' | 'ADMIN_GRANT' | 'ADMIN_REVOKE'
 
-/** 화면에서 고르는 조치입니다. 서버 경로·본문과 기록 종류로 바꾸는 일은 Data Layer가 맡습니다. */
-export type AdminAccountActionKind = 'suspend' | 'unsuspend' | 'revoke-sessions' | 'grant-admin' | 'revoke-admin'
+/**
+ * 화면에서 고르는 조치입니다. 서버 경로·본문과 기록 종류로 바꾸는 일은 Data Layer가 맡습니다.
+ * 관리자 권한 부여는 화면에서 잠시 뺐고, 다른 관리자의 권한 해제만 남았습니다.
+ */
+export type AdminAccountActionKind = 'suspend' | 'unsuspend' | 'revoke-sessions' | 'revoke-admin'
 
 /** 관리자 목록 한 줄입니다. 비밀번호·토큰은 없고 비밀번호가 있는지만 압니다. 시각은 서울 기준 `yyyy-MM-ddTHH:mm:ss`입니다. */
 export type AdminAccountSummary = {
@@ -79,6 +83,24 @@ export type AdminAccountAction = {
   createdAt: string
 }
 
+/**
+ * 상세의 요금제·사용량입니다. assigned*는 배정 그대로(끝난 배정 포함)이고 plan·planEndsAt·items는 지금 적용하는 요금제와
+ * 이번 기간 사용량입니다. 금액은 소수 6자리 USD 문자열이며 가격표에 없는 호출(unpricedCalls)은 금액에 들어가지 않습니다.
+ */
+export type AdminAccountPlan = {
+  plan: PlanCode | null
+  planEndsAt: string | null
+  assignedPlan: PlanCode
+  assignedSource: PlanSource | null
+  assignedAt: string | null
+  assignedEndsAt: string | null
+  items: { feature: PlanUsageFeature; period: PlanUsagePeriod; limit: number | null; used: number; resetsAt: string }[]
+  usedTrials: PlanCode[]
+  /** 탈퇴 표식으로 체험·사용량을 이어받은 탈퇴 계정 ID입니다. */
+  inheritedFromAccountIds: number[]
+  aiUsageThisMonth: { calls: number; estimatedUsd: string; unpricedCalls: number }
+}
+
 export type AdminAccountDetail = {
   account: AdminAccountSummary
   company: {
@@ -96,6 +118,7 @@ export type AdminAccountDetail = {
   }
   /** 최근 조치부터 최대 20건입니다. */
   actions: AdminAccountAction[]
+  plan: AdminAccountPlan
   /** 조회한 관리자 자신의 계정이면 참입니다. */
   isSelf: boolean
 }
@@ -135,10 +158,10 @@ export const adminAccountActionLabels: Record<AdminAccountActionType, string> = 
 
 /**
  * 조치할 수 있는 계정인지입니다. 서버도 같은 규칙으로 거절합니다. 자기 계정에는 아무 조치도 못 하고,
- * 다른 관리자 계정은 권한 해제만 할 수 있으며, 정지된 계정은 정지 해제만 할 수 있습니다(관리자로 올리려면 정지를 먼저 풉니다).
+ * 다른 관리자 계정은 권한 해제만 할 수 있으며, 정지된 계정은 정지 해제만 할 수 있습니다.
  */
 export function availableAdminAccountActions(detail: AdminAccountDetail): AdminAccountActionKind[] {
   if (detail.isSelf) return []
   if (detail.account.role === 'ADMIN') return ['revoke-admin']
-  return detail.account.status === 'SUSPENDED' ? ['unsuspend'] : ['suspend', 'revoke-sessions', 'grant-admin']
+  return detail.account.status === 'SUSPENDED' ? ['unsuspend'] : ['suspend', 'revoke-sessions']
 }

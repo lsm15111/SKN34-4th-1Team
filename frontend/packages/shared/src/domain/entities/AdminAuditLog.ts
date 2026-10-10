@@ -11,6 +11,7 @@ export type AdminAuditAction =
   | 'ACCOUNT_ADMIN_GRANT'
   | 'ACCOUNT_ADMIN_REVOKE'
   | 'AUDIT_LOG_LIST'
+  | 'AI_COST_VIEW'
 
 export const adminAuditActionLabels: Record<AdminAuditAction, string> = {
   ACCOUNT_LIST: '회원 목록 조회',
@@ -21,6 +22,7 @@ export const adminAuditActionLabels: Record<AdminAuditAction, string> = {
   ACCOUNT_ADMIN_GRANT: '관리자 권한 부여',
   ACCOUNT_ADMIN_REVOKE: '관리자 권한 해제',
   AUDIT_LOG_LIST: '감사 기록 조회',
+  AI_COST_VIEW: 'AI 비용 조회',
 }
 
 export const adminAuditActions = Object.keys(adminAuditActionLabels) as AdminAuditAction[]

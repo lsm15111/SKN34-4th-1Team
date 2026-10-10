@@ -18,6 +18,7 @@ import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import ai.govbiz.core.admin.domain.AdminAccountPlan
 
 /** 정지·정지 해제·강제 로그아웃에 함께 보내는 사유입니다. 조치 기록에 남습니다. */
 class AdminAccountActionRequest(
@@ -167,11 +168,62 @@ data class AdminAccountActionResponse(
     }
 }
 
+/** 기능 하나의 이번 기간 사용량입니다. [limit]이 null이면 개발용 무제한 계정입니다. */
+data class AdminAccountPlanUsageResponse(
+    val feature: String,
+    val period: String,
+    val limit: Int?,
+    val used: Int,
+    val resetsAt: String,
+)
+
+/** 이번 달(서울) AI 사용 합계입니다. 금액은 소수 6자리 USD 문자열입니다. */
+data class AdminAccountAiUsageResponse(val calls: Long, val estimatedUsd: String, val unpricedCalls: Long)
+
+/**
+ * 요금제 패널입니다. [assignedPlan]·[assignedSource]·[assignedAt]·[assignedEndsAt]은 배정 그대로(끝난 배정 포함)이고,
+ * [plan]·[planEndsAt]·[items]는 지금 적용하는 요금제와 이번 기간 사용량입니다.
+ */
+data class AdminAccountPlanResponse(
+    val plan: String?,
+    val planEndsAt: String?,
+    val assignedPlan: String,
+    val assignedSource: String?,
+    val assignedAt: String?,
+    val assignedEndsAt: String?,
+    val items: List<AdminAccountPlanUsageResponse>,
+    val usedTrials: List<String>,
+    val inheritedFromAccountIds: List<Long>,
+    val aiUsageThisMonth: AdminAccountAiUsageResponse,
+) {
+    companion object {
+        fun from(plan: AdminAccountPlan): AdminAccountPlanResponse = AdminAccountPlanResponse(
+            plan = plan.usage.plan?.name,
+            planEndsAt = plan.usage.planEndsAt?.toLocalDateTime()?.formatted(),
+            assignedPlan = plan.assignment.code.name,
+            assignedSource = plan.assignment.source?.name,
+            assignedAt = plan.assignment.startsAt?.toLocalDateTime()?.formatted(),
+            assignedEndsAt = plan.assignment.endsAt?.toLocalDateTime()?.formatted(),
+            items = plan.usage.items.map {
+                AdminAccountPlanUsageResponse(it.feature.name, it.period.name, it.limit, it.used, it.resetsAt.toLocalDateTime().formatted())
+            },
+            usedTrials = plan.usedTrials.map { it.name }.sorted(),
+            inheritedFromAccountIds = plan.inheritedFrom,
+            aiUsageThisMonth = AdminAccountAiUsageResponse(
+                plan.aiUsageThisMonth.calls,
+                plan.aiUsageThisMonth.estimatedUsd.setScale(6, java.math.RoundingMode.HALF_UP).toPlainString(),
+                plan.aiUsageThisMonth.unpricedCalls,
+            ),
+        )
+    }
+}
+
 data class AdminAccountDetailResponse(
     val account: AdminAccountSummaryResponse,
     val company: AdminAccountCompanyResponse?,
     val activity: AdminAccountActivityResponse,
     val actions: List<AdminAccountActionResponse>,
+    val plan: AdminAccountPlanResponse,
     /** 조회한 관리자 자신의 계정이면 참입니다. 화면은 이때 조치 버튼을 그리지 않습니다. */
     val isSelf: Boolean,
 ) {
@@ -182,6 +234,7 @@ data class AdminAccountDetailResponse(
                 company = detail.company?.let(AdminAccountCompanyResponse::from),
                 activity = AdminAccountActivityResponse.from(detail.activity),
                 actions = detail.actions.map(AdminAccountActionResponse::from),
+                plan = AdminAccountPlanResponse.from(detail.plan),
                 isSelf = detail.account.id == viewerAccountId,
             )
     }

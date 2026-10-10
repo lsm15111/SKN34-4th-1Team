@@ -38,6 +38,8 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 /**
  * 도우미 자유 질문 한 건을 처리합니다. 개인 정보를 가린 질문을 AI Service에 한 번 보내 의도를 받고,
@@ -56,7 +58,10 @@ class AssistantMessageService(
     private val documentService: AssistantSavedProgramDocumentService? = null,
     private val tracing: AssistantTracingHelper = AssistantTracingHelper(),
 ) {
-    fun answer(account: Account?, question: AssistantQuestion): AssistantAnswer = tracing.observe("total") {
+    fun answer(account: Account?, question: AssistantQuestion): AssistantAnswer =
+        AiUsageContextHelper.attribute(account?.id, AiUsageFeature.ASSISTANT) { answerTraced(account, question) }
+
+    private fun answerTraced(account: Account?, question: AssistantQuestion): AssistantAnswer = tracing.observe("total") {
         val verified = if (properties.agentEnabled) askAgent(account, question) else askClassifier(account, question)
         when (verified.intent) {
             AssistantIntent.PRODUCT_HELP -> productHelp(verified, question)

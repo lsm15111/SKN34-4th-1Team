@@ -209,6 +209,7 @@ OPENAI_API_KEY=발급받은_OpenAI_API_키
 | `BIZNO_API_KEY` | 빈 값 | 기업 등록 시 사업자등록번호를 확인하는 Bizno API 키. 비어 있으면 프로필의 기업 조회·등록이 503 |
 | `BIZNO_URL` | `https://bizno.net/api/fapi` | Bizno 조회 endpoint |
 | `OPENAI_API_KEY` | 없음(필수) | AI Service만 사용하는 OpenAI 인증키 |
+| `OPENAI_ADMIN_KEY` · `OPENAI_PROJECT_ID` · `AI_COST_KRW_PER_USD` | 빈 값(선택) | Core 관리자 AI 비용 화면의 실제 비용(OpenAI Costs API)용 조직 관리자 키, 비용을 볼 프로젝트, 원화 표시 환율. 비우면 요청별 추정 비용만 보임 |
 | `OPENAI_MODEL` | `gpt-6-luna` | 대화·원문 답변의 모델, 랭킹 전용 모델 미설정 시 상속 |
 | `OPENAI_RANKING_MODEL` | 미설정 | 랭킹 전용 모델. `.env.example`은 비용 절감을 위해 `gpt-6-luna` 설정 |
 | `OPENAI_RANKING_REASONING_EFFORT` | `none` | 랭킹 추론 수준(`none` 또는 `low`). `.env.example`은 `low`; 비용·지연 증가 가능 |

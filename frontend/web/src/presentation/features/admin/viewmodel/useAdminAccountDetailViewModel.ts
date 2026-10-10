@@ -14,6 +14,7 @@ import {
   type AdminAccountActionKind,
   type AdminAccountDetail,
 } from '../../../../domain/entities/AdminAccount'
+import { planLabels, planUsageFeatureLabels, planUsagePeriodLabels } from '@govbiz/shared/domain/entities/PlanUsage'
 import type { GetAdminAccountDetailUseCase, TakeAdminAccountActionUseCase } from '../../../../domain/usecases/AdminAccountUseCases'
 import { signedOut } from '../../../shared/auth/state/authSlice'
 import { appPaths } from '../../../shared/routes/appPaths'
@@ -31,7 +32,6 @@ export const adminAccountDetailMessages = {
     suspend: '계정을 정지했습니다. 이 계정의 모든 세션이 종료되었습니다.',
     unsuspend: '정지를 해제했습니다. 회원은 다시 로그인하면 됩니다.',
     'revoke-sessions': '모든 기기에서 로그아웃시켰습니다.',
-    'grant-admin': '관리자 권한을 부여했어요.',
     'revoke-admin': '관리자 권한을 해제했어요.',
   } satisfies Record<AdminAccountActionKind, string>,
   conflict: '다른 관리자가 먼저 상태를 바꿨습니다. 최신 상태를 다시 불러왔습니다.',
@@ -65,18 +65,41 @@ const actionCopy: Record<AdminAccountActionKind, {
     description: (email) => `${email} 계정의 모든 세션을 끝냅니다. 계정은 그대로라 다시 로그인할 수 있습니다.`,
     tone: 'danger',
   },
-  'grant-admin': {
-    buttonLabel: '관리자 권한 부여',
-    title: '관리자 권한을 부여할까요?',
-    description: (email) => `${email} 계정이 회원 정보를 보고 계정을 조치할 수 있게 돼요.`,
-    tone: 'default',
-  },
   'revoke-admin': {
     buttonLabel: '관리자 권한 해제',
     title: '관리자 권한을 해제할까요?',
     description: (email) => `${email} 계정은 다음 요청부터 관리자 화면을 쓸 수 없어요.`,
     tone: 'danger',
   },
+}
+
+const planSourceLabels = { OPERATOR: '운영자 배정', TRIAL: '체험' } as const
+
+/** 요금제 카드의 줄입니다. 지금 적용하는 요금제, 끝난 배정, 기능별 사용량, 쓴 체험, 이어받은 계정, 이번 달 AI 사용을 차례로 씁니다. */
+function planRowsOf(plan: AdminAccountDetail['plan']): { label: string; value: string }[] {
+  const current = plan.plan ?? 'FREE'
+  const source = current !== 'FREE' && plan.assignedSource !== null ? ` ${planSourceLabels[plan.assignedSource]}` : ''
+  const until = plan.planEndsAt === null ? (current === 'FREE' ? '' : ' (기간 없음, 30일마다 새 기간)') : ` (${formatAdminDateTime(plan.planEndsAt)}까지)`
+  const ended = plan.assignedPlan !== 'FREE' && current === 'FREE' && plan.assignedEndsAt !== null
+    ? [{ label: '끝난 배정', value: `${planLabels[plan.assignedPlan]} · ${formatAdminDateTime(plan.assignedEndsAt)} 종료` }]
+    : []
+  const usage = plan.aiUsageThisMonth
+  return [
+    { label: '요금제', value: `${planLabels[current]}${source}${until}` },
+    ...ended,
+    ...plan.items.map((item) => ({
+      label: planUsageFeatureLabels[item.feature],
+      value: `${planUsagePeriodLabels[item.period]} ${item.used}${item.limit === null ? '회 (한도 없음)' : ` / ${item.limit}회`}`,
+    })),
+    { label: '쓴 체험', value: plan.usedTrials.length === 0 ? '없음' : plan.usedTrials.map((code) => planLabels[code]).join(', ') },
+    ...(plan.inheritedFromAccountIds.length === 0 ? [] : [{
+      label: '이어받은 탈퇴 계정', value: plan.inheritedFromAccountIds.map((id) => `#${id}`).join(', '),
+    }]),
+    {
+      label: '이번 달 AI 사용',
+      value: `${usage.calls}회 · 추정 $${usage.estimatedUsd}${usage.unpricedCalls > 0 ? ` (가격 없는 호출 ${usage.unpricedCalls}회 제외)` : ''}`,
+    },
+  ]
 }
 
 const tierLabels: Record<AccountTier, string> = { MEMBER: '회원', COMPANY: '기업 회원', ADMIN: '관리자' }
@@ -220,6 +243,7 @@ export function useAdminAccountDetailViewModel(useCases: Partial<DetailUseCases>
       { label: '업종', value: detail.company.industry },
       { label: '설립연도', value: `${detail.company.foundedYear}년` },
     ],
+    planRows: detail === null ? [] : planRowsOf(detail.plan),
     activityRows: detail === null ? [] : [
       { label: '모집글', value: `${detail.activity.recruitmentCount}건 (모집 중 ${detail.activity.openRecruitmentCount}건)` },
       { label: '보낸 제안', value: `${detail.activity.sentProposalCount}건` },

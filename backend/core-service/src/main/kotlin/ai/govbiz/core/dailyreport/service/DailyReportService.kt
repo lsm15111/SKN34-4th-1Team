@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 /** 검색과 근거 답변을 재사용한다. 리포트가 저장되어야만 별도 단계에서 메일을 보낸다. */
 @Service
@@ -110,7 +112,7 @@ class DailyReportService(
                 val content = admission.execute("daily-report:${report.accountId}") {
                     val ready = readiness.get()
                     if (!ready.indexReady) throw DailyReportException(DailyReportErrorCode.SEARCH_NOT_READY)
-                    generateContent(report, ready)
+                    AiUsageContextHelper.attribute(report.accountId, AiUsageFeature.DAILY_REPORT) { generateContent(report, ready) }
                 }
                 repository.finishGenerationJob(jobId, report, content)
             } catch (_: Exception) {

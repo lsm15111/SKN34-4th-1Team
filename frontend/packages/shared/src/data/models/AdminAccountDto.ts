@@ -45,6 +45,28 @@ export const adminAccountStatsDtoSchema = z.object({
   recentJoinDays: z.number().int().positive(),
 })
 
+const planCodeSchema = z.enum(['FREE', 'PLUS', 'PREMIUM'])
+const usdSchema = z.string().regex(/^\d+\.\d{6}$/)
+
+export const adminAccountPlanDtoSchema = z.object({
+  plan: planCodeSchema.nullable(),
+  planEndsAt: dateTimeSchema.nullable(),
+  assignedPlan: planCodeSchema,
+  assignedSource: z.enum(['OPERATOR', 'TRIAL']).nullable(),
+  assignedAt: dateTimeSchema.nullable(),
+  assignedEndsAt: dateTimeSchema.nullable(),
+  items: z.array(z.object({
+    feature: z.enum(['AI_SEARCH', 'EVIDENCE_QUESTION', 'APPLICATION_DRAFT', 'COMBINATION_REVIEW']),
+    period: z.enum(['DAY', 'MONTH', 'PLAN']),
+    limit: countSchema.nullable(),
+    used: countSchema,
+    resetsAt: dateTimeSchema,
+  })),
+  usedTrials: z.array(planCodeSchema),
+  inheritedFromAccountIds: z.array(z.number().int().positive()),
+  aiUsageThisMonth: z.object({ calls: countSchema, estimatedUsd: usdSchema, unpricedCalls: countSchema }),
+})
+
 export const adminAccountDetailDtoSchema = z.object({
   account: adminAccountSummaryDtoSchema,
   company: z.object({
@@ -67,6 +89,7 @@ export const adminAccountDetailDtoSchema = z.object({
     adminEmail: z.string().min(1),
     createdAt: dateTimeSchema,
   })),
+  plan: adminAccountPlanDtoSchema,
   isSelf: z.boolean(),
 })
 
@@ -113,6 +136,13 @@ export function toAdminAccountDetail(dto: AdminAccountDetailDto): AdminAccountDe
     company: dto.company === null ? null : { ...dto.company },
     activity: { ...dto.activity },
     actions: dto.actions.map((action) => ({ ...action })),
+    plan: {
+      ...dto.plan,
+      items: dto.plan.items.map((item) => ({ ...item })),
+      usedTrials: [...dto.plan.usedTrials],
+      inheritedFromAccountIds: [...dto.plan.inheritedFromAccountIds],
+      aiUsageThisMonth: { ...dto.plan.aiUsageThisMonth },
+    },
     isSelf: dto.isSelf,
   }
 }

@@ -75,7 +75,7 @@
     }
   },
   "rag_generation": {
-    "sha256": "21386be695314c21b4fc2bc1b14e06fc732f0733570f42ff9637091ddf49f75a",
+    "sha256": "2dc47d3fab3f6a9bda550dadafe791f64bc293a7cf6301dca9518dcf084c33e6",
     "files": {
       "evaluation/support-program-evidence/evaluate.py": "0430f08ad1f51c9a8fd22119e0b4d0badac9f89ab8e254e963a4944bd79ed514",
       "evaluation/support-program-evidence/official_snapshot.py": "1b97e2d2aa15ca02b50e2a999203c7f685de08afc735bb8456b880041c37abf4",
@@ -93,12 +93,13 @@
       "backend/ai-service/uv.lock": "349ecdd9152eb2f5479a3db41d39e9d1bf7a8f5a16103426c2cd78207add1fe3",
       "backend/ops-service/apps/evaluations/vector_cache.py": "177707a4d9f60b28daeab7460e69d02b3dbf61323e58a3e47a7e69ffa10f830e",
       "evaluation/support-program-evidence/rag_live.py": "16d9d4d2f0fe121197e59b11f63dc4eb66b7dbed9b3c3b18bcfd3ab6ad939005",
-      "evaluation/support-program-evidence/rag_budget.py": "08e4d90cdfd3d594bd238bb62e5cf6e887dc41f4ca9231bb470efcd01d7ed3f2",
+      "evaluation/support-program-evidence/rag_budget.py": "8a3a41786e2443414b65345c42379504425906204998330a4e9502720b67da76",
       "evaluation/support-program-evidence/embedding_budget.py": "79449cc479a04efd0397621b48a0bb0258ed97690b40c90081d36ac8f2bee635",
       "evaluation/support-program-evidence/budget_client.py": "5fb2ba03088467201693f94ec2c2b074ab15998f4e2ea6724c0c67cdef6613f9",
-      "evaluation/support-program-evidence/serve_flow.py": "494ffa688f2fcf6ca0720b53eeeeaa899c617e8783f01fe5a8c9d45e803868e4",
-      "backend/ai-service/app/bootstrap.py": "4efddd18d97d4988e7301c578811cf9398200d623e0a4cc59f0128ff90ad9ee3",
-      "backend/ai-service/app/main.py": "166565c55888c4e22390720f805ae20634c94efaf87a8410e774e465a77b76d0",
+      "evaluation/support-program-evidence/serve_flow.py": "2c071a4d9817ad3f013cacf41263c968ae5bb04f732fa723b66628dfbd45fc88",
+      "backend/ai-service/app/bootstrap.py": "32cb388b5b4ae7b4c46ff65717b635030d27501e633efcadb2501e396bb73f71",
+      "backend/ai-service/app/main.py": "8b6d8147f4ddd4652d21ff35504668bb1ba021ba0849c70ec2f05aaa1f5f022e",
+      "backend/ai-service/app/openai_usage.py": "e090f3bbb526bbaeab9dff10e943a7ae1da941e79a42757bcec887ac4dc02e81",
       "backend/ai-service/app/support_program_embedding.py": "944c846cb01022a74578aad4c088387b555444b56e3b73085ba62885381aa2d5",
       "backend/ai-service/app/support_program_evidence/service.py": "3206ead966556d3cf2f73e4ab278afd1fbbaaea563054faec4d3318726539fdf",
       "backend/ai-service/app/support_program_evidence/router.py": "4ff043f5d8b25c236c24ea74e5a26ed2ae5829661834ae4ffc80d98ced3e4f72"
@@ -121,13 +122,13 @@
     "document_vectors": "content-addressed-evaluation-cache-v1"
   },
   "pipeline": {
-    "sha256": "9e03a4d3f2e4ccb8902d6fecedb8081a1f3b0aae974755e77da8387c762f769f",
+    "sha256": "b3f00603ca28c776f1e5c385512131ec270eeb9ce0891eb56e78696c4fb02862",
     "files": {
       "evaluation/support-program-evidence/ops_flow.py": "f1381e5de9362797ea75c70529f60230e75e06f38bb5ca5d9312753f9cbd9840",
       "evaluation/support-program-evidence/budget_client.py": "5fb2ba03088467201693f94ec2c2b074ab15998f4e2ea6724c0c67cdef6613f9",
       "backend/ops-service/apps/evaluations/catalog.py": "fab46fe80efd7fe02c485440354f70d5941811c71234cec5a2552699acfca44f",
       "backend/ops-service/apps/evaluations/recovery_inputs.py": "0070dfdda076bf3cda0eb2202f6a175a5eef02c02b6e02a6d21c4d434250a3bb",
-      "backend/ops-service/apps/evaluations/execution_spec.py": "318401848061fa3a1ceb7bff6407127a80d4390d6a38884c94ba2d2934acaf80",
+      "backend/ops-service/apps/evaluations/execution_spec.py": "59c0f4a381cb19f35dd8653258826b9d5c60f89a0675abdc961ba57067e39ab9",
       "backend/ops-service/apps/evaluations/quality_policy.py": "b2715707819f120f677aba684790f3f68d6c27c17c1613db455d162d89823b84",
       "backend/ops-service/apps/evaluations/vector_cache.py": "177707a4d9f60b28daeab7460e69d02b3dbf61323e58a3e47a7e69ffa10f830e",
       "backend/ops-service/apps/evaluations/artifact_files.py": "68ccee925969e3eba852658013d6f67789b524f971212b8a4c00aaa0e289799a"

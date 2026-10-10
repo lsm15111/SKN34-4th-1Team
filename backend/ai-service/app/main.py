@@ -19,6 +19,7 @@ from app.support_program_ranking.agent import SupportProgramRecommendationAgent
 from app.support_program_ranking.router import router as support_program_rankings_router
 from app.bootstrap import build_application_container
 from app.config import Settings
+from app.openai_usage import OpenAIUsageMiddleware
 from app.support_program_index.router import router as support_program_index_router
 from app.support_program_conversation.agent import SupportProgramConversationAgent
 from app.support_program_conversation.router import router as support_program_conversation_router
@@ -68,6 +69,7 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.container = container
+    application.add_middleware(OpenAIUsageMiddleware)
     application.include_router(health_router)
     application.include_router(gov_agent_router)
     application.include_router(combination_review_router)

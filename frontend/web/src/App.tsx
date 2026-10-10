@@ -16,6 +16,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
 import { AdminAccountDetailPage } from './presentation/features/admin/view/AdminAccountDetailPage'
 import { AdminAccountsPage } from './presentation/features/admin/view/AdminAccountsPage'
 import { AdminAuditLogsPage } from './presentation/features/admin/view/AdminAuditLogsPage'
+import { AdminAiCostsPage } from './presentation/features/admin/view/AdminAiCostsPage'
 import { ForgotPasswordPage } from './presentation/features/auth/view/ForgotPasswordPage'
 import { LoginPage } from './presentation/features/auth/view/LoginPage'
 import { OAuthCompletePage } from './presentation/features/auth/view/OAuthCompletePage'
@@ -159,6 +160,7 @@ function CoreApp() {
           <Route path={appPaths.adminAccounts} element={<AdminAccountsPage />} />
           <Route path={appPaths.adminAccountDetail} element={<AdminAccountDetailPage />} />
           <Route path={appPaths.adminAuditLogs} element={<AdminAuditLogsPage />} />
+          <Route path={appPaths.adminAiCosts} element={<AdminAiCostsPage />} />
         </Route>
       </Route>
 

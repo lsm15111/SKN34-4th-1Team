@@ -4,6 +4,10 @@ import ai.govbiz.core.account.domain.AccountRole
 import ai.govbiz.core.account.domain.AccountTier
 import ai.govbiz.core.account.domain.OAuthProvider
 import java.time.LocalDateTime
+import ai.govbiz.core.aiusage.domain.AiUsageTotals
+import ai.govbiz.core.planusage.domain.AccountPlan
+import ai.govbiz.core.planusage.domain.PlanCode
+import ai.govbiz.core.planusage.service.dto.PlanUsageResult
 
 /** 관리자 목록에서 계정을 나누는 상태입니다. 삭제된 계정은 목록과 상세에 나오지 않습니다. */
 enum class AdminAccountStatus {
@@ -163,6 +167,19 @@ data class AdminAccountDetail(
     val activity: AdminAccountActivity,
     /** 최근 조치부터 최대 [ai.govbiz.core.admin.service.AdminAccountService.ACTION_HISTORY_LIMIT]건입니다. */
     val actions: List<AdminAccountAction>,
+    val plan: AdminAccountPlan,
+)
+
+/**
+ * 상세의 요금제·사용량입니다. [assignment]는 배정 그대로(끝난 배정 포함)이고 [usage]는 지금 적용하는 요금제와 이번 기간 사용량입니다.
+ * [inheritedFrom]은 탈퇴 표식으로 기록을 이어받은 탈퇴 계정, [aiUsageThisMonth]는 이번 달(서울) AI 사용 합계입니다.
+ */
+data class AdminAccountPlan(
+    val assignment: AccountPlan,
+    val usage: PlanUsageResult,
+    val usedTrials: Set<PlanCode>,
+    val inheritedFrom: List<Long>,
+    val aiUsageThisMonth: AiUsageTotals,
 )
 
 /** 조치 transaction 안에서 잠가 읽은 계정의 역할·정지 상태입니다. 대상 계정과, 권한 변경에서는 처리한 관리자도 이렇게 읽습니다. */

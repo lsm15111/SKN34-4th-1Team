@@ -10,7 +10,10 @@ import { adminAccountsPageStyles as styles } from './AdminAccountsPage.styles'
 
 type DetailViewModel = ReturnType<typeof useAdminAccountDetailViewModel>
 
-/** 관리자 계정 상세입니다. 계정·기업·활동·조치 기록을 보여 주고, 정지·정지 해제·강제 로그아웃은 사유를 받아 처리합니다. */
+/**
+ * 관리자 계정 상세입니다. 계정·기업·요금제·활동·조치 기록을 보여 주고, 정지·정지 해제·강제 로그아웃·관리자 권한 해제는
+ * 사유를 받아 처리합니다. 요금제 카드는 조회만 합니다.
+ */
 export function AdminAccountDetailPage() {
   const vm = useAdminAccountDetailViewModel()
   const loading = vm.phase !== 'missing' && vm.phase !== 'failed' && vm.account === null
@@ -76,6 +79,11 @@ export function AdminAccountDetailPage() {
               {vm.companyRows ? <InfoList rows={vm.companyRows} /> : <p className={styles.actionNote}>등록한 기업이 없습니다.</p>}
             </section>
 
+            <section className={workspacePageStyles.card} aria-label="요금제·사용량">
+              <h2 className={workspacePageStyles.cardTitle}>요금제·사용량</h2>
+              <InfoList rows={vm.planRows} />
+            </section>
+
             <section className={workspacePageStyles.card} aria-label="활동">
               <h2 className={workspacePageStyles.cardTitle}>활동</h2>
               <InfoList rows={vm.activityRows} />
@@ -106,10 +114,10 @@ export function AdminAccountDetailPage() {
   )
 }
 
-/** 계정 상세를 읽는 동안의 자리입니다. 실제와 같은 네 카드(계정 · 기업 · 활동 · 조치 기록)에 제목과 항목 줄을 막대로 채웁니다. */
+/** 계정 상세를 읽는 동안의 자리입니다. 실제와 같은 다섯 카드(계정 · 기업 · 요금제 · 활동 · 조치 기록)에 제목과 항목 줄을 막대로 채웁니다. */
 function DetailSkeleton() {
   return <div className={styles.detailGrid} aria-hidden="true">
-    {[5, 4, 4, 2].map((rows, card) => <section className={workspacePageStyles.card} key={card}>
+    {[5, 4, 6, 4, 2].map((rows, card) => <section className={workspacePageStyles.card} key={card}>
       <span className={`${styles.skeletonLine} h-6`}><span className={`${styles.skeletonBar} h-4 ${card === 0 ? 'w-48' : 'w-16'}`} /></span>
       <div className={styles.infoList}>
         {Array.from({ length: rows }, (_, row) => <div className={styles.infoRow} key={row}>

@@ -23,6 +23,7 @@ from app.support_program_evidence.answer_service import SupportProgramEvidenceAn
 from app.support_program_evidence.service import SupportProgramEvidenceService
 from app.bootstrap import ApplicationContainer, build_application_container
 from app.config import Settings
+from app.openai_usage import record_openai_usage
 from app.support_program_conversation.service import SupportProgramConversationService
 from app.application_preparation.service import ApplicationPreparationService
 
@@ -81,7 +82,11 @@ async def test_builds_and_wires_agent_in_the_composition_root(monkeypatch):
         assert isinstance(container.support_program_evidence_answer_service, SupportProgramEvidenceAnswerService)
         assert isinstance(container.support_program_evidence_service, SupportProgramEvidenceService)
         assert isinstance(container.application_preparation_service, ApplicationPreparationService)
-        assert captured == {"api_key": "private-key", "timeout": 1.25, "max_retries": 0}
+        assert {key: value for key, value in captured.items() if key != "http_client"} == {
+            "api_key": "private-key", "timeout": 1.25, "max_retries": 0,
+        }
+        assert captured["http_client"].event_hooks["response"] == [record_openai_usage]
+        await captured["http_client"].aclose()
         assert container.openai_client is client
         for service in (container.support_program_index_service, container.support_program_evidence_service):
             assert service.embedding_request_token_limit == 8191

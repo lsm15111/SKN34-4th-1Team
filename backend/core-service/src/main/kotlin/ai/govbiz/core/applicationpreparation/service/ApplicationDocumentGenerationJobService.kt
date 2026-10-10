@@ -18,6 +18,8 @@ import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 /**
  * 문서 생성을 계정별 작업으로 접수하고 실행한다. 접수는 HTTP 요청에서, 실행은 [ApplicationDocumentGenerationJobWorker]가
@@ -87,9 +89,11 @@ class ApplicationDocumentGenerationJobService(
                 }
                 var aiStarted = false
                 try {
-                    val files = documents.generateNow(owner, job.preparationId, job.expectedRevision,
-                        onStage = { stage -> repository.updateStage(id, stage) },
-                        onAiStart = { check(repository.beginAi(id)) { "Document generation job is no longer active" }; aiStarted = true })
+                    val files = AiUsageContextHelper.attribute(owner.id, AiUsageFeature.APPLICATION_DRAFT) {
+                        documents.generateNow(owner, job.preparationId, job.expectedRevision,
+                            onStage = { stage -> repository.updateStage(id, stage) },
+                            onAiStart = { check(repository.beginAi(id)) { "Document generation job is no longer active" }; aiStarted = true })
+                    }
                     repository.succeed(id, files.map { it.id })
                 } catch (error: Exception) {
                     record(job, error, aiStarted)

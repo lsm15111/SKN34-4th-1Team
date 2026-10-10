@@ -15,6 +15,7 @@ export const adminAuditLogRecordDtoSchema = z.object({
     'ACCOUNT_ADMIN_GRANT',
     'ACCOUNT_ADMIN_REVOKE',
     'AUDIT_LOG_LIST',
+    'AI_COST_VIEW',
   ]),
   actorAccountId: positiveIdSchema,
   actorEmail: z.string().min(1).nullable(),

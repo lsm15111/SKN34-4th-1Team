@@ -191,6 +191,35 @@ transaction에서 `WithdrawalMarkService.inherit → PlanUsageService.inherit`�
 작업 표가 없는 신청 문서 경로는 `기능 Service → PlanUsageService.consumeDraftProgram(TransactionTemplate) → PlanUsageRepository → MyBatis → MySQL`
 뒤 기존 AI 호출입니다.
 
+관리자는 계정 상세에서 요금제·이번 기간 사용량·쓴 체험·이어받은 탈퇴 계정·이번 달 AI 사용을 조회만 합니다. 이용권 배정은 아직
+화면에 두지 않고 [요금제 사용량 한도](../../docs/plan-usage-limits.md)의 운영 SQL로 합니다.
+
+## AI 사용량과 비용
+
+`ai.govbiz.core.aiusage`는 OpenAI 호출마다 쓴 토큰과 추정 비용을 남기고, 관리자 키가 있으면 OpenAI가 알려 준 실제 비용을 함께 보입니다.
+
+- **기록:** ai-service는 요청마다 OpenAI 응답의 `usage`를 모아 `X-GovBiz-OpenAI-Usage` 헤더(모델·처리 등급별 호출 수와 입력·캐시·출력 토큰)로
+  돌려줍니다. Core의 ai-service RestClient 다섯 개가 모두 `AiUsageRecordingInterceptor`를 거쳐
+  `AiUsageService.record(REQUIRES_NEW) → AiUsageRepository → MyBatis → MySQL(V63 ai_usage_record)`로 남기므로, 기능이 실패해 되돌려져도 쓴 토큰은
+  남습니다. 기록하지 못하면 경고만 남기고 사용자의 요청은 그대로 진행합니다.
+- **계정·기능:** AI를 부르는 블록을 `AiUsageContextHelper.attribute(계정, 기능)`로 감쌉니다. `PlanUsageService.consume`(AI 검색·원문 질문),
+  `consumeDraftProgram`과 양식 분석·문서 생성 작업(신청 문서), 중복 검토 실행(검토 소유자), 도우미, 기업 맞춤 리포트, 관심 공고 준비가 이렇게 표시하고,
+  여러 스레드로 나누는 작업은 표시를 넘깁니다. 표시가 없는 호출은 로그인 전 요청이나 시스템 작업(색인·조건 정리·공고 분석)입니다.
+  catalog-service의 색인 비용은 Core에 기록되지 않고 실제 비용에만 나타납니다.
+- **추정 비용:** V63 `ai_model_price`(1M 토큰당 USD)에서 모델 이름 접두어와 응답의 처리 등급(`default`·`priority`(Fast)·`flex`)이 맞고 사용일에
+  시작한 가장 늦은 가격을 골라 `(입력 − 캐시) × 입력가 + 캐시 × 캐시가 + 출력 × 출력가`로 계산합니다. 가격표에 없으면 비용을 비워 "가격 없음"으로 셉니다.
+  2026-10-10 공식 가격(Standard·Flex·Fast, 짧은 문맥)을 넣었고, 긴 문맥(272K 초과)·캐시 쓰기·지역 처리 할증은 반영하지 않습니다.
+  가격은 고치지 않고 관리자 화면에서 새 시작일로 더합니다.
+- **실제 비용:** `OPENAI_ADMIN_KEY`(조직 관리자 키)가 있으면 매일 서울 10:10과 관리자 요청 때 `AiCostSyncService → OpenAiCostsClient`가
+  Costs API(`/v1/organization/costs`, 하루 단위·UTC, 프로젝트·항목별)를 끝 쪽까지 읽은 뒤 그 기간의 V63 `ai_cost_daily`를 한 transaction에서
+  바꿉니다. 한 쪽이라도 실패하면 기존 값을 그대로 둡니다. 프로젝트 키로는 조회되지 않으며 OpenAI 집계는 몇 시간 늦게 반영될 수 있습니다.
+
+| 관리자 AI 비용 API | 동작 |
+|---|---|
+| `GET /api/v1/admin/ai-costs?from&to` | 서울 날짜 기간(최대 92일)의 추정 합계·실제 합계·기능별·모델별·날짜별·많이 쓴 회원 10명. 회원 이메일이 있어 `AI_COST_VIEW` 접속기록을 남김. no-store |
+| `GET /api/v1/admin/ai-costs/prices`, `POST .../prices` | 가격표 조회와 새 가격 추가. 같은 모델·등급·시작일은 409 `AI_MODEL_PRICE_CONFLICT`, 값이 틀리면 400 |
+| `POST /api/v1/admin/ai-costs/sync` | 실제 비용을 지금 가져옴. 관리자 키 없음 503 `OPENAI_ADMIN_KEY_MISSING`, 거절 502 `OPENAI_ADMIN_KEY_REJECTED`, 그 밖 502 |
+
 ## 실행
 
 기업 맞춤 리포트는 `ai.govbiz.core.dailyreport`에서 저장된 기업 조건·지원 목적을 기존 검색과 HTML 근거 답변에
@@ -526,6 +555,7 @@ Controller의 `SupportProgramRequestAdmissionService.execute`가 공개 요청 �
 | `GET /api/v1/admin/accounts/{id}` | 관리자 전용. 계정·기업·활동 수·최근 조치 기록 20건. 목록·상세는 응답 전에 `admin_access_log`에 기록하고, 기록하지 못하면 503 `ADMIN_ACCESS_LOG_UNAVAILABLE` |
 | `POST /api/v1/admin/accounts/{id}/suspend` `/unsuspend` `/sessions/revoke` | 관리자 전용. 사유(1~500자) 필수. 정지는 모든 세션 삭제, 자기 계정 422 `ADMIN_SELF_ACTION`, 다른 관리자 422 `ADMIN_TARGET_PROTECTED`, 이미 그 상태면 409. `account_admin_action`과 접속기록을 같은 transaction에 기록 |
 | `POST /api/v1/admin/accounts/{id}/role` | 관리자 전용. `{ "role": "ADMIN"\|"USER", "reason" }`. 자기 계정 422 `ADMIN_SELF_ACTION`, 같은 역할·정지 계정 승격 409, 마지막 활성 관리자 해제 422 `ADMIN_LAST_ACTIVE_ADMIN`, 처리자 권한이 먼저 내려갔으면 403. `ADMIN_GRANT`·`ADMIN_REVOKE` 조치 기록과 접속기록을 함께 남김 |
+| `GET /api/v1/admin/accounts/{id}` 의 `plan` | 상세 응답의 요금제 패널. 배정 그대로(`assigned*`), 지금 적용하는 요금제와 기능별 사용량, 쓴 체험, 이어받은 탈퇴 계정, 이번 달 AI 호출·추정 USD |
 | `GET /api/v1/admin/audit-logs` | 관리자 전용 감사 기록. `actorAccountId` `targetAccountId` `action` `from`·`to`(서울 날짜, 끝 날 포함) `before`(커서) `limit`(1~50, 기본 50). 최신순 `records[]`(처리자 ID·이메일, 대상 ID, 요청 요약, 접속 주소, User-Agent, 시각)와 `nextCursor`, `no-store`. 이 조회도 기록 |
 | `GET /api/v1/me/company/lookup` | 로그인한 회원이 사업자등록번호로 국세청 등록 여부·상호·사업자 상태를 미리 보기(Bizno) |
 | `GET` `POST` `PUT /api/v1/me/company` | 내 기업 조회·등록(계속·휴업자만, 폐업자는 422, 201)·담당자 입력 항목 수정. 파트너 모집글·제안 쓰기는 계속사업자만(403 `ACTIVE_BUSINESS_REQUIRED`) |
@@ -839,6 +869,10 @@ Compose는 일부 주소·CORS 값을 내부 네트워크에 맞게 덮어씁니
 | `ACCOUNT_JWT_SECRET` | 없음(필수) | 세션 JWT HS256 서명 비밀키(32자 이상). 코드에 기본값이 없어 비어 있으면 기동 실패. Compose·`.env.example`은 로컬 개발용 값을 넣음 |
 | `ACCOUNT_IDENTITY_HMAC_KEY` | 빈 값 | 탈퇴 표식(이메일·소셜 연결·사업자등록번호) HMAC 키. 비어 있으면 `ACCOUNT_JWT_SECRET`을 씀. 따로 두면 JWT 비밀을 바꿔도 이전 표식이 계속 맞음 |
 | `ACCOUNT_WITHDRAWAL_MARK_PURGE_ENABLED` | `true` | 보관 기간(1년)이 지난 탈퇴 표식을 매일 서울 04:30에 지우는 작업 |
+| `OPENAI_ADMIN_KEY` | 빈 값 | 관리자 AI 비용 화면의 실제 비용(OpenAI Costs API)을 가져오는 조직 관리자 키. 비우면 추정 비용만 보이고, 프로젝트 키로는 조회되지 않음 |
+| `OPENAI_PROJECT_ID` | 빈 값 | 적으면 그 OpenAI 프로젝트의 비용만 가져옴 |
+| `AI_COST_SYNC_ENABLED` | `true` | 관리자 키가 있을 때 매일 서울 10:10에 최근 35일 실제 비용을 가져오는 작업 |
+| `AI_COST_KRW_PER_USD` | 빈 값 | 관리자 AI 비용 화면에 원화를 함께 보일 운영자 환율. 비우면 USD만 |
 | `ACCOUNT_COOKIE_SECURE` | `true` | 세션 쿠키 `Secure` 속성. HTTPS가 없는 로컬 개발에서만 `false` |
 | `ACCOUNT_DEV_LOGIN_ENABLED` | `false` | `true`이면 `POST /api/v1/auth/dev-login`이 등록되어 비밀번호 없이 시드 계정 세션 발급 |
 | `ACCOUNT_DEV_LOGIN_EMAIL` | `admin@govbiz.local` | 개발용 관리자 시드 계정 이메일. 없으면 ADMIN 역할·이메일 인증 완료로 생성 |
@@ -1006,6 +1040,16 @@ planusage/
 │   ├── mapper            # MyBatis Mapper, DbRow
 │   └── exception         # 사용량 저장소 장애
 └── domain                # 요금제별 한도(없으면 null), 기능·기간, 서울 기준 집계 기간
+aiusage/
+├── controller            # 관리자 AI 비용·가격표·실제 비용 가져오기 HTTP 진입점
+│   └── dto               # 공개 요청·응답 계약(금액은 소수 6자리 USD 문자열)
+├── service               # 사용량 기록(REQUIRES_NEW)·추정 비용·기간 합계, 실제 비용 동기화와 매일 작업
+├── client                # ai-service 사용량 헤더 기록 인터셉터, OpenAI Costs API
+│   ├── dto · mapper · exception
+├── repository            # 사용 기록·가격표·실제 일별 비용(MySQL)
+│   └── mapper            # MyBatis Mapper, DbRow
+├── helper                # 지금 AI를 부르는 계정·기능 표시(ThreadLocal)
+└── domain                # 가격 선택·비용 계산, 기간 합계
 _health                    # Core API Health
 _health_ai_service         # AI Service Health의 Controller → Service → Client
 _sampleitem                # 학습 예제
