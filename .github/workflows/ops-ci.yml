@@ -3,16 +3,40 @@ name: GovBiz Ops CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: CI scope / Ops
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      selected: ${{ steps.scope.outputs.selected }}
+    steps:
+      - name: Check out CI policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select required validation from verified changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B infrastructure/release/ci_policy.py --plan ops-ci.yml
+
   checks:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'checks') }}
     name: Ops checks and MySQL tests
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -142,10 +166,11 @@ jobs:
         run: uv run --locked python manage.py test rag_budget_http_checks --noinput
 
   docker:
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'docker') }}
     name: Ops container integration
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    needs: checks
+    needs: [changes, checks]
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -172,7 +197,7 @@ jobs:
   merge-readiness:
     name: Required CI / Ops
     if: ${{ always() }}
-    needs: [checks, docker]
+    needs: [changes, checks, docker]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:

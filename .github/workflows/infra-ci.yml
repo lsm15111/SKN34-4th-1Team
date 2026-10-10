@@ -3,9 +3,11 @@ name: Infra CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 # GitOps code lives inside the application repository; Actions are discovered
 # only in the repository-root .github/workflows directory.
@@ -18,7 +20,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: CI scope / Infra
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      selected: ${{ steps.scope.outputs.selected }}
+    steps:
+      - name: Check out CI policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select required validation from verified changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B infrastructure/release/ci_policy.py --plan infra-ci.yml
+
   fork-identity:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'fork-identity') }}
     name: Fork identity (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -39,6 +63,8 @@ jobs:
         run: python -B -m unittest discover -s infrastructure/release -p test_repository.py
 
   repository:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'repository') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -56,6 +82,8 @@ jobs:
         run: python -B scripts/check_repository.py
 
   kubernetes-manifests:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'kubernetes-manifests') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -111,6 +139,8 @@ jobs:
         run: python -B scripts/check_kubernetes.py
 
   helm-gitops:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'helm-gitops') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -154,7 +184,7 @@ jobs:
   merge-readiness:
     name: Required CI / Infra
     if: ${{ always() }}
-    needs: [fork-identity, repository, kubernetes-manifests, helm-gitops]
+    needs: [changes, fork-identity, repository, kubernetes-manifests, helm-gitops]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:

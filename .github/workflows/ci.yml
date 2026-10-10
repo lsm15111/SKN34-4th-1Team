@@ -3,9 +3,11 @@ name: GovBiz CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 # Superseded runs cannot authorize publication of the current branch head.
 # Keep other workflows and pull-request refs in independent groups.
@@ -14,7 +16,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: CI scope / GovBiz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      selected: ${{ steps.scope.outputs.selected }}
+    steps:
+      - name: Check out CI policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select required validation from verified changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B infrastructure/release/ci_policy.py --plan ci.yml
+
   frontend:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'frontend') }}
     name: Web and shared
     runs-on: ubuntu-24.04
     steps:
@@ -58,6 +82,8 @@ jobs:
         run: python3 -B infrastructure/scripts/verify-production-proxy.py --web-image govbiz-web:ci
 
   mobile:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'mobile') }}
     name: Mobile
     runs-on: ubuntu-24.04
     steps:
@@ -92,6 +118,8 @@ jobs:
         run: pnpm --filter @govbiz/mobile export
 
   core-service:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'core-service') }}
     name: Core API
     runs-on: ubuntu-24.04
     defaults:
@@ -117,6 +145,8 @@ jobs:
         run: ./gradlew clean build --no-daemon
 
   ai-service:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'ai-service') }}
     name: AI Service
     runs-on: ubuntu-24.04
     services:
@@ -204,8 +234,10 @@ jobs:
           --verify-report runs/elasticsearch-korean-queries-20260912-v1/report.json
 
   container-integration:
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'container-integration') }}
     name: Container integration
     needs:
+      - changes
       - frontend
       - core-service
       - ai-service
@@ -243,7 +275,7 @@ jobs:
   merge-readiness:
     name: Required CI / GovBiz
     if: ${{ always() }}
-    needs: [frontend, mobile, core-service, ai-service, container-integration]
+    needs: [changes, frontend, mobile, core-service, ai-service, container-integration]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:

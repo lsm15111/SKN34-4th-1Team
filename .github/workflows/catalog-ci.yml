@@ -5,9 +5,11 @@ on:
     # Validate every submitted branch, including commits that only change release
     # policy or documentation. Publication separately checks upstream merge and fork opt-in.
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
 
 # Superseded runs cannot authorize publication of the current branch head.
 concurrency:
@@ -15,7 +17,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: CI scope / Catalog
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      selected: ${{ steps.scope.outputs.selected }}
+    steps:
+      - name: Check out CI policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select required validation from verified changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B infrastructure/release/ci_policy.py --plan catalog-ci.yml
+
   catalog-service:
+    needs: changes
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'catalog-service') }}
     name: Catalog clean build and boundaries
     runs-on: ubuntu-24.04
     steps:
@@ -39,8 +63,9 @@ jobs:
         run: python3 -B infrastructure/scripts/verify-catalog-separation.py --config-only
 
   catalog-integration:
+    if: ${{ contains(fromJSON(needs.changes.outputs.selected), 'catalog-integration') }}
     name: Catalog to Core HTTP projection with offline fixtures
-    needs: catalog-service
+    needs: [changes, catalog-service]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -54,7 +79,7 @@ jobs:
   merge-readiness:
     name: Required CI / Catalog
     if: ${{ always() }}
-    needs: [catalog-service, catalog-integration]
+    needs: [changes, catalog-service, catalog-integration]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:
