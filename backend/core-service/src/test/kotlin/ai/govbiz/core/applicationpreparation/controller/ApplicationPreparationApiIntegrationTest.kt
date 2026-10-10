@@ -200,6 +200,7 @@ class ApplicationPreparationApiIntegrationTest {
                     bytes,
                 )),
                 listOf("과기정통부 원문 대조 필요"),
+                collectionNotice = "과기정통부 수집 범위 안내",
             ),
         )
         val hwpBytes = requireNotNull(javaClass.getResourceAsStream("/applicationpreparation/checkbox-form.hwp")).readBytes()
@@ -393,7 +394,8 @@ class ApplicationPreparationApiIntegrationTest {
             .andExpect(jsonPath("$.items[0].sourceCode").value("MSIT"))
             .andExpect(jsonPath("$.items[0].sourceProgramId").value(MSIT_PROGRAM_ID))
             .andExpect(jsonPath("$.items[0].sourceUrl").value(MSIT_SOURCE_URL))
-            .andExpect(jsonPath("$.warnings[0]").value("과기정통부 원문 대조 필요"))
+            .andExpect(jsonPath("$.warnings[0]").value("과기정통부 수집 범위 안내"))
+            .andExpect(jsonPath("$.warnings[1]").value("과기정통부 원문 대조 필요"))
         verify(msitAttachments).collect("MSIT", MSIT_PROGRAM_ID, MSIT_SOURCE_URL)
     }
 
