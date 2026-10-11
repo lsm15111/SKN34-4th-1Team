@@ -132,7 +132,7 @@ HTTP API와 비동기 메시지로 연결합니다.
 
 ### 5.1 서비스 연결
 
-**사용자 업무:** 웹·모바일은 같은 `core-service`를 사용하며, `core-service`가 `catalog-service`와 `ai-service`를 호출합니다.
+<img src="docs/assets/readme/service-business-caption.svg" alt="사용자 업무 — 웹·모바일은 같은 core-service를 사용하며, core-service가 catalog-service와 ai-service를 호출합니다." width="820">
 
 ```mermaid
 flowchart LR
@@ -160,8 +160,7 @@ flowchart LR
     class Redis redisCache
 ```
 
-**비동기 작업:** 큐가 활성화된 업무는 `core-service`가 작업과 발행 대기 기록(Outbox)을 MySQL에 저장한 뒤
-RabbitMQ로 전달합니다. 발행기와 소비자는 모두 `core-service` 내부에서 실행됩니다.
+<img src="docs/assets/readme/service-async-caption.svg" alt="비동기 작업 — 큐가 활성화된 업무는 core-service가 작업과 발행 대기 기록(Outbox)을 MySQL에 저장한 뒤 RabbitMQ로 전달합니다. 발행기와 소비자는 모두 core-service 내부에서 실행됩니다." width="820">
 
 ```mermaid
 flowchart LR
@@ -180,12 +179,13 @@ flowchart LR
 적용 업무는 **리포트 생성·메일 발송, 중복 지원 검토, 신청 양식·문항 분석, 카카오 연결 해제,
 관심 공고 원문 수집·색인**입니다. 소비자는 업무에 따라 `ai-service`·공식 원문·메일 서버·카카오 API를 호출합니다.
 
-**평가 운영:** 같은 React 웹의 관리자 화면이 `ops-service`를 호출하고, 평가 작업은 HTTP 요청 밖에서 실행됩니다.
+<img src="docs/assets/readme/service-evaluation-caption.svg" alt="평가 운영 — 같은 React 웹의 관리자 화면이 ops-service를 호출하고, 평가 작업은 HTTP 요청 밖에서 실행됩니다." width="820">
 
 ```mermaid
 flowchart LR
     Admin["React Web<br/>LLMOps 관리자 화면"] --> Ops["ops-service<br/>예산 · 실행 관리 · 검토"]
-    Ops -->|평가 접수| Evaluation["Prefect + 평가 실행기<br/>평가 · 보고서 · 추적"]
+    Ops -->|평가 접수| Evaluation["Prefect + 평가 실행기<br/>평가 · 지표 계산<br/>Evidently 비교 보고서 생성"]
+    Evaluation -->|trace · 점수 등록| Langfuse["Langfuse<br/>모델 호출 추적 · 평가 점수"]
     Ops -->|관리자 세션 확인| Core["core-service<br/>계정 · 권한"]
     Ops -.-> OpsDB[("Ops MySQL<br/>실행 · 검토 · 예산")]
     Core -.-> CoreDB[("Core MySQL<br/>계정 · 권한")]
@@ -195,7 +195,7 @@ flowchart LR
     classDef mysql fill:#fff4df,stroke:#c8ad72,color:#183d32
     class Admin client
     class Ops,Core service
-    class Evaluation execution
+    class Evaluation,Langfuse execution
     class OpsDB,CoreDB mysql
 ```
 
@@ -207,7 +207,7 @@ Core·Catalog·Ops의 MySQL은 같은 색을 사용하고, 서비스별 소유�
 
 <a id="로컬-시작"></a>
 
-### 5.2 배치 구조
+### 5.2 전체 구성도
 
 업무 서비스와 LLMOps 평가·관측을 **하나의 Kubernetes(kind) 클러스터**에 배치하고,
 역할에 따라 세 namespace로 구분합니다.
@@ -404,7 +404,7 @@ Qdrant·Elasticsearch·Redis와 평가 결과 파일의 연결은 [서비스 연
 Catalog가 공식 API의 제목·기관·신청 기간·지역·분야·지원 대상·원문 URL·신청 경로를 정규화합니다.
 공고는 **제공처 코드 + 원본 ID**로 구분하고, 접수 상태는 신청 기간과 서울 기준 현재 날짜로 계산합니다.
 
-**수집·색인 준비:** `catalog-service`가 수집 결과를 검증·정규화하고, 키워드 색인과 의미 검색 벡터를 준비합니다.
+<img src="docs/assets/readme/catalog-indexing-caption.svg" alt="수집·색인 준비 — catalog-service가 수집 결과를 검증·정규화하고, 키워드 색인과 의미 검색 벡터를 준비합니다." width="820">
 
 ```mermaid
 flowchart LR
@@ -422,8 +422,7 @@ flowchart LR
     class Elastic searchIndex
 ```
 
-**공개·동기화:** 수집과 두 색인 준비가 모두 성공하면 Catalog MySQL에 공개합니다.
-`core-service`는 인증된 HTTP snapshot을 조회·검증해 Core MySQL의 조회용 복제본을 갱신합니다.
+<img src="docs/assets/readme/catalog-sync-caption.svg" alt="공개·동기화 — 수집과 두 색인 준비가 모두 성공하면 Catalog MySQL에 공개합니다. core-service는 인증된 HTTP snapshot을 조회·검증해 Core MySQL의 조회용 복제본을 갱신합니다." width="820">
 
 ```mermaid
 flowchart LR
@@ -903,6 +902,8 @@ flowchart LR
     class Quality service
     class Recovery execution
 ```
+
+### 9.5 기능별 상세설명
 
 | 기능 | 동작 |
 |---|---|
