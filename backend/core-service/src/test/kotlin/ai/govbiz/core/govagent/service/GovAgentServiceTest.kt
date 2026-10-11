@@ -122,6 +122,48 @@ class GovAgentServiceTest {
     }
 
     @Test
+    fun combinationReviewPreservesSelectedCompositeIdentityWithoutExecutingOrCharging() {
+        decide("COMBINATION_REVIEW")
+        val selected = GovAgentProgram("KSTARTUP", "P001")
+        val result = service.answer(admin, "127.0.0.1", question(selected))
+
+        assertEquals(GovAgentOutcome.COMBINATION_REVIEW, result.outcome)
+        assertEquals(selected, result.program)
+        assertNull(result.interpretation)
+        assertNull(result.evidence)
+        assertTrue(!result.message.isNullOrBlank())
+        verifyNoInteractions(conversation, evidence, usage)
+    }
+
+    @Test
+    fun combinationReviewWithoutSelectionStillPreparesReviewWithoutExecutingOrCharging() {
+        decide("COMBINATION_REVIEW", selected = false)
+        val result = service.answer(admin, "127.0.0.1", question(null))
+
+        assertEquals(GovAgentOutcome.COMBINATION_REVIEW, result.outcome)
+        assertNull(result.program)
+        assertNull(result.interpretation)
+        assertNull(result.evidence)
+        assertTrue(result.message!!.contains("두 공고"))
+        verifyNoInteractions(conversation, evidence, usage)
+    }
+
+    @Test
+    fun partnersNeverScopesTheBrowseResponseToASelectedProgramOrExecutesAnotherFeature() {
+        for (selected in listOf(null, program)) {
+            decide("PARTNERS", selected = selected != null)
+            val result = service.answer(admin, "127.0.0.1", question(selected))
+
+            assertEquals(GovAgentOutcome.PARTNERS, result.outcome)
+            assertNull(result.program)
+            assertNull(result.interpretation)
+            assertNull(result.evidence)
+            assertTrue(!result.message.isNullOrBlank())
+        }
+        verifyNoInteractions(conversation, evidence, usage)
+    }
+
+    @Test
     fun unsupportedRequestsDoNotExecuteAnyFeature() {
         decide("UNSUPPORTED")
         assertEquals(GovAgentOutcome.UNSUPPORTED, service.answer(admin, "127.0.0.1", question()).outcome)

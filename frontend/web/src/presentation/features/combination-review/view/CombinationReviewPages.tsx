@@ -205,6 +205,31 @@ export function CombinationReviewEditorPage({ create = false }: { create?: boole
   return <ReviewEditor key={`${sessionKey(account)}:${editorKey}`} id={id} account={account.email} initialProgram={initialProgram} />
 }
 
+/** 대화 안에서는 주소를 바꾸지 않고 입력과 실행 결과 중 하나만 엽니다. 저장한 ID는 대화가 보관합니다. */
+export function CombinationReviewPanel({ id, initialProgram = null, onCreated }: {
+  id: number | null
+  initialProgram?: InitialReviewProgram | null
+  onCreated: (id: number) => void
+}) {
+  const account = useAppSelector(selectCurrentAccount)
+  if (!account) return null
+  if (id !== null && (!Number.isSafeInteger(id) || id <= 0)) return <p role="alert">올바른 검토 번호가 아닙니다.</p>
+  const panelKey = id ?? `new:${initialProgram ? reviewProgramKey(initialProgram) : ''}`
+  return <ReviewPanel key={`${sessionKey(account)}:${panelKey}`} id={id} account={account.email} initialProgram={initialProgram} onCreated={onCreated} />
+}
+
+function ReviewPanel({ id, account, initialProgram, onCreated }: {
+  id: number | null; account: string; initialProgram: InitialReviewProgram | null; onCreated: (id: number) => void
+}) {
+  const [runId, setRunId] = useState<number | null>(null)
+  const [step, setStep] = useState<Step>(id ? 'analysis' : 'selection')
+  const [facts, setFacts] = useState('')
+  return id && runId ? <RunResultPage key={runId} reviewId={id} runId={runId} account={account}
+    embedded={{ onRun: setRunId, onEdit: (next, additionalFacts = '') => { setStep(next); setFacts(additionalFacts); setRunId(null) } }} />
+    : <ReviewEditor id={id} account={account} initialProgram={initialProgram}
+      embedded={{ step, facts, onStep: setStep, onCreated, onRun: setRunId }} />
+}
+
 export function CombinationReviewRunResultPage() {
   const account = useAppSelector(selectCurrentAccount)
   const { reviewId: reviewIdParam, runId: runIdParam } = useParams()
@@ -216,29 +241,37 @@ export function CombinationReviewRunResultPage() {
   return <RunResultPage key={`${sessionKey(account)}:${reviewId}:${runId}`} reviewId={reviewId} runId={runId} account={account.email} />
 }
 
-function RunResultPage({ reviewId, runId, account }: { reviewId: number; runId: number; account: string }) {
+function RunResultPage({ reviewId, runId, account, embedded }: {
+  reviewId: number; runId: number; account: string
+  embedded?: { onRun: (id: number) => void; onEdit: (step: Step, additionalFacts?: string) => void }
+}) {
   const vm = useReviewEditorViewModel(reviewId, account, runId)
   const navigate = useNavigate()
   const contentRef = useRef<HTMLElement>(null)
   const reviewPath = `${appPaths.combinationReviews}/${reviewId}`
-  const header = <WorkspacePageHeader parent={[{ to: appPaths.combinationReviews, label: listTitle }, { to: `${reviewPath}?step=analysis`, label: vm.review?.title ?? '검토' }]} title="검토 결과"
+  const Content = embedded ? 'section' : 'main'
+  const contentClass = embedded ? 'min-w-0 space-y-4' : workspacePageStyles.content
+  const header = embedded ? <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">검토 결과 · {vm.review?.title ?? '검토'}</h3><button type="button" className={s.secondarySm} onClick={() => embedded.onEdit('selection')}>입력 수정</button></div>
+    : <WorkspacePageHeader parent={[{ to: appPaths.combinationReviews, label: listTitle }, { to: `${reviewPath}?step=analysis`, label: vm.review?.title ?? '검토' }]} title="검토 결과"
     actions={<Link className={workspacePageStyles.secondaryButton} to={reviewPath}>입력 수정</Link>} />
   useEffect(() => {
+    if (embedded) return
     const scrollArea = contentRef.current?.parentElement
     if (scrollArea && typeof scrollArea.scrollTo === 'function') scrollArea.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [])
+  }, [embedded])
   // 첫 렌더(읽기 시작 전)도 실패하기 전까지는 읽는 중으로 봅니다.
   const loadingRun = vm.run?.id !== runId && (vm.busy.some((value) => value === 'load' || value === 'run') || vm.error === null)
   const showRunSkeleton = useDelayedFlag(loadingRun)
   const historyBusy = vm.busy.includes('history')
   const rerunBusy = vm.busy.includes('save') || vm.busy.includes('analysis')
   // 저장(바뀐 경우) 뒤 접수한 새 실행의 결과 화면으로 옮겨 진행 상태와 결과를 이어서 봅니다.
-  const rerun = (additionalFacts: string) => vm.saveAndStart(additionalFacts, (started) => navigate(combinationReviewRunResultPath(reviewId, started.id)))
-  if (vm.error?.status === 401) return <>{header}<main className={workspacePageStyles.content}><ReviewError error={vm.error} /></main></>
+  const openRun = (id: number) => embedded ? embedded.onRun(id) : navigate(combinationReviewRunResultPath(reviewId, id))
+  const rerun = (additionalFacts: string) => vm.saveAndStart(additionalFacts, (started) => openRun(started.id))
+  if (vm.error?.status === 401) return <>{header}<Content className={contentClass}><ReviewError error={vm.error} /></Content></>
   const selectedRun = vm.run?.id === runId ? vm.run : null
   const runOptions = vm.runs?.items ?? []
   const currentRunInOptions = runOptions.some((run) => run.id === runId)
-  return <>{header}<main ref={contentRef} className={workspacePageStyles.content}>
+  return <>{header}<Content ref={contentRef} className={contentClass}>
     <div className="flex flex-wrap items-end justify-between gap-3">
       <p className={s.muted}>실행 #{runId}{selectedRun && ` · ${formatReviewDateTime(selectedRun.startedAt)} · 입력 버전 ${selectedRun.inputRevision}`}</p>
       <div className="flex flex-wrap items-center gap-2">
@@ -247,7 +280,7 @@ function RunResultPage({ reviewId, runId, account }: { reviewId: number; runId: 
             ...(currentRunInOptions ? [] : [{ value: String(runId), label: `실행 #${runId} · 현재 결과` }]),
             ...runOptions.map((run) => ({ value: String(run.id), label: `실행 #${run.id} · ${runLabels[run.status]} · ${formatReviewDateTime(run.startedAt)}` })),
           ]}
-          onChange={(value) => navigate(combinationReviewRunResultPath(reviewId, Number(value)))} />
+          onChange={(value) => openRun(Number(value))} />
         {vm.runs?.nextBeforeId && <button className={s.secondarySm} type="button" disabled={historyBusy} aria-busy={historyBusy} onClick={() => vm.history(vm.runs!.nextBeforeId!)}>{historyBusy ? <><span className={s.buttonSpinner} aria-hidden="true" />불러오는 중…</> : '이전 실행 더 보기'}</button>}
       </div>
     </div>
@@ -256,11 +289,13 @@ function RunResultPage({ reviewId, runId, account }: { reviewId: number; runId: 
     {showRunSkeleton && <ReviewRunResultSkeleton />}
     {!selectedRun && vm.review && vm.error && !vm.busy.includes('run') && <div className="flex justify-center"><button className={s.primary} type="button" onClick={() => vm.selectRun(runId)}>다시 시도</button></div>}
     {selectedRun && <ReviewRunResult key={selectedRun.id} run={selectedRun} currentRevision={vm.review?.inputRevision ?? selectedRun.inputRevision} names={vm.names} download={vm.download} downloading={vm.busy.includes('download')}
+      onEdit={embedded ? (additionalFacts) => embedded.onEdit('analysis', additionalFacts) : undefined}
       narrowing={vm.review && reviewAnswersOf(selectedRun.analysis) && <ReviewNarrowingPanel value={vm.draft} names={vm.names} dirty={vm.dirty} busy={rerunBusy}
         blocked={vm.startBlocked} pendingPath={vm.pending ? `${reviewPath}?step=analysis` : null}
+        onPending={embedded ? () => embedded.onEdit('analysis') : undefined}
         onChange={(situation) => vm.setDraft({ ...vm.draft, ...situation })} onSubmit={() => rerun(selectedRun.input.additionalFacts)} />}
       reanalyze={vm.review && <Reanalyze busy={rerunBusy} blocked={vm.pending ? '응답을 확인하지 못한 분석 요청이 있어요' : vm.startBlocked} onClick={() => rerun(selectedRun.input.additionalFacts)} />} />}
-  </main></>
+  </Content></>
 }
 
 /**
@@ -277,15 +312,19 @@ function Reanalyze({ busy, blocked, onClick }: { busy: boolean; blocked: string 
   </div>
 }
 
-function ReviewEditor({ id, account, initialProgram = null }: { id: number | null; account: string; initialProgram?: InitialReviewProgram | null }) {
+function ReviewEditor({ id, account, initialProgram = null, embedded }: {
+  id: number | null; account: string; initialProgram?: InitialReviewProgram | null
+  embedded?: { step: Step; facts: string; onStep: (step: Step) => void; onCreated: (id: number) => void; onRun: (id: number) => void }
+}) {
+  const isEmbedded = !!embedded
   const location = useLocation()
   const suppliedFacts = (location.state as { additionalFacts?: unknown } | null)?.additionalFacts
-  const initialFacts = typeof suppliedFacts === 'string' ? suppliedFacts : ''
-  const vm = useReviewEditorViewModel(id, account, null, initialFacts, initialProgram)
+  const initialFacts = embedded ? embedded.facts : typeof suppliedFacts === 'string' ? suppliedFacts : ''
+  const vm = useReviewEditorViewModel(id, account, null, initialFacts, initialProgram, embedded?.onCreated)
   // 단계는 주소(?step=)가 정합니다. 새로고침 · 뒤로 가기 · 링크로 들어와도 같은 단계를 봅니다. 저장 전인 새 검토는 1단계뿐입니다.
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedStep = searchParams.get('step')
-  const step: Step = id && (requestedStep === 'analysis' || requestedStep === 'participation') ? 'analysis' : 'selection'
+  const step: Step = embedded ? embedded.step : id && (requestedStep === 'analysis' || requestedStep === 'participation') ? 'analysis' : 'selection'
   const reasonId = useId()
   const slotsHeadingId = useId()
   const situationHeadingId = useId()
@@ -303,9 +342,10 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
   const closePicker = () => { focusSlot.current = pickerSlot; setPickerSlot(null) }
   useEffect(() => {
     setPickerSlot(null)
+    if (isEmbedded) return
     const scrollArea = contentRef.current?.parentElement
     if (scrollArea && typeof scrollArea.scrollTo === 'function') scrollArea.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [step])
+  }, [step, isEmbedded])
   const saving = vm.busy.includes('save')
   const inputBusy = saving || vm.busy.includes('load')
   const analysisBusy = vm.busy.includes('analysis')
@@ -323,12 +363,18 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
   const finishedRun = latestRun && !['QUEUED', 'RUNNING', 'UNKNOWN'].includes(latestRun.status) ? latestRun : null
   const currentResult = finishedRun?.status === 'SUCCEEDED' && finishedRun.inputRevision === vm.review?.inputRevision && !vm.dirty ? finishedRun : null
   const now = useNow(!!activeRun, 1000)
-  const changeStep = (next: Step) => { vm.setError(null); setSearchParams(next === 'selection' ? {} : { step: next }) }
+  const changeStep = (next: Step) => {
+    vm.setError(null)
+    if (embedded) embedded.onStep(next)
+    else setSearchParams(next === 'selection' ? {} : { step: next })
+  }
   // 단계를 넘길 때 입력을 검증 · 저장합니다(새 검토는 1단계에서 만들어 주소가 바뀜).
   const goTo = (next: Step) => vm.saveInput(() => changeStep(next))
   const stepIndex = steps.findIndex(([value]) => value === step)
   const title = id ? (vm.review?.title ?? '검토') : '새 검토'
-  const header = <WorkspacePageHeader parent={{ to: appPaths.combinationReviews, label: listTitle }} title={title} />
+  const Content = embedded ? 'section' : 'main'
+  const contentClass = embedded ? 'min-w-0 space-y-4' : workspacePageStyles.content
+  const header = embedded ? <h3 className="mb-4 font-bold">{title}</h3> : <WorkspacePageHeader parent={{ to: appPaths.combinationReviews, label: listTitle }} title={title} />
   const saveNote = saving ? '저장 중…' : !id || vm.dirty ? '다음 단계로 넘어가면 자동 저장돼요' : '자동 저장됨'
   const nextLabel = saving ? <><span className={s.buttonSpinner} aria-hidden="true" />저장 중…</> : '다음 →'
   // 주 버튼을 누를 수 없는 이유입니다. 버튼 옆에 적고 aria-describedby로 연결합니다.
@@ -336,8 +382,8 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
     : invalidProgramCount ? `공고를 2개 고르면 넘어갈 수 있어요 · 지금 ${vm.draft.programs.length}개` : null
   // 바뀐 내 상황은 [검토 실행]이 먼저 저장하므로 실행을 막는 이유가 아닙니다.
   const runBlocked = vm.startBlocked
-  if (vm.error?.status === 401) return <>{header}<main className={workspacePageStyles.content}><ReviewError error={vm.error} /></main></>
-  return <>{header}<main ref={contentRef} className={workspacePageStyles.content}>
+  if (vm.error?.status === 401) return <>{header}<Content className={contentClass}><ReviewError error={vm.error} /></Content></>
+  return <>{header}<Content ref={contentRef} className={contentClass}>
     <ol className="grid gap-2 max-[599px]:hidden sm:grid-cols-2" aria-label="검토 진행 단계">
       {steps.map(([value, label], index) => <li key={value} className={`flex flex-col rounded-2xl border px-3 py-2 ${index === stepIndex ? 'border-brand-primary bg-brand-soft' : index < stepIndex ? 'border-brand-primary/40 bg-white' : 'border-slate-200 bg-white'}`} aria-current={index === stepIndex ? 'step' : undefined}>
         <span className={`text-xs font-bold ${index <= stepIndex ? 'text-brand-primary' : 'text-slate-500'}`}>{index + 1}단계{index < stepIndex ? ' · 완료' : index === stepIndex ? ' · 진행 중' : ''}</span>
@@ -350,7 +396,7 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
       <span className="text-xs text-slate-500">{saveNote}</span>
     </div>
     <ReviewError error={vm.error} />
-    {id && vm.error?.runId && <Link className={s.secondarySm} to={combinationReviewRunResultPath(id, vm.error.runId)}>실패 실행 #{vm.error.runId} 확인</Link>}
+    {id && vm.error?.runId && <ReviewRunLink className={s.secondarySm} reviewId={id} runId={vm.error.runId} onOpen={embedded?.onRun}>실패 실행 #{vm.error.runId} 확인</ReviewRunLink>}
     {vm.rejectedRevision && vm.pending && <button className={s.secondarySm} onClick={vm.clearRejectedRequest}>버전 충돌로 거절된 실행 요청 정리</button>}
     {vm.notice && <p role="status" className={s.muted}>{vm.notice}</p>}
     {id && !vm.review ? (loadingReview
@@ -372,7 +418,7 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
           </section>
           {unsupported && <p className={s.warning}>{unsupportedNotice}</p>}
         </fieldset>
-        <StepBar note={saveNote} reason={selectionBlocked} reasonId={reasonId}
+        <StepBar embedded={isEmbedded} note={saveNote} reason={selectionBlocked} reasonId={reasonId}
           next={<button className={s.primaryPill} type="button" onClick={() => goTo('analysis')} disabled={!!selectionBlocked || inputBusy} aria-busy={saving} aria-describedby={selectionBlocked ? reasonId : undefined}>{nextLabel}</button>} />
       </>}
       {step === 'analysis' && id && <>
@@ -380,7 +426,7 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
         {/* 진행 중이면 진행 카드를, 끝났으면 최근 결과로 가는 카드를 맨 위에 둡니다. 상태가 바뀌면 화면 읽기 프로그램이 한 번 읽습니다. */}
         <div role="status" aria-live="polite" className="contents">
           {activeRun && <RunProgress run={activeRun} now={now} />}
-          {!activeRun && finishedRun && <LatestRunCard reviewId={id} run={finishedRun} stale={finishedRun.inputRevision !== vm.review?.inputRevision || vm.dirty} />}
+          {!activeRun && finishedRun && <LatestRunCard reviewId={id} run={finishedRun} stale={finishedRun.inputRevision !== vm.review?.inputRevision || vm.dirty} onOpen={embedded?.onRun} />}
         </div>
         <section className={`${s.card} space-y-3`} aria-label="분석 대상 공고"><h2 className="font-bold">분석 대상 공고</h2><ul className="space-y-2">{vm.draft.programs.map((program, index) => <li key={reviewProgramKey(program)} className="rounded-lg bg-slate-50 p-3"><strong>사업 {index + 1} · {vm.names[reviewProgramKey(program)] ?? '공고 정보 확인 중'}</strong></li>)}</ul></section>
         {/* 내 상황은 모두 선택입니다. 고르면 조건부 답을 좁혀 주고, [검토 실행]이나 단계 이동 때 저장합니다. */}
@@ -409,14 +455,14 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
         </section>
         <section className={`${s.card} space-y-3`} aria-label="실행 기록"><h2 className="text-lg font-bold">실행 기록</h2>
           {vm.runs?.items.length === 0 && <p className={s.muted}>아직 분석을 실행하지 않았습니다.</p>}
-          <ul className="space-y-2">{vm.runs?.items.map((run) => <li key={run.id}><Link className={`${s.button} w-full justify-start text-left`} to={combinationReviewRunResultPath(id, run.id)}>#{run.id} · 입력 버전 {run.inputRevision} · {runLabels[run.status]} · {formatReviewDateTime(run.startedAt)}</Link></li>)}</ul>
+          <ul className="space-y-2">{vm.runs?.items.map((run) => <li key={run.id}><ReviewRunLink className={`${s.button} w-full justify-start text-left`} reviewId={id} runId={run.id} onOpen={embedded?.onRun}>#{run.id} · 입력 버전 {run.inputRevision} · {runLabels[run.status]} · {formatReviewDateTime(run.startedAt)}</ReviewRunLink></li>)}</ul>
           {vm.runs?.nextBeforeId && <div className="flex justify-center"><button className={s.secondarySm} disabled={historyBusy} aria-busy={historyBusy} onClick={() => vm.history(vm.runs!.nextBeforeId!)}>{historyBusy ? <><span className={s.buttonSpinner} aria-hidden="true" />불러오는 중…</> : '이전 실행 더 보기'}</button></div>}
         </section>
-        <StepBar note={activeRun ? '화면을 나가도 분석은 계속돼요' : '검토 실행 1회마다 유료 분석이 한 번 실행돼요'} reason={vm.pending ? null : runBlocked} reasonId={reasonId}
+        <StepBar embedded={isEmbedded} note={activeRun ? '화면을 나가도 분석은 계속돼요' : '검토 실행 1회마다 유료 분석이 한 번 실행돼요'} reason={vm.pending ? null : runBlocked} reasonId={reasonId}
           back={<button className={s.secondaryPill} type="button" disabled={inputBusy || analysisBusy} onClick={() => goTo('selection')}>← 이전</button>}
           next={vm.pending ? null : <>
             {/* 현재 입력으로 끝난 결과가 있으면 [결과 보기]가 주 동작이고, 다시 실행은 보조 동작입니다(실행마다 유료). */}
-            {currentResult && <Link className={s.primaryPill} to={combinationReviewRunResultPath(id, currentResult.id)}>결과 보기 →</Link>}
+            {currentResult && <ReviewRunLink className={s.primaryPill} reviewId={id} runId={currentResult.id} onOpen={embedded?.onRun}>결과 보기 →</ReviewRunLink>}
             <button className={currentResult ? s.secondaryPill : s.primaryPill} type="button" aria-busy={analysisBusy || saving || !!activeRun}
               aria-describedby={runBlocked ? reasonId : undefined}
               disabled={analysisBusy || inputBusy || !!runBlocked} onClick={() => vm.saveAndStart(vm.facts)}>
@@ -426,7 +472,7 @@ function ReviewEditor({ id, account, initialProgram = null }: { id: number | nul
           </>} />
       </>}
     </>}
-  </main>
+  </Content>
   {step === 'selection' && pickerSlot !== null && <SlotPickerPanel slot={pickerSlot} slots={vm.slots} programInfo={vm.programInfo}
     onConfirm={(program) => { vm.chooseSlot(pickerSlot, program); closePicker() }} onClose={closePicker} />}
   </>
@@ -514,9 +560,9 @@ function ProgramSlot({ index, program, info, name, buttonRef, onPick, onClear }:
  * 단계 화면 아래에 붙는 이동 바입니다(화면 통일안 R3 StepFlow · 신청 문서 답변 입력과 같은 배치).
  * 왼쪽 [← 이전] · 가운데 저장 상태 안내 · 오른쪽 주 동작. 주 동작을 누를 수 없으면 그 이유를 버튼 앞에 적습니다.
  */
-function StepBar({ back, note, reason = null, reasonId, next }: { back?: ReactNode; note: string; reason?: string | null; reasonId?: string; next: ReactNode }) {
+function StepBar({ back, note, reason = null, reasonId, next, embedded = false }: { back?: ReactNode; note: string; reason?: string | null; reasonId?: string; next: ReactNode; embedded?: boolean }) {
   // 모든 폭에서 아래에 붙는 바라 도우미 런처를 그 위로 올립니다.
-  return <div className={s.stepBar} {...assistantLift.always}>
+  return <div className={embedded ? 'flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-white p-3' : s.stepBar} {...(embedded ? {} : assistantLift.always)}>
     {back}
     <span className={s.stepBarNote} role="status" aria-live="polite">{note}</span>
     <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -547,7 +593,7 @@ function RunProgress({ run, now }: { run: RunSummary; now: number }) {
 }
 
 /** 끝난 최근 실행으로 가는 카드입니다. 성공은 [결과 보기], 실패 · 중단은 [자세히 보기]로 결과 화면의 이유를 엽니다. */
-function LatestRunCard({ reviewId, run, stale }: { reviewId: number; run: RunSummary; stale: boolean }) {
+function LatestRunCard({ reviewId, run, stale, onOpen }: { reviewId: number; run: RunSummary; stale: boolean; onOpen?: (id: number) => void }) {
   const succeeded = run.status === 'SUCCEEDED'
   const when = formatReviewDateTime(run.finishedAt ?? run.startedAt)
   return <section className={`${s.resultCard} ${succeeded ? s.resultCardDone : s.resultCardFailed}`} aria-label="최근 실행">
@@ -556,6 +602,13 @@ function LatestRunCard({ reviewId, run, stale }: { reviewId: number; run: RunSum
       <span className="text-xs text-ink-muted">실행 #{run.id} · 입력 버전 {run.inputRevision} · {when}</span>
       {stale && <span className="text-xs text-ink-muted">지금 입력과 다른 버전의 결과예요. 바뀐 입력으로 보려면 다시 실행해 주세요.</span>}
     </div>
-    <Link className={s.secondarySm} to={combinationReviewRunResultPath(reviewId, run.id)}>{succeeded ? '결과 보기' : '자세히 보기'}<span className="sr-only">: 실행 #{run.id}</span></Link>
+    <ReviewRunLink className={s.secondarySm} reviewId={reviewId} runId={run.id} onOpen={onOpen}>{succeeded ? '결과 보기' : '자세히 보기'}<span className="sr-only">: 실행 #{run.id}</span></ReviewRunLink>
   </section>
+}
+
+function ReviewRunLink({ reviewId, runId, onOpen, className, children }: {
+  reviewId: number; runId: number; onOpen?: (id: number) => void; className: string; children: ReactNode
+}) {
+  return onOpen ? <button type="button" className={className} onClick={() => onOpen(runId)}>{children}</button>
+    : <Link className={className} to={combinationReviewRunResultPath(reviewId, runId)}>{children}</Link>
 }

@@ -13,11 +13,12 @@ INSTRUCTIONS = """당신은 Gov 에이전트의 실행 경로를 선택하는 su
 판단 기준:
 - message는 이번에 사용자가 요청한 작업입니다. 현재 메시지의 목적을 먼저 판단합니다.
 - searchQuery와 pendingSearchQuestion은 이전 검색의 참고 문맥이며, 새 작업 요청보다 우선하지 않습니다.
-  보류 질문이 있어도 사용자가 신청 준비나 공고 원문 질문으로 전환했다면 그 작업으로 분류합니다.
+  보류 질문이 있어도 사용자가 신청 준비, 공고 원문 질문, 중복 검토, 파트너 조회로 전환했다면 그 작업으로 분류합니다.
   '서울', '제조업'처럼 실제로 보류된 검색 질문에 답하는 짧은 메시지만 해당 문맥을 이용합니다.
 - hasSelectedProgram은 실행에 필요한 공고를 골랐는지만 나타냅니다. false여도 신청 준비는 APPLICATION,
-  공고 원문 질문은 EVIDENCE입니다. 공고가 없다는 이유로 먼저 검색하라고 판단하지 않습니다.
-  공고 선택 안내는 Core가 반환합니다. 원하는 작업과 그 작업의 실행 전제조건을 구분합니다.
+  공고 원문 질문은 EVIDENCE입니다. 중복 검토와 파트너 조회도 공고 선택 여부와 관계없이 각 경로로 보냅니다.
+  공고가 없다는 이유로 먼저 검색하라고 판단하지 않습니다. 필요한 공고 선택 안내는 Core가 반환합니다.
+  원하는 작업과 그 작업의 실행 전제조건을 구분합니다.
 - 단어의 포함 여부가 아닌 요청 전체의 목적을 판단합니다. '신청서 작성 교육 사업 찾아줘'는 SEARCH,
   '신청서를 작성하고 싶어요'는 APPLICATION, '신청서 제출 방법은?'은 EVIDENCE입니다.
 
@@ -33,8 +34,15 @@ APPLICATION: 신청 준비, 신청서 양식 분석, 신청서·사업계획서 
   '신청서 작성해 줘', '이 공고 양식 분석해 줘'가 해당합니다.
   준비하고 싶다는 의사 표현도 포함하며 공고 이름이나 선택은 분류의 필수 조건이 아닙니다.
   이 경로는 준비 화면만 안내하며, 사용자가 신청서를 선택하고 분석·작성 버튼을 눌러야 실행합니다.
-UNSUPPORTED: 외부 기관에 신청서 제출·접수, 저장/삭제 등 변경, 계정 관리, 외부 시스템 조작,
-  여러 공고 비교/여러 작업 일괄 실행, 그 밖의 지원하지 않는 요청.
+COMBINATION_REVIEW: 두 공고에 함께 지원·참여할 수 있는지, 중복 신청·수혜가 가능한지 비교·검토하는 요청.
+  '이 두 사업 같이 지원해도 돼?', '중복 수혜를 검토하고 싶어요'가 해당합니다.
+  선택한 공고가 없어도 이 경로입니다. 검토 화면에서 두 공고와 참여 상태·사업 관계를 확인하고
+  사용자가 검토 실행 버튼을 눌러야 실제 분석합니다. 검토가 이미 끝났다고 답하지 않습니다.
+PARTNERS: 협업할 파트너나 파트너 모집글을 찾고 조회하는 요청.
+  '함께할 파트너 찾아줘', '협업 모집글을 보여줘'가 해당하며 공고 선택이 필요하지 않습니다.
+  기존 모집글 조회 화면을 안내하며, AI 맞춤 매칭을 수행하거나 제안을 보내지 않습니다.
+UNSUPPORTED: 외부 기관에 신청서 제출·접수, 제안 발송, 파트너 모집글 작성 등 자동 변경,
+  저장/삭제 등 변경, 계정 관리, 외부 시스템 조작, 여러 작업 자동·일괄 실행, 그 밖의 지원하지 않는 요청.
 아직 연결하지 않은 기능을 실행했다고 주장하지 않습니다. 서버가 실행 가능한 범위를 안내합니다.
 
 분류 예시:
@@ -46,6 +54,13 @@ message='서울', hasSelectedProgram=false,
   searchQuery='창업 지원', pendingSearchQuestion='검색할 지역을 알려 주세요.' -> SEARCH
 message='신청서 작성 교육을 지원하는 사업 찾아줘', hasSelectedProgram=true -> SEARCH
 message='신청할 때 제출할 서류는 뭐야?', hasSelectedProgram=false -> EVIDENCE
+message='중복 수혜를 검토하고 싶어요', hasSelectedProgram=false,
+  searchQuery='창업 지원', pendingSearchQuestion='검색할 지역을 알려 주세요.' -> COMBINATION_REVIEW
+message='이 사업과 다른 공고에 함께 지원할 수 있어?', hasSelectedProgram=true -> COMBINATION_REVIEW
+message='협업 파트너 모집글 찾아줘', hasSelectedProgram=false -> PARTNERS
+message='이 파트너에게 제안을 보내 줘', hasSelectedProgram=true -> UNSUPPORTED
+message='파트너 모집글을 대신 작성해 줘', hasSelectedProgram=false -> UNSUPPORTED
+message='사업을 찾아 신청서를 작성하고 중복 검토까지 전부 실행해 줘', hasSelectedProgram=false -> UNSUPPORTED
 message='이 공고에 신청서를 대신 제출해 줘', hasSelectedProgram=true -> UNSUPPORTED
 """
 

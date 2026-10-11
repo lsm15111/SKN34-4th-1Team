@@ -53,7 +53,7 @@ function toSlots(programs: ReviewProgram[], gap: number | null): (ReviewProgram 
   return slots
 }
 
-export function useReviewEditorViewModel(id: number | null, account: string, resultRunId: number | null = null, initialFacts = '', initialProgram: InitialReviewProgram | null = null) {
+export function useReviewEditorViewModel(id: number | null, account: string, resultRunId: number | null = null, initialFacts = '', initialProgram: InitialReviewProgram | null = null, onCreated?: (id: number) => void) {
   const useCase = appContainer.resolve('combinationReviewUseCase')
   const detailUseCase = appContainer.resolve('getSupportProgramDetailUseCase')
   const journal = appContainer.resolve('reviewRequestJournal')
@@ -224,7 +224,10 @@ export function useReviewEditorViewModel(id: number | null, account: string, res
     let input: ReviewDraft
     try { input = validateReviewDraft(draft) } catch (e) { setError({ message: (e as Error).message }); return }
     if (!id) {
-      void perform('save', (signal) => useCase.create(input, signal), (saved) => navigate(`${appPaths.combinationReviews}/${saved.id}?step=analysis`, { replace: true }))
+      void perform('save', (signal) => useCase.create(input, signal), (saved) => {
+        if (onCreated) onCreated(saved.id)
+        else navigate(`${appPaths.combinationReviews}/${saved.id}?step=analysis`, { replace: true })
+      })
       return
     }
     if (!review) return

@@ -7,6 +7,8 @@ import type { SupportProgramSearchReadiness } from '../../../../domain/entities/
 import { PlanUsageLine } from '../../../shared/plan-usage/PlanUsageLine'
 import { appPaths } from '../../../shared/routes/appPaths'
 import { ApplicationPreparationInline } from '../../application-preparation/view/ApplicationPreparationInline'
+import { CombinationReviewPanel } from '../../combination-review/view/CombinationReviewPages'
+import { PartnerRecruitmentPanel } from '../../partner-recruitment/view/PartnerRecruitmentListPage'
 import { useChatPageViewModel } from '../viewmodel/useChatPageViewModel'
 import { companyConditionFields } from '../viewmodel/chatConversationProposal'
 import { ConversationProposal } from './ConversationProposal'
@@ -30,6 +32,7 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
     govProgram,
     selectGovProgram,
     attachGovPreparation,
+    attachGovReview,
     evidenceUsage,
     isRestoredHistory,
     displayProposal,
@@ -71,8 +74,8 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
   const isLandingIntro = layout === 'landing' && conversationCount === 0
   const isDockedLanding = layout === 'landing' && !isLandingIntro
   const isGuest = layout === 'landing'
-  // 저장된 대화에도 신청 준비 안내는 남기되 가장 최근 카드 하나만 조회·분석 상태를 이어받습니다.
-  const latestApplicationMessageId = messages.reduce<string | null>((latest, message) => message.govApplication ? message.id : latest, null)
+  // 가장 최근 업무 카드만 활성화합니다. 이전 기록은 저장된 결과를 여는 링크로 남깁니다.
+  const latestToolMessageId = messages.findLast((message) => message.govApplication || message.govReview || message.govPartners)?.id
 
   /**
    * 공개 첫 화면의 첫 전송은 소개가 사라지고 입력창이 아래로 내려가는 큰 전환이라 View Transition으로 잇습니다.
@@ -125,7 +128,7 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
           onKeyDown={handleInputKeyDown}
-          placeholder={isGovAgent ? '지원사업 검색, 공고 질문, 신청 준비를 요청해 주세요.' : isLandingIntro
+          placeholder={isGovAgent ? '지원사업 검색, 공고 질문, 신청 준비, 중복 검토, 파트너 조회를 요청해 주세요.' : isLandingIntro
             ? '예: 서울에서 AI 서비스를 만드는 창업기업입니다. 사업화 지원을 받을 수 있을까요?'
             : isDockedLanding ? '지원사업·조건을 입력해 주세요.'
               : '찾고 싶은 지원사업이나 변경할 조건을 알려주세요.'}
@@ -236,7 +239,7 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
                   <EvidenceQuestionFeedback compact state={message.govEvidence.answer.answerStatus === 'ANSWERED'
                     ? { status: 'answered', answer: message.govEvidence.answer } : { status: 'insufficient-evidence' }} />
                 </> : isGovAgent && index === 0
-                  ? '안녕하세요. Gov 에이전트입니다. 지원사업을 검색하고, 공고를 선택하면 같은 대화에서 원문 질문과 신청 준비를 도와드립니다.'
+                  ? '안녕하세요. Gov 에이전트입니다. 지원사업 검색, 공고 원문 질문, 신청 준비, 중복 지원 검토와 파트너 조회를 같은 대화에서 도와드립니다.'
                   : message.text}
                 {retrySearch || retryInterpretation ? (
                   <div className={chatPageStyles.messageActions}>
@@ -247,7 +250,7 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
                   </div>
                 ) : null}
               </div>
-              {message.govApplication ? (isGovAgent && layout === 'workspace' && message.id === latestApplicationMessageId
+              {message.govApplication ? (isGovAgent && layout === 'workspace' && message.id === latestToolMessageId
                 && govProgram?.sourceCode === message.govApplication.program.sourceCode
                 && govProgram.sourceProgramId === message.govApplication.program.sourceProgramId
                 ? <ApplicationPreparationInline key={`${accountEmail}:${message.id}:${message.govApplication.preparationId ?? 'new'}`} program={message.govApplication.program}
@@ -259,6 +262,23 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
                     : `${appPaths.applicationPreparationNew}?${new URLSearchParams({
                     sourceCode: message.govApplication.program.sourceCode, sourceProgramId: message.govApplication.program.sourceProgramId,
                   })}`}>신청 준비 화면에서 이어서 보기</Link>
+                </div>) : null}
+              {message.govReview ? (isGovAgent && layout === 'workspace' && message.id === latestToolMessageId
+                ? <div className="mt-3 min-w-0" key={`${accountEmail}:${message.id}:${message.govReview.reviewId ?? 'new'}`}>
+                  <CombinationReviewPanel id={message.govReview.reviewId ?? null} initialProgram={message.govReview.program}
+                    onCreated={(id) => attachGovReview(message.id, id)} />
+                </div>
+                : <div className="mt-3 rounded-xl border border-line p-4 text-sm">
+                  <Link className="text-brand-primary underline" to={message.govReview.reviewId
+                    ? `${appPaths.combinationReviews}/${message.govReview.reviewId}`
+                    : `${appPaths.combinationReviewNew}${message.govReview.program ? `?${new URLSearchParams({
+                      sourceCode: message.govReview.program.sourceCode, sourceProgramId: message.govReview.program.sourceProgramId,
+                    })}` : ''}`}>중복 검토 화면에서 이어서 보기</Link>
+                </div>) : null}
+              {message.govPartners ? (isGovAgent && layout === 'workspace' && message.id === latestToolMessageId
+                ? <div className="mt-3 min-w-0" key={`${accountEmail}:${message.id}`}><PartnerRecruitmentPanel /></div>
+                : <div className="mt-3 rounded-xl border border-line p-4 text-sm">
+                  <Link className="text-brand-primary underline" to={appPaths.partners}>파트너 모집글 보기</Link>
                 </div>) : null}
               {message.searchOptions && isUser ? (
                 <div>

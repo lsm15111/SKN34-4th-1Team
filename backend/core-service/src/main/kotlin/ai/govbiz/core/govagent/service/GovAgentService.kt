@@ -17,7 +17,7 @@ import ai.govbiz.core.supportprogram.service.conversation.SupportProgramConversa
 import ai.govbiz.core.supportprogram.service.evidence.SupportProgramEvidenceService
 import org.springframework.stereotype.Service
 
-/** 한 턴에 한 업무만 위임한다. 검색·신청 준비는 안내 뒤 사용자의 명시적인 실행을 기다린다. */
+/** 한 턴에 한 업무만 위임한다. 검색·신청 준비·중복 검토는 안내 뒤 사용자의 명시적인 실행을 기다린다. */
 @Service
 class GovAgentService(
     private val client: AiGovAgentClient,
@@ -58,8 +58,12 @@ class GovAgentService(
                 GovAgentResult(GovAgentOutcome.APPLICATION, program = program,
                     message = "신청 양식과 지원 분야를 확인한 뒤 작성을 시작해 주세요. 저장된 양식이 없으면 분석을 요청할 수 있습니다.")
             }
+            "COMBINATION_REVIEW" -> GovAgentResult(GovAgentOutcome.COMBINATION_REVIEW, program = question.selectedProgram,
+                message = "함께 지원할 두 공고를 선택하고 참여 상태와 사업 관계를 확인한 뒤 중복 검토를 실행해 주세요.")
+            "PARTNERS" -> GovAgentResult(GovAgentOutcome.PARTNERS,
+                message = "협업할 파트너 모집글을 조회할 수 있습니다. 모집 역할과 지역 등 조건을 선택하고 모집글 상세 내용을 확인해 주세요.")
             "UNSUPPORTED" -> GovAgentResult(GovAgentOutcome.UNSUPPORTED,
-                message = "현재 Gov 에이전트에서는 지원사업 검색, 선택한 공고의 원문 질문과 신청서 준비를 지원합니다. 외부 기관 제출·삭제·여러 작업 일괄 실행은 지원하지 않습니다. 비교·저장 등 다른 기능은 해당 화면에서 이용해 주세요.")
+                message = "현재 Gov 에이전트에서는 지원사업 검색, 선택한 공고의 원문 질문과 신청서 준비, 중복 검토 준비와 파트너 모집글 조회를 지원합니다. 외부 기관 제출·제안 발송·모집글 작성·저장·삭제·여러 작업 자동 실행은 지원하지 않습니다.")
             else -> throw AiServiceCallException.invalidResponse("Unknown Gov agent action", null)
         }
     }

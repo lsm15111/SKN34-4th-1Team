@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { asValue } from 'awilix/browser'
-import { StrictMode } from 'react'
+import { StrictMode, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
@@ -15,7 +15,8 @@ import { PlanQuotaExceededError } from '@govbiz/shared/domain/errors/PlanQuotaEr
 import { CombinationReviewUseCase } from '../../../../domain/usecases/CombinationReviewUseCase'
 import { CombinationReviewRepositoryImpl } from '../../../../data/repositories/CombinationReviewRepositoryImpl'
 import { supportPrograms } from '../../../../data/fixtures/supportPrograms'
-import { CombinationReviewEditorPage, CombinationReviewListPage, CombinationReviewRunResultPage } from './CombinationReviewPages'
+import { CombinationReviewEditorPage, CombinationReviewListPage, CombinationReviewPanel, CombinationReviewRunResultPage } from './CombinationReviewPages'
+import type { InitialReviewProgram } from '../viewmodel/useReviewEditorViewModel'
 import { answerRunFixture, reviewFixture, runFixture } from '../testing/reviewFixtures'
 import { useReviewSessionIsolation } from '../viewmodel/useReviewSessionIsolation'
 import { chooseOption, optionLabels, selectedValue } from '../../../../test/selectField'
@@ -77,6 +78,166 @@ function mount(path = '/app/combination-reviews/12?step=analysis', strict = fals
   const rendered = render(strict ? <StrictMode>{screenTree}</StrictMode> : screenTree)
   return { store, ...rendered }
 }
+
+function mountPanel(id: number | null = 12, initialProgram: InitialReviewProgram | null = null, onCreated = vi.fn()) {
+  const store = createAppStore()
+  store.dispatch(signedIn({ email: 'a@example.com', role: 'ADMIN', tier: 'MEMBER', emailVerified: false, hasPassword: true, accountType: null, onboarded: true, company: null }))
+  function SavedPanel() {
+    const [savedId, setSavedId] = useState(id)
+    return <CombinationReviewPanel id={savedId} initialProgram={initialProgram} onCreated={(next) => { onCreated(next); setSavedId(next) }} />
+  }
+  return { store, onCreated, ...render(<Provider store={store}><Isolation /><MemoryRouter initialEntries={[
+    { pathname: '/app/chat', search: '?step=analysis&conversation=4', state: { additionalFacts: '다른 화면에서 온 설명' } },
+  ]}><LocationProbe /><SavedPanel /></MemoryRouter></Provider>) }
+}
+
+describe('embedded combination review', () => {
+  it.each([false, true])('creates a review only after two explicit choices, with preselection=%s, and keeps the chat URL', async (preselected) => {
+    const first = catalogProgram('PBLN_100', { title: '청년창업 사업화 지원 공고' })
+    const second = catalogProgram('PBLN_200', { title: '딥테크 성장 지원 공고' })
+    browseSavedPrograms.mockResolvedValue(savedEntries(first, second))
+    repository.create.mockResolvedValue(structuredClone(reviewFixture))
+    const mounted = mountPanel(null, preselected ? { sourceCode: 'BIZINFO', sourceProgramId: 'PBLN_100' } : null)
+    if (preselected) await within(slot(1)).findByText(first.title)
+    expect(screen.queryByRole('main')).toBeNull()
+    expect(repository.create).not.toHaveBeenCalled()
+    expect(repository.start).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('검토 제목'), { target: { value: '대화에서 고른 두 사업' } })
+    for (const index of preselected ? [2] : [1, 2]) {
+      fireEvent.click(within(slot(index)).getByRole('button', { name: `사업 ${index} 공고 고르기` }))
+      const picker = screen.getByRole('dialog', { name: '공고 고르기' })
+      fireEvent.click(await within(picker).findByRole('radio', { name: new RegExp(index === 1 ? first.title : second.title) }))
+      fireEvent.click(within(picker).getByRole('button', { name: `사업 ${index}로 선택` }))
+    }
+    fireEvent.click(nextButton())
+    await screen.findByRole('region', { name: '분석 실행' })
+    expect(mounted.onCreated).toHaveBeenCalledExactlyOnceWith(12)
+    expect(repository.create.mock.calls[0][0].programs.map((program: ReviewProgram) => program.participation)).toEqual([unknownParticipation(), unknownParticipation()])
+    expect(screen.getByLabelText('분석에 참고할 추가 설명 (선택)')).toHaveProperty('value', '')
+    expect(repository.start).not.toHaveBeenCalled()
+    expect(currentLocation()).toBe('/app/chat?step=analysis&conversation=4')
+  })
+
+  it('saves changed input, starts once, and opens completed and older results locally', async () => {
+    vi.useFakeTimers()
+    const queued = { ...runFixture, inputRevision: 3, status: 'QUEUED', analysis: null, evidence: null, finishedAt: null }
+    const complete = { ...runFixture, inputRevision: 3 }
+    const older = { ...runFixture, id: 29 }
+    repository.replace.mockResolvedValue(undefined)
+    repository.start.mockImplementation(async (_id, request) => ({ ...queued, requestKey: request.requestKey }))
+    repository.run.mockImplementation(async (_id, runId) => runId === 29 ? older : complete)
+    await act(async () => { mountPanel() })
+    chooseOption(screen.getByLabelText('사업 1 지금 상태'), 'UNKNOWN')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '검토 실행' })) })
+    expect(repository.replace).toHaveBeenCalledTimes(1)
+    expect(repository.start).toHaveBeenCalledTimes(1)
+    expect(repository.start.mock.calls[0][1].expectedRevision).toBe(3)
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(repository.run).toHaveBeenCalledTimes(1)
+    repository.get.mockResolvedValue({ ...reviewFixture, inputRevision: 3 })
+    repository.runs.mockResolvedValue({ items: [complete, older], nextBeforeId: null })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '결과 보기 →' })) })
+    expect(screen.getByRole('region', { name: '실행 30 결과' })).toBeTruthy()
+    chooseOption(screen.getByLabelText('실행 결과 선택'), '29')
+    await act(async () => {})
+    expect(screen.getByRole('region', { name: '실행 29 결과' })).toBeTruthy()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '내 상황 입력하고 다시 보기' })) })
+    expect(screen.getByLabelText('분석에 참고할 추가 설명 (선택)')).toHaveProperty('value', older.input.additionalFacts)
+    expect(currentLocation()).toBe('/app/chat?step=analysis&conversation=4')
+    expect(repository.start).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('main')).toBeNull()
+  })
+
+  it('preserves the same pending request across reopening without an automatic analysis', async () => {
+    repository.start.mockRejectedValueOnce(new TypeError('lost response')).mockImplementation(async (_id, request) => ({ ...runFixture, requestKey: request.requestKey }))
+    const first = mountPanel()
+    fireEvent.click(await screen.findByRole('button', { name: '검토 실행' }))
+    await screen.findByRole('alert')
+    const request = repository.start.mock.calls[0][1]
+    first.unmount()
+    mountPanel()
+    await screen.findByText(/응답을 확인하지 못한 분석 요청/)
+    expect(repository.start).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    await screen.findByRole('button', { name: /#30 · 입력 버전 1 · 분석 완료/ })
+    expect(repository.start).toHaveBeenCalledTimes(2)
+    expect(repository.start.mock.calls[1][1]).toEqual(request)
+    expect(currentLocation()).toBe('/app/chat?step=analysis&conversation=4')
+  })
+
+  it('returns failed results to analysis without starting or changing the URL', async () => {
+    const failed = { ...runFixture, status: 'FAILED', analysis: null, failureCode: 'SOURCE_UNSUPPORTED' }
+    repository.runs.mockResolvedValue({ items: [failed], nextBeforeId: null })
+    repository.run.mockResolvedValue(failed)
+    mountPanel()
+    fireEvent.click(await screen.findByRole('button', { name: /자세히 보기: 실행 #30/ }))
+    await screen.findByRole('region', { name: '실행 30 결과' })
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+    await screen.findByRole('region', { name: '분석 실행' })
+    expect(repository.start).not.toHaveBeenCalled()
+    expect(currentLocation()).toBe('/app/chat?step=analysis&conversation=4')
+  })
+
+  it('starts an explicitly requested narrowing and shows its accepted result locally', async () => {
+    const queued = { ...answerRunFixture, id: 32, inputRevision: 3, status: 'QUEUED', analysis: null }
+    repository.runs.mockResolvedValue({ items: [answerRunFixture], nextBeforeId: null })
+    repository.run.mockImplementation(async (_id, runId) => runId === 32 ? queued : structuredClone(answerRunFixture))
+    repository.replace.mockResolvedValue(undefined)
+    repository.start.mockImplementation(async (_id, request) => ({ ...queued, requestKey: request.requestKey }))
+    mountPanel()
+    fireEvent.click(await screen.findByRole('button', { name: '결과 보기 →' }))
+    const narrowing = await screen.findByRole('region', { name: '내 상황으로 좁히기' })
+    expect(repository.start).not.toHaveBeenCalled()
+    chooseOption(within(narrowing).getByLabelText('사업 1 지금 상태'), 'UNKNOWN')
+    fireEvent.click(within(narrowing).getByRole('button', { name: '저장하고 다시 분석' }))
+    await waitFor(() => expect(repository.start).toHaveBeenCalledTimes(1))
+    expect(repository.start.mock.calls[0][1].additionalFacts).toBe(answerRunFixture.input.additionalFacts)
+    await screen.findByRole('region', { name: '실행 32 결과' })
+    expect(repository.run).toHaveBeenCalledWith(12, 32, expect.any(AbortSignal))
+    expect(currentLocation()).toBe('/app/chat?step=analysis&conversation=4')
+  })
+
+  it('does not attach a late created review after the account changes', async () => {
+    browseSavedPrograms.mockResolvedValue(savedEntries(catalogProgram('PBLN_200', { title: '두 번째 공고' })))
+    let resolve!: (value: typeof reviewFixture) => void
+    repository.create.mockImplementation(() => new Promise((done) => { resolve = done }))
+    const mounted = mountPanel(null, { sourceCode: 'BIZINFO', sourceProgramId: 'PBLN_100' })
+    fireEvent.change(screen.getByLabelText('검토 제목'), { target: { value: '계정 전환 전 검토' } })
+    fireEvent.click(within(slot(2)).getByRole('button', { name: '사업 2 공고 고르기' }))
+    const picker = screen.getByRole('dialog', { name: '공고 고르기' })
+    fireEvent.click(await within(picker).findByRole('radio', { name: /두 번째 공고/ }))
+    fireEvent.click(within(picker).getByRole('button', { name: '사업 2로 선택' }))
+    fireEvent.click(nextButton())
+    await waitFor(() => expect(repository.create).toHaveBeenCalledTimes(1))
+    const signal = repository.create.mock.calls[0][1] as AbortSignal
+    act(() => mounted.store.dispatch(signedIn({ email: 'b@example.com', role: 'ADMIN', tier: 'MEMBER', emailVerified: false, hasPassword: true, accountType: null, onboarded: true, company: null })))
+    expect(signal.aborted).toBe(true)
+    await act(async () => { resolve(reviewFixture) })
+    expect(mounted.onCreated).not.toHaveBeenCalled()
+    expect(repository.start).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('검토 제목')).toHaveProperty('value', '')
+  })
+
+  it.each(['unmount', 'account'] as const)('stops embedded polling after %s and ignores a late result', async (departure) => {
+    vi.useFakeTimers()
+    const queued = { ...runFixture, status: 'QUEUED', analysis: null, finishedAt: null }
+    repository.runs.mockResolvedValue({ items: [queued], nextBeforeId: null })
+    let resolve!: (value: typeof runFixture) => void
+    repository.run.mockImplementation(() => new Promise((done) => { resolve = done }))
+    let mounted!: ReturnType<typeof mountPanel>
+    await act(async () => { mounted = mountPanel() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    const signal = repository.run.mock.calls[0][2] as AbortSignal
+    if (departure === 'unmount') mounted.unmount()
+    else act(() => mounted.store.dispatch(signedOut()))
+    expect(signal.aborted).toBe(true)
+    await act(async () => { resolve(runFixture); await vi.advanceTimersByTimeAsync(9000) })
+    expect(repository.run).toHaveBeenCalledTimes(1)
+    expect(repository.start).not.toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: '최근 실행' })).toBeNull()
+  })
+})
+
 describe('review screens and execution safety', () => {
   it('shows the review title and both ancestor links on results and navigates back', async () => {
     mount('/app/combination-reviews/12/runs/30')

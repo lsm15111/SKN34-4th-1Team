@@ -1,4 +1,4 @@
-import type { GovAgentApplication, GovAgentEvidence, GovAgentProgram } from './GovAgent'
+import type { GovAgentApplication, GovAgentEvidence, GovAgentPartners, GovAgentProgram, GovAgentReview } from './GovAgent'
 import type { SupportProgram } from './SupportProgram'
 import type { SupportProgramCompanyConditions, SupportProgramSearch } from '../repositories/SupportProgramRepository'
 import type { SupportProgramConversationContext, SupportProgramInterpretation, SupportProgramInterpretRequest, SupportProgramLastSearch, SupportProgramPendingClarification } from './SupportProgramConversation'
@@ -7,6 +7,8 @@ export type ChatSearchOptions = { acceptingOnly: boolean; companyConditions?: Su
 export type ChatMessage = {
   govEvidence?: GovAgentEvidence
   govApplication?: GovAgentApplication
+  govReview?: GovAgentReview
+  govPartners?: GovAgentPartners
   id: string
   role: 'assistant' | 'user'
   text: string

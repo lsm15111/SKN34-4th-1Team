@@ -404,6 +404,7 @@ function createChatHook(overrides: Partial<ChatHook> = {}): ChatHook {
     govProgram: null,
     selectGovProgram: vi.fn(),
     attachGovPreparation: vi.fn(),
+    attachGovReview: vi.fn(),
     isRestoredHistory: false,
     confirmedContext: emptyConversationContext,
     conversationQuery: null,
