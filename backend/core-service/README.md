@@ -53,7 +53,7 @@ private RDS TLS 검증, Secure 쿠키, 개발 로그인 비활성화, Nginx 고�
 `Controller → GovAgentService → AiGovAgentClient → AI supervisor`에서 경로를 선택한 뒤
 동일 Service가 기존 `SupportProgramConversationService` 또는 `SupportProgramEvidenceService`를 실행합니다.
 응답 `outcome`은 `SEARCH`(interpretation), `EVIDENCE`(program·evidence), `APPLICATION`(program·message),
-`NEEDS_PROGRAM` 또는 `UNSUPPORTED`(message)입니다.
+`COMBINATION_REVIEW`(nullable program·message), `PARTNERS`(message), `NEEDS_PROGRAM` 또는 `UNSUPPORTED`(message)입니다.
 
 검색은 조건 제안까지만 반환하며 확인 후 기존 검색 API가 `AI_SEARCH` 사용량을 집행합니다.
 원문 답변은 기존 `PlanUsageService.consume(EVIDENCE_QUESTION)`에서 처리하므로 실패 시 사용량 반환도 유지합니다.
@@ -63,7 +63,11 @@ private RDS TLS 검증, Secure 쿠키, 개발 로그인 비활성화, Nginx 고�
 웹의 신청 준비 카드가 기존 `application-preparations` API를 재사용합니다. 분석·작성은 버튼으로 명시적으로 실행하며 기존 소유권·작업 큐·사용량 경계를 유지합니다.
 준비 건 생성 후 웹은 반환된 `preparationId`를 기존 대화 JSON에 선택 필드로 저장하고, 같은 대화에서 답변 편집·문서 생성·다운로드를 이어갑니다.
 이 ID는 권한이나 실행 승인이 아니며, 기존 신청 준비 API가 매번 계정 소유권과 현재 revision·작업 상태를 검증합니다. Gov 에이전트 응답 계약에는 준비 건 ID를 추가하지 않습니다.
-새 DB·migration·실행 서비스는 필요하지 않습니다. 중복 검토 등 나머지 기능은 아직 이 대화 API에 연결하지 않았습니다.
+`COMBINATION_REVIEW`는 선택한 공고가 있으면 그 복합 식별자를 첫 공고 후보로 반환하고, 없어도 검토 준비 안내를 반환합니다.
+웹은 기존 중복 검토 입력 화면에서 두 공고·참여 상태·사업 관계를 확인합니다. 저장과 분석은 명시적 버튼으로 기존 `combination-reviews` API를 호출하며, 기존 소유권·revision·요청 키·사용량·작업 큐 경계를 유지합니다.
+`PARTNERS`는 공고 선택과 무관하며 `program`은 null입니다. 기존 `GET /api/v1/partners/recruitments`의 모집 역할·지역·검색어 필터와 상세 조회를 재사용하며, AI 맞춤 매칭·제안 발송·모집글 작성은 실행하지 않습니다.
+두 경로의 Gov 응답 자체는 검토 생성·분석·사용량 차감을 하지 않습니다. 새 DB·migration·실행 서비스는 필요하지 않습니다.
+외부 기관 제출, 제안 발송, 모집글 자동 작성, 저장·삭제와 여러 작업 자동 실행은 `UNSUPPORTED`입니다.
 
 ## 계정별 대화 기록
 

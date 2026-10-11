@@ -25,6 +25,7 @@ import {
   govProgramSelected,
   govMessageSucceeded,
   govApplicationPrepared,
+  govReviewCreated,
   interpretationStarted,
   interpretationSucceeded,
   interpretationFailed,
@@ -283,6 +284,10 @@ export function useSupportProgramChat(
             message: result.evidence.answer, evidence: { program: selected, answer: result.evidence } }))
           else if (result.outcome === 'APPLICATION' && selected) dispatch(govMessageSucceeded({ requestId,
             message: result.message, application: { program: selected, message: result.message } }))
+          else if (result.outcome === 'COMBINATION_REVIEW') dispatch(govMessageSucceeded({ requestId,
+            message: result.message, review: { program: selected, message: result.message } }))
+          else if (result.outcome === 'PARTNERS') dispatch(govMessageSucceeded({ requestId,
+            message: result.message, partners: { message: result.message } }))
           else if (result.outcome === 'NEEDS_PROGRAM' || result.outcome === 'UNSUPPORTED') {
             dispatch(govMessageSucceeded({ requestId, message: result.message }))
           }
@@ -358,6 +363,9 @@ export function useSupportProgramChat(
     selectGovProgram: (program: GovAgentProgram | null) => { if (isGovAgent) dispatchToStore(govProgramSelected(program)) },
     attachGovPreparation: (messageId: string, preparationId: number) => {
       if (isGovAgent && accountEmail) dispatchToStore(govApplicationPrepared({ accountEmail, messageId, preparationId }))
+    },
+    attachGovReview: (messageId: string, reviewId: number) => {
+      if (isGovAgent && accountEmail) dispatchToStore(govReviewCreated({ accountEmail, messageId, reviewId }))
     },
     isRestoredHistory,
     confirmedContext,

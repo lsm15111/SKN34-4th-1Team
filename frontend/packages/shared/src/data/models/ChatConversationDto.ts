@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { govAgentApplicationSchema, govAgentEvidenceSchema, govAgentProgramSchema } from './GovAgentDto'
+import { govAgentApplicationSchema, govAgentEvidenceSchema, govAgentPartnersSchema, govAgentProgramSchema, govAgentReviewSchema } from './GovAgentDto'
 import { conversationContextDtoSchema, supportProgramInterpretationDtoSchema } from './SupportProgramConversationDto'
 import { supportProgramDtoSchema } from './SupportProgramDto'
 
@@ -20,6 +20,8 @@ export const chatConversationSnapshotSchema = z.object({
   messages: z.array(z.object({
     govEvidence: govAgentEvidenceSchema.optional(),
     govApplication: govAgentApplicationSchema.optional(),
+    govReview: govAgentReviewSchema.optional(),
+    govPartners: govAgentPartnersSchema.optional(),
     id: z.string().min(1).max(128), role: z.enum(['assistant', 'user']), text: z.string().max(10_000),
     failure: z.enum(['search', 'interpretation']).optional(), programs: z.array(supportProgramDtoSchema).max(5).optional(),
     totalCount: z.number().int().min(0).max(5).optional(), resultToken: z.uuid().nullable().optional(),

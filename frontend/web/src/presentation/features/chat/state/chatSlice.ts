@@ -1,5 +1,5 @@
 import { createSelector, createSlice, nanoid, type PayloadAction } from '@reduxjs/toolkit'
-import type { GovAgentApplication, GovAgentEvidence, GovAgentProgram } from '@govbiz/shared/domain/entities/GovAgent'
+import type { GovAgentApplication, GovAgentEvidence, GovAgentPartners, GovAgentProgram, GovAgentReview } from '@govbiz/shared/domain/entities/GovAgent'
 
 import type { RootState } from '../../../../app/store'
 import type { ChatConversationSnapshot, ChatMessage, ChatSearchOptions } from '../../../../domain/entities/ChatConversation'
@@ -135,23 +135,33 @@ const chatSlice = createSlice({
       state.govProgram = program
       if (state.interpretation.status === 'failed') state.interpretation = { status: 'idle' }
     },
-    govMessageSucceeded(state, action: PayloadAction<{ requestId: string; message: string; evidence?: GovAgentEvidence; application?: GovAgentApplication }>) {
+    govMessageSucceeded(state, action: PayloadAction<{ requestId: string; message: string; evidence?: GovAgentEvidence; application?: GovAgentApplication;
+      review?: GovAgentReview; partners?: GovAgentPartners }>) {
       if (state.interpretation.status !== 'pending' || state.interpretation.requestId !== action.payload.requestId) return
       state.messages.push({ id: `${action.payload.requestId}-answer`, role: 'assistant', text: action.payload.message,
         ...(action.payload.evidence ? { govEvidence: action.payload.evidence } : {}),
-        ...(action.payload.application ? { govApplication: action.payload.application } : {}) })
+        ...(action.payload.application ? { govApplication: action.payload.application } : {}),
+        ...(action.payload.review ? { govReview: action.payload.review } : {}),
+        ...(action.payload.partners ? { govPartners: action.payload.partners } : {}) })
       state.interpretation = { status: 'idle' }
       state.unseenOutcome = 'interpretation-answered'
     },
     govApplicationPrepared(state, action: PayloadAction<{ accountEmail: string; messageId: string; preparationId: number }>) {
       const { accountEmail, messageId, preparationId } = action.payload
       if (state.accountEmail !== accountEmail || !Number.isSafeInteger(preparationId) || preparationId <= 0) return
-      const message = state.messages.findLast((item) => item.govApplication)
+      const message = state.messages.findLast((item) => item.govApplication || item.govReview || item.govPartners)
       if (message?.id !== messageId || !message.govApplication || message.govApplication.preparationId !== undefined) return
       const application = message.govApplication
       if (state.govProgram?.sourceCode !== application.program.sourceCode
         || state.govProgram.sourceProgramId !== application.program.sourceProgramId) return
       application.preparationId = preparationId
+    },
+    govReviewCreated(state, action: PayloadAction<{ accountEmail: string; messageId: string; reviewId: number }>) {
+      const { accountEmail, messageId, reviewId } = action.payload
+      if (state.accountEmail !== accountEmail || !Number.isSafeInteger(reviewId) || reviewId <= 0) return
+      const message = state.messages.findLast((item) => item.govApplication || item.govReview || item.govPartners)
+      if (message?.id !== messageId || !message.govReview || message.govReview.reviewId !== undefined) return
+      message.govReview.reviewId = reviewId
     },
     interpretationStarted: {
       reducer(state, action: PayloadAction<{ requestId: string; messageId: string; request: SupportProgramInterpretRequest }>) {
@@ -359,6 +369,7 @@ export const {
   govProgramSelected,
   govMessageSucceeded,
   govApplicationPrepared,
+  govReviewCreated,
   interpretationStarted,
   interpretationSucceeded,
   interpretationFailed,

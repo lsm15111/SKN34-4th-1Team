@@ -169,6 +169,60 @@ describe('관리자 Gov 에이전트 대화', () => {
     expect(hook.result.current.govProgram).toBeNull()
   })
 
+  it.each([false, true])('opens and restores a review with selected program=%s without running a search or analysis', async (selected) => {
+    const hook = setup()
+    if (selected) await searchAndSelect(hook)
+    const review = { program: selected ? program : null, message: '검토할 공고 두 개를 선택해 주세요.' }
+    hook.gov.mockResolvedValue({ outcome: 'COMBINATION_REVIEW', ...review })
+    act(() => hook.result.current.updateDraft('두 지원사업을 동시에 받을 수 있을까?'))
+    await act(async () => hook.result.current.submitMessage())
+    const message = hook.result.current.messages.at(-1)!
+    expect(message.govReview).toEqual(review)
+    act(() => hook.result.current.attachGovReview(message.id, 12))
+    expect(hook.result.current.messages.at(-1)?.govReview?.reviewId).toBe(12)
+    const snapshot = chatConversationSnapshotSchema.parse(createChatConversationSnapshot(hook.store.getState().chat))
+    const calls = hook.gov.mock.calls.length
+    act(() => hook.result.current.startNewConversation())
+    act(() => hook.store.dispatch(conversationHistoryOpened({ accountEmail: account.email, snapshot })))
+    expect(hook.result.current.messages.at(-1)?.govReview).toEqual({ ...review, reviewId: 12 })
+    expect(hook.gov).toHaveBeenCalledTimes(calls)
+    expect(hook.search).toHaveBeenCalledTimes(selected ? 1 : 0)
+    expect(hook.interpret).not.toHaveBeenCalled()
+  })
+
+  it('opens recruitment browsing without a program and ignores a late review save after switching tools', async () => {
+    const hook = setup()
+    hook.gov.mockResolvedValue({ outcome: 'COMBINATION_REVIEW', program: null, message: '검토 준비' })
+    act(() => hook.result.current.updateDraft('중복 지원 검토해 줘'))
+    await act(async () => hook.result.current.submitMessage())
+    const reviewMessageId = hook.result.current.messages.at(-1)!.id
+    hook.gov.mockResolvedValue({ outcome: 'PARTNERS', message: '전체 모집글에서 조건을 확인해 주세요.' })
+    act(() => hook.result.current.updateDraft('같이 사업할 파트너 모집글 찾아줘'))
+    await act(async () => hook.result.current.submitMessage())
+    act(() => hook.result.current.attachGovReview(reviewMessageId, 12))
+    expect(hook.result.current.messages.find((message) => message.id === reviewMessageId)?.govReview?.reviewId).toBeUndefined()
+    expect(hook.result.current.messages.at(-1)?.govPartners).toEqual({ message: '전체 모집글에서 조건을 확인해 주세요.' })
+    expect(hook.result.current.govProgram).toBeNull()
+    expect(hook.search).not.toHaveBeenCalled()
+    const snapshot = chatConversationSnapshotSchema.parse(createChatConversationSnapshot(hook.store.getState().chat))
+    act(() => hook.result.current.startNewConversation())
+    act(() => hook.store.dispatch(conversationHistoryOpened({ accountEmail: account.email, snapshot })))
+    expect(hook.result.current.messages.at(-1)?.govPartners).toEqual({ message: '전체 모집글에서 조건을 확인해 주세요.' })
+    expect(hook.gov).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['COMBINATION_REVIEW', 'PARTNERS'] as const)('discards a late %s response after changing account', async (outcome) => {
+    const hook = setup()
+    let resolve!: (value: GovAgentResult) => void
+    hook.gov.mockReturnValue(new Promise((done) => { resolve = done }))
+    act(() => hook.result.current.updateDraft('검토 또는 모집글 찾아줘'))
+    let request!: Promise<void>
+    act(() => { request = hook.result.current.submitMessage() })
+    act(() => hook.store.dispatch(signedIn({ ...account, email: 'another@test.local' })))
+    await act(async () => { resolve({ outcome, program: null, message: '이전 계정 응답' }); await request })
+    expect(hook.result.current.messages.some((message) => message.govReview || message.govPartners)).toBe(false)
+  })
+
   it('requests selection without inventing a target and does not launch a search', async () => {
     const hook = setup()
     hook.gov.mockResolvedValue({ outcome: 'NEEDS_PROGRAM', message: '공고를 선택해 주세요.' })

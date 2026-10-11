@@ -10,6 +10,7 @@ import { emptyConversationContext, readyConversationProposal } from '../../../..
 import { supportPrograms } from '../../../../data/fixtures/supportPrograms'
 import { completeSearchResult } from '../../../../data/fixtures/supportProgramSearchResult'
 import { signedIn } from '../../../shared/auth/state/authSlice'
+import { conversationHistoryOpened, createChatConversationSnapshot } from '../state/chatSlice'
 import { RouteDocumentTitle } from '../../../shared/routes/RouteDocumentTitle'
 import { SupportProgramSearchPage } from '../../support-program-catalog/view/SupportProgramSearchPage'
 
@@ -20,6 +21,15 @@ vi.mock('../viewmodel/useSearchResultInterests', async (importOriginal) => ({
   ...await importOriginal<typeof import('../viewmodel/useSearchResultInterests')>(), useSearchResultInterests: () => null,
 }))
 vi.mock('../../../shared/plan-usage/usePlanUsage', () => ({ usePlanUsage: () => ({ usage: null, reload: vi.fn() }) }))
+vi.mock('../../combination-review/view/CombinationReviewPages', () => ({
+  CombinationReviewPanel: ({ id, onCreated }: { id: number | null; onCreated: (id: number) => void }) => (
+    <section aria-label="대화 중복 검토"><p>{id === null ? '새 검토' : `저장된 검토 ${id}`}</p>
+      <button onClick={() => onCreated(12)}>검토 저장</button></section>
+  ),
+}))
+vi.mock('../../partner-recruitment/view/PartnerRecruitmentListPage', () => ({
+  PartnerRecruitmentPanel: () => <section aria-label="대화 파트너 조회">전체 모집글 패널</section>,
+}))
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 function setup(role: 'ADMIN' | 'USER') {
@@ -65,4 +75,42 @@ it('일반 회원은 AI 대화 검색 이름을 유지한다', () => {
   expect(screen.queryByRole('tab', { name: 'Gov 에이전트' })).toBeNull()
   expect(screen.queryByText(/선택한 공고:/)).toBeNull()
   expect(document.title).toBe('AI 대화 검색 · GovBiz')
+})
+
+it('관리자는 대화에서 검토 건을 저장·복원하고 파트너 조회로 전환하면 이전 검토를 링크로 남긴다', async () => {
+  const gov = vi.spyOn(supportProgramClient, 'sendGovAgentMessage').mockResolvedValue({
+    outcome: 'COMBINATION_REVIEW', program: null, message: '비교할 공고를 선택하세요.',
+  })
+  const store = setup('ADMIN')
+  const input = screen.getByRole('textbox', { name: '지원사업 검색어' })
+  fireEvent.change(input, { target: { value: '중복 지원 검토해줘' } })
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: '검색 전송' })))
+  expect(screen.getByRole('region', { name: '대화 중복 검토' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '검토 저장' }))
+  expect(screen.getByText('저장된 검토 12')).toBeTruthy()
+  const snapshot = createChatConversationSnapshot(store.getState().chat)
+  act(() => store.dispatch(conversationHistoryOpened({ accountEmail: 'test@govbiz.local', snapshot })))
+  expect(screen.getByText('저장된 검토 12')).toBeTruthy()
+  expect(gov).toHaveBeenCalledOnce()
+  gov.mockResolvedValue({ outcome: 'PARTNERS', message: '전체 모집글에서 찾아보세요.' })
+  fireEvent.change(input, { target: { value: '파트너 모집글 찾아줘' } })
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: '검색 전송' })))
+  expect(screen.queryByRole('region', { name: '대화 중복 검토' })).toBeNull()
+  expect(screen.getByRole('link', { name: '중복 검토 화면에서 이어서 보기' }).getAttribute('href')).toBe('/app/combination-reviews/12')
+  expect(screen.getByRole('region', { name: '대화 파트너 조회' })).toBeTruthy()
+  expect(screen.getByRole('textbox', { name: '지원사업 검색어' })).toBe(input)
+})
+
+it('일반 회원에게 저장된 Gov 카드가 있어도 실행 패널을 열지 않는다', () => {
+  const gov = vi.spyOn(supportProgramClient, 'sendGovAgentMessage')
+  const store = setup('USER')
+  const snapshot = createChatConversationSnapshot(store.getState().chat)
+  snapshot.messages = [...snapshot.messages,
+    { id: 'review', role: 'assistant', text: '중복 검토', govReview: { program: null, message: '중복 검토', reviewId: 12 } },
+    { id: 'partners', role: 'assistant', text: '파트너 조회', govPartners: { message: '모집글' } },
+  ]
+  act(() => store.dispatch(conversationHistoryOpened({ accountEmail: 'test@govbiz.local', snapshot })))
+  expect(screen.queryByRole('region', { name: '대화 중복 검토' })).toBeNull()
+  expect(screen.queryByRole('region', { name: '대화 파트너 조회' })).toBeNull()
+  expect(gov).not.toHaveBeenCalled()
 })

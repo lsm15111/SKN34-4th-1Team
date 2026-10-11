@@ -15,4 +15,4 @@ class GovAgentRequest(BaseModel):
 class GovAgentDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["SEARCH", "EVIDENCE", "APPLICATION", "UNSUPPORTED"]
+    action: Literal["SEARCH", "EVIDENCE", "APPLICATION", "COMBINATION_REVIEW", "PARTNERS", "UNSUPPORTED"]

@@ -18,7 +18,14 @@ from app.gov_agent.router import get_supervisor, router
     ("EVIDENCE", "이 공고 제출서류 뭐야?", True),
     ("APPLICATION", "이 공고 신청서 작성해 줘", True),
     ("APPLICATION", "신청서 양식 분석해 줘", False),
+    ("COMBINATION_REVIEW", "이 공고와 다른 사업에 함께 지원할 수 있어?", True),
+    ("COMBINATION_REVIEW", "중복 수혜를 검토하고 싶어요", False),
+    ("PARTNERS", "협업 파트너 모집글 찾아줘", True),
+    ("PARTNERS", "함께할 파트너 찾아줘", False),
     ("UNSUPPORTED", "외부 기관에 신청서 제출해 줘", True),
+    ("UNSUPPORTED", "이 파트너에게 제안을 보내 줘", True),
+    ("UNSUPPORTED", "파트너 모집글을 대신 작성해 줘", False),
+    ("UNSUPPORTED", "사업 검색과 신청서 작성과 중복 검토를 전부 실행해 줘", False),
 ])
 async def test_one_bounded_decision_without_executing_tools(action, message, has_selected_program):
     model = ResponsesChatStub([[response_message(json.dumps({"action": action}))]])
@@ -31,7 +38,9 @@ async def test_one_bounded_decision_without_executing_tools(action, message, has
     assert call.timeout == 3
     assert len(model.calls) == 1
     assert json.loads(call.input[0]["content"])["hasSelectedProgram"] is has_selected_program
-    assert call.schema["properties"]["action"]["enum"] == ["SEARCH", "EVIDENCE", "APPLICATION", "UNSUPPORTED"]
+    assert call.schema["properties"]["action"]["enum"] == [
+        "SEARCH", "EVIDENCE", "APPLICATION", "COMBINATION_REVIEW", "PARTNERS", "UNSUPPORTED",
+    ]
     assert not call.body.get("tools")
     model.assert_complete()
 
@@ -51,20 +60,25 @@ async def test_model_reasoning_survives_binding_with_bounded_output_and_timeout(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("action,message", [
+    ("APPLICATION", "신청서 작성을 준비하고 싶어요"),
+    ("COMBINATION_REVIEW", "중복 수혜를 검토하고 싶어요"),
+    ("PARTNERS", "협업할 파트너 모집글을 보여 주세요"),
+])
 @pytest.mark.parametrize("search_query,pending_question", [
     (None, None),
     ("창업 지원", "검색할 지역을 알려 주세요."),
 ])
-async def test_current_application_request_preserves_optional_search_context_in_data(search_query, pending_question):
+async def test_current_request_preserves_optional_search_context_in_data(action, message, search_query, pending_question):
     # 스텁은 전달 경계만 검증한다. 실제 모델의 의도 분류 정확도를 측정하는 테스트가 아니다.
-    model = ResponsesChatStub([[response_message('{"action":"APPLICATION"}')]])
+    model = ResponsesChatStub([[response_message(json.dumps({"action": action}))]])
     request = GovAgentRequest(
-        message="신청서 작성을 준비하고 싶어요", hasSelectedProgram=False,
+        message=message, hasSelectedProgram=False,
         searchQuery=search_query, pendingSearchQuestion=pending_question,
     )
-    assert (await GovAgentSupervisor(model=model.model, timeout_seconds=3).decide(request)).action == "APPLICATION"
+    assert (await GovAgentSupervisor(model=model.model, timeout_seconds=3).decide(request)).action == action
     assert json.loads(model.first_call.input[0]["content"]) == {
-        "message": "신청서 작성을 준비하고 싶어요", "hasSelectedProgram": False,
+        "message": message, "hasSelectedProgram": False,
         "searchQuery": search_query, "pendingSearchQuestion": pending_question,
     }
     assert model.first_call.system_instructions == INSTRUCTIONS

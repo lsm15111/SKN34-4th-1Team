@@ -10,6 +10,9 @@ const identitySchema = z.object({ sourceCode: z.string().regex(/^[A-Z][A-Z0-9_]{
 export const govAgentProgramSchema = identitySchema.extend({ title: z.string().min(1).max(1_000) })
 export const govAgentApplicationSchema = z.object({ program: govAgentProgramSchema, message: z.string().min(1).max(1_000),
   preparationId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional() })
+export const govAgentReviewSchema = z.object({ program: govAgentProgramSchema.nullable(), message: z.string().min(1).max(1_000),
+  reviewId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional() })
+export const govAgentPartnersSchema = z.object({ message: z.string().min(1).max(1_000) })
 export const govAgentEvidenceSchema = z.object({ program: govAgentProgramSchema, answer: supportProgramEvidenceAnswerDtoSchema })
   .refine((value) => value.answer.citations.every((citation) => isOfficialSupportProgramSourceUrl(value.program.sourceCode, citation.sourceUrl)),
     '근거는 선택한 제공처의 공식 원문이어야 합니다.')
@@ -21,6 +24,10 @@ const resultSchema = z.discriminatedUnion('outcome', [
     interpretation: z.null().optional(), message: z.null().optional() }),
   z.object({ outcome: z.literal('APPLICATION'), program: identitySchema, message: z.string().min(1).max(1_000),
     interpretation: z.null().optional(), evidence: z.null().optional() }),
+  z.object({ outcome: z.literal('COMBINATION_REVIEW'), program: identitySchema.nullable(), message: z.string().min(1).max(1_000),
+    interpretation: z.null().optional(), evidence: z.null().optional() }),
+  z.object({ outcome: z.literal('PARTNERS'), message: z.string().min(1).max(1_000),
+    interpretation: z.null().optional(), evidence: z.null().optional(), program: z.null().optional() }),
   z.object({ outcome: z.enum(['NEEDS_PROGRAM', 'UNSUPPORTED']), message: z.string().min(1).max(1_000),
     interpretation: z.null().optional(), evidence: z.null().optional(), program: z.null().optional() }),
 ])
@@ -31,6 +38,8 @@ export function parseGovAgentResult(payload: unknown, selectedProgram: SupportPr
     if (!selectedProgram || result.program.sourceCode !== selectedProgram.sourceCode
       || result.program.sourceProgramId !== selectedProgram.sourceProgramId) throw new Error('Gov agent program mismatch')
   }
+  if (result.outcome === 'COMBINATION_REVIEW' && (result.program?.sourceCode !== selectedProgram?.sourceCode
+    || result.program?.sourceProgramId !== selectedProgram?.sourceProgramId)) throw new Error('Gov agent program mismatch')
   if (result.outcome === 'EVIDENCE') {
     return { ...result, evidence: parseSupportProgramEvidenceAnswerDto(result.evidence, result.program.sourceCode) }
   }

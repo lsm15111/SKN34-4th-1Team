@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { govAgentApplicationSchema, govAgentEvidenceSchema, parseGovAgentResult } from './GovAgentDto'
+import { govAgentApplicationSchema, govAgentEvidenceSchema, govAgentReviewSchema, parseGovAgentResult } from './GovAgentDto'
 
 const program = { sourceCode: 'BIZINFO', sourceProgramId: 'P001' }
 const answer = { answer: '온라인 신청입니다.', answerStatus: 'ANSWERED', citations: [{ excerpt: '온라인 신청',
@@ -37,6 +37,25 @@ describe('Gov agent public contract', () => {
     const application = { program: { ...program, title: '공고' }, message: '신청 준비' }
     expect(govAgentApplicationSchema.parse({ ...application, approved: true, requestKey: 'injected' })).toEqual(application)
     expect(govAgentApplicationSchema.safeParse({ ...application, program: { ...application.program, sourceCode: '../' } }).success).toBe(false)
+  })
+  it('opens comparison with no selection or exactly the selected composite identity', () => {
+    const payload = { outcome: 'COMBINATION_REVIEW', program: null, message: '비교할 공고 두 개를 선택하세요.' }
+    expect(parseGovAgentResult(payload, null)).toEqual(payload)
+    expect(parseGovAgentResult({ ...payload, program }, program)).toEqual({ ...payload, program })
+    expect(() => parseGovAgentResult(payload, program)).toThrow()
+    expect(() => parseGovAgentResult({ ...payload, program }, null)).toThrow()
+    expect(() => parseGovAgentResult({ ...payload, program }, { ...program, sourceCode: 'KSTARTUP' })).toThrow()
+    expect(() => parseGovAgentResult({ ...payload, program, evidence: answer }, program)).toThrow()
+  })
+  it('opens all partner recruitments without implying a selected-program filter', () => {
+    const payload = { outcome: 'PARTNERS', program: null, message: '모집 조건을 확인하세요.' }
+    expect(parseGovAgentResult(payload, null)).toEqual(payload)
+    expect(parseGovAgentResult(payload, program)).toEqual(payload)
+    expect(() => parseGovAgentResult({ ...payload, program }, program)).toThrow()
+    expect(() => parseGovAgentResult({ ...payload, evidence: answer }, null)).toThrow()
+  })
+  it.each([null, '12', 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])('rejects invalid saved review id %s', (reviewId) => {
+    expect(govAgentReviewSchema.safeParse({ program: null, message: '중복 검토', reviewId }).success).toBe(false)
   })
   it.each([null, '12', 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN])('rejects invalid saved preparation id %s', (preparationId) => {
     expect(govAgentApplicationSchema.safeParse({ program: { ...program, title: '공고' }, message: '신청 준비', preparationId }).success).toBe(false)

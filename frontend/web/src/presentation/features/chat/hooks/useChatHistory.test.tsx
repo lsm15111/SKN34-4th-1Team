@@ -11,7 +11,7 @@ import { emptyConversationContext, readyConversationProposal, seoulConversationC
 import { supportPrograms } from '../../../../data/fixtures/supportPrograms'
 import { completeSearchResult } from '../../../../data/fixtures/supportProgramSearchResult'
 import { sessionRestored, signedIn, signedOut } from '../../../shared/auth/state/authSlice'
-import { conversationReset, createChatConversationSnapshot, draftChanged, govApplicationPrepared, govMessageSucceeded, govProgramSelected, interpretationStarted, interpretationSucceeded, proposalConfirmed, searchStarted, searchSucceeded } from '../state/chatSlice'
+import { conversationReset, createChatConversationSnapshot, draftChanged, govApplicationPrepared, govMessageSucceeded, govProgramSelected, govReviewCreated, interpretationStarted, interpretationSucceeded, proposalConfirmed, searchStarted, searchSucceeded } from '../state/chatSlice'
 import { useChatHistory } from './useChatHistory'
 
 const account: Account = { email: 'first@test.local', tier: 'MEMBER', role: 'USER', emailVerified: true, hasPassword: true, accountType: null, onboarded: true, company: null }
@@ -63,6 +63,21 @@ it('persists the preparation ID attached after the Gov reply and restores it fro
 })
 
 describe('로그인 계정별 대화 기록 수명', () => {
+  it('saves a review ID created after the Gov reply and restores it without an analysis command', async () => {
+    const { store, api, result } = harness({ ...account, role: 'ADMIN', tier: 'ADMIN' })
+    await waitFor(() => expect(api.list).toHaveBeenCalledOnce())
+    const request = interpretationStarted({ message: '중복 지원 검토', context: emptyConversationContext }, 'review-conversation')
+    await act(async () => {
+      store.dispatch(request)
+      store.dispatch(govMessageSucceeded({ requestId: request.payload.requestId, message: '중복 검토', review: { program: null, message: '공고 두 개 선택' } }))
+    })
+    await act(async () => store.dispatch(govReviewCreated({ accountEmail: account.email, messageId: `${request.payload.requestId}-answer`, reviewId: 21 })))
+    const snapshot = vi.mocked(api.save).mock.calls.at(-1)![3]
+    expect(snapshot.messages.at(-1)?.govReview).toEqual({ program: null, message: '공고 두 개 선택', reviewId: 21 })
+    act(() => store.dispatch(conversationReset()))
+    await act(async () => { expect(await result.current.open('review-conversation')).toBe(true) })
+    expect(store.getState().chat.messages.at(-1)?.govReview?.reviewId).toBe(21)
+  })
   it('현재 대화를 삭제하면 초기화하고 늦은 저장·AI 응답이 기록을 되살리지 않는다', async () => {
     const { store, api, result } = harness()
     const pendingSave = deferred<ChatConversationSummary>()
