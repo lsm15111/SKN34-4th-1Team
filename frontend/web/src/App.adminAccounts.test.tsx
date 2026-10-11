@@ -62,6 +62,10 @@ function detailOf(account: AdminAccountSummary, overrides: Partial<AdminAccountD
     company: account.company === null ? null : { ...account.company, region: '서울특별시', industry: '정보통신업', foundedYear: 2021 },
     activity: { recruitmentCount: 2, openRecruitmentCount: 1, sentProposalCount: 3, activeSessionCount: 1 },
     actions: [],
+    plan: {
+      plan: 'FREE', planEndsAt: null, assignedPlan: 'FREE', assignedSource: null, assignedAt: null, assignedEndsAt: null,
+      items: [], usedTrials: [], inheritedFromAccountIds: [], aiUsageThisMonth: { calls: 0, estimatedUsd: '0.000000', unpricedCalls: 0 },
+    },
     isSelf: false,
     ...overrides,
   }
@@ -268,29 +272,37 @@ describe('관리자 세션·권한이 도중에 바뀐 경우', () => {
 })
 
 describe('관리자 권한 변경', () => {
-  it('회원에게 사유를 받아 관리자 권한을 부여하면 해제 버튼과 조치 기록으로 바뀐다', async () => {
-    vi.spyOn(appContainer.resolve('getAdminAccountDetailUseCase'), 'execute').mockResolvedValue(detailOf(member))
-    const promoted = detailOf({ ...member, role: 'ADMIN', tier: 'ADMIN' }, {
+  it('회원 계정에는 관리자 권한 부여 버튼이 없고, 지난 부여 기록은 그대로 읽는다', async () => {
+    vi.spyOn(appContainer.resolve('getAdminAccountDetailUseCase'), 'execute').mockResolvedValue(detailOf(member, {
       actions: [{ id: 5, action: 'ADMIN_GRANT', reason: '운영 담당 추가', adminEmail: 'admin@govbiz.local', createdAt: '2026-09-11T09:30:00' }],
-    })
-    const act = vi.spyOn(appContainer.resolve('takeAdminAccountActionUseCase'), 'execute').mockResolvedValue({ outcome: 'done', detail: promoted })
+    }))
     renderApp('/app/admin/accounts/detail?accountId=11')
 
     const info = await screen.findByRole('region', { name: '계정 정보' })
-    fireEvent.click(within(info).getByRole('button', { name: '관리자 권한 부여' }))
-    const dialog = screen.getByRole('dialog', { name: '관리자 권한을 부여할까요?' })
-    const confirm = within(dialog).getByRole('button', { name: '관리자 권한 부여' }) as HTMLButtonElement
-    expect(confirm.disabled).toBe(true)
-    fireEvent.change(within(dialog).getByLabelText('사유 (조치 기록에 남습니다)'), { target: { value: ' 운영 담당 추가 ' } })
-    fireEvent.click(confirm)
-
-    await waitFor(() => expect(act).toHaveBeenCalledWith(11, 'grant-admin', '운영 담당 추가'))
-    expect(await screen.findByText(adminAccountDetailMessages.done['grant-admin'])).toBeTruthy()
-    const updated = screen.getByRole('region', { name: '계정 정보' })
-    // 관리자가 된 계정은 정지·강제 로그아웃 대신 권한 해제만 할 수 있습니다.
-    expect(within(updated).getByRole('button', { name: '관리자 권한 해제' })).toBeTruthy()
-    expect(within(updated).queryByRole('button', { name: '정지' })).toBeNull()
+    expect(within(info).queryByRole('button', { name: '관리자 권한 부여' })).toBeNull()
+    expect(within(info).getAllByRole('button').map((button) => button.textContent)).toEqual(['정지', '강제 로그아웃'])
     expect(within(screen.getByRole('region', { name: '조치 기록' })).getByText('관리자 권한 부여')).toBeTruthy()
+  })
+
+  it('요금제 카드에 사용량·쓴 체험·이어받은 계정·이번 달 AI 비용을 보이고 배정 버튼은 두지 않는다', async () => {
+    const withTrial = detailOf(member, {
+      plan: {
+        plan: 'PLUS', planEndsAt: '2026-10-24T12:00:00', assignedPlan: 'PLUS', assignedSource: 'TRIAL',
+        assignedAt: '2026-10-10T12:00:00', assignedEndsAt: '2026-10-24T12:00:00',
+        items: [{ feature: 'AI_SEARCH', period: 'PLAN', limit: 500, used: 12, resetsAt: '2026-10-24T12:00:00' }],
+        usedTrials: ['PLUS'], inheritedFromAccountIds: [7],
+        aiUsageThisMonth: { calls: 14, estimatedUsd: '0.012346', unpricedCalls: 2 },
+      },
+    })
+    vi.spyOn(appContainer.resolve('getAdminAccountDetailUseCase'), 'execute').mockResolvedValue(withTrial)
+    renderApp('/app/admin/accounts/detail?accountId=11')
+
+    const plan = await screen.findByRole('region', { name: '요금제·사용량' })
+    expect(within(plan).getByText('플러스 체험 (2026-10-24 12:00까지)')).toBeTruthy()
+    expect(within(plan).getByText('이번 기간 12 / 500회')).toBeTruthy()
+    expect(within(plan).getByText('#7')).toBeTruthy()
+    expect(within(plan).getByText('14회 · 추정 $0.012346 (가격 없는 호출 2회 제외)')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: '계정 정보' })).queryByRole('button', { name: /배정|이용권/ })).toBeNull()
   })
 
   it('마지막 활성 관리자의 권한 해제는 모달 안에서 까닭을 알린다', async () => {

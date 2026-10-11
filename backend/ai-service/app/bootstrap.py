@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import httpx
+
 from agents import OpenAIResponsesModel
 from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI
@@ -22,6 +24,7 @@ from app.tracing import LLMTracing
 from app.support_program_ranking.agent import SupportProgramRecommendationAgent
 from app.support_program_ranking.service import SupportProgramRankingService
 from app.config import Settings
+from app.openai_usage import usage_http_client
 from app.support_program_index.service import SupportProgramIndexService
 from app.support_program_conversation.agent import SupportProgramConversationAgent
 from app.support_program_conversation.service import SupportProgramConversationService
@@ -77,10 +80,13 @@ def build_application_container(
     """환경설정과 선택적 테스트 대역을 실제 애플리케이션 객체로 조립한다."""
 
     llm_tracing = LLMTracing(settings.langfuse)
+    # 모든 OpenAI 호출이 같은 HTTP 클라이언트를 거쳐 요청별 사용량이 Core에 돌아간다(app.openai_usage).
+    openai_http_client = usage_http_client()
     openai_client = AsyncOpenAI(
         api_key=settings.openai_api_key,
         timeout=settings.llm_model_timeout_seconds,
         max_retries=0,
+        http_client=openai_http_client,
     )
     ranking_agent = support_program_recommendation_agent
     evidence_answer_agent = support_program_evidence_answer_agent
@@ -186,9 +192,12 @@ def build_application_container(
         )
         assistant_agent_service = AssistantAgentService(
             graph=build_assistant_agent_graph(
-                classify_model=_chat_model(settings, settings.openai_assistant_model, settings.openai_assistant_reasoning_effort),
+                classify_model=_chat_model(
+                    settings, settings.openai_assistant_model, settings.openai_assistant_reasoning_effort, openai_http_client,
+                ),
                 agent_model=_chat_model(
                     settings, settings.openai_assistant_agent_model, settings.openai_assistant_agent_reasoning_effort,
+                    openai_http_client,
                 ),
                 tool_client=assistant_tool_client,
                 max_tool_calls=settings.assistant_agent_max_tool_calls,
@@ -205,7 +214,9 @@ def build_application_container(
         support_program_ranking_service=SupportProgramRankingService(ranking_agent, tracing=llm_tracing),
         support_program_conversation_service=SupportProgramConversationService(conversation_agent),
         gov_agent_supervisor=GovAgentSupervisor(
-            model=_chat_model(settings, settings.openai_assistant_model, settings.openai_assistant_reasoning_effort),
+            model=_chat_model(
+                settings, settings.openai_assistant_model, settings.openai_assistant_reasoning_effort, openai_http_client,
+            ),
             timeout_seconds=settings.llm_model_timeout_seconds,
         ),
         assistant_service=AssistantService(assistant_agent),
@@ -229,9 +240,15 @@ def build_application_container(
     )
 
 
-def _chat_model(settings: Settings, model: str, reasoning_effort: str) -> ChatOpenAI:
-    """LangChain용 OpenAI Responses 모델. 재시도 없음, 저장 안 함, 제한 시간은 도우미 모델과 같다."""
+def _chat_model(
+    settings: Settings, model: str, reasoning_effort: str, http_client: httpx.AsyncClient | None = None,
+) -> ChatOpenAI:
+    """LangChain용 OpenAI Responses 모델. 재시도 없음, 저장 안 함, 제한 시간은 도우미 모델과 같다.
+
+    앱에서는 공유 HTTP 클라이언트를 넘겨 요청별 사용량을 모으고, 단독 평가 스크립트는 생략해 LangChain 기본 클라이언트를 쓴다.
+    """
     return ChatOpenAI(
         model=model, api_key=settings.openai_api_key, use_responses_api=True, store=False,
         reasoning={"effort": reasoning_effort}, timeout=settings.llm_model_timeout_seconds, max_retries=0,
+        http_async_client=http_client,
     )

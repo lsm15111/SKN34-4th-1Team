@@ -4,6 +4,9 @@ import ai.govbiz.core._common.exception.AiServiceCallException
 import ai.govbiz.core.account.domain.AccountRole
 import ai.govbiz.core.account.helper.AccountTestHelper
 import ai.govbiz.core.admin.service.exception.AdminAccessDeniedException
+import ai.govbiz.core.aiusage.domain.AiUsageAttribution
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 import ai.govbiz.core.govagent.client.AiGovAgentClient
 import ai.govbiz.core.govagent.client.dto.AiGovAgentPayload
 import ai.govbiz.core.govagent.client.dto.AiGovAgentRequest
@@ -51,6 +54,21 @@ class GovAgentServiceTest {
         doReturn(proposed).`when`(conversation).interpret("신청 방법은?", context, null, null, null)
         assertEquals(proposed, service.answer(admin, "127.0.0.1", question()).interpretation)
         verifyNoInteractions(evidence, usage)
+    }
+
+    @Test
+    fun recordsTheRouteDecisionAndSearchInterpretationUsageAsThisAdminsGovAgent() {
+        val seen = mutableListOf<AiUsageAttribution?>()
+        doAnswer { seen += AiUsageContextHelper.current(); AiGovAgentPayload("SEARCH") }
+            .`when`(client).decide(AiGovAgentRequest("신청 방법은?", true, null, null))
+        val proposed = SupportProgramConversationResult(SupportProgramConversationStatus.READY, context.copy(query = "창업 지원"), null, emptyList(), null)
+        doAnswer { seen += AiUsageContextHelper.current(); proposed }.`when`(conversation).interpret("신청 방법은?", context, null, null, null)
+
+        service.answer(admin, "127.0.0.1", question())
+
+        assertEquals(List(2) { AiUsageAttribution(7, AiUsageFeature.GOV_AGENT) }, seen)
+        // 한 요청이 끝나면 다음 요청에 기록 대상이 남지 않습니다.
+        assertNull(AiUsageContextHelper.current())
     }
 
     @Test

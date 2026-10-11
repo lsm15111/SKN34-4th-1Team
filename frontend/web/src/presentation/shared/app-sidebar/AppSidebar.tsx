@@ -345,6 +345,16 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
                     <MenuIconGraphic name="document" />
                     <span>{screenTitles.adminAuditLogs}</span>
                   </Link>
+                  {/* AI 비용 메뉴는 잠시 숨깁니다. 화면은 /app/admin/ai-costs 주소로 그대로 열립니다. 다시 보이려면 아래 주석만 풉니다.
+                  <Link
+                    className={sidebarMenuItemClassName(pathname.startsWith(appPaths.adminAiCosts) ? 'active' : 'inactive')}
+                    to={appPaths.adminAiCosts}
+                    aria-current={pathname.startsWith(appPaths.adminAiCosts) ? 'page' : undefined}
+                  >
+                    <MenuIconGraphic name="search" />
+                    <span>{screenTitles.adminAiCosts}</span>
+                  </Link>
+                  */}
                 </>
               ) : null}
               <button className={appSidebarStyles.accountMenuButton} type="button" onClick={signOutToLanding}>

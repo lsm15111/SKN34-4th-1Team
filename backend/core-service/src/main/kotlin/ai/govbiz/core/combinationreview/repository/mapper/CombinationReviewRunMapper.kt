@@ -9,6 +9,7 @@ interface CombinationReviewRunMapper {
     fun lockActiveAccount(@Param("ownerId") ownerId: Long): Long?
     fun countAccountPending(@Param("ownerId") ownerId: Long): Int
     fun findById(@Param("runId") runId: Long): CombinationReviewRunDbRow?
+    fun findOwnerId(@Param("runId") runId: Long): Long?
     fun publishable(@Param("now") now: LocalDateTime): List<Long>
     fun reservePublication(@Param("runId") runId: Long, @Param("now") now: LocalDateTime): Int
     fun markPublished(@Param("runId") runId: Long, @Param("now") now: LocalDateTime): Int

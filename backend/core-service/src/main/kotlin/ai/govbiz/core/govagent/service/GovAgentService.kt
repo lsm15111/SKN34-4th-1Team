@@ -3,6 +3,8 @@ package ai.govbiz.core.govagent.service
 import ai.govbiz.core._common.exception.AiServiceCallException
 import ai.govbiz.core.account.domain.Account
 import ai.govbiz.core.admin.service.exception.AdminAccessDeniedException
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 import ai.govbiz.core.assistant.service.AssistantPiiMasker
 import ai.govbiz.core.govagent.client.AiGovAgentClient
 import ai.govbiz.core.govagent.client.dto.AiGovAgentRequest
@@ -25,6 +27,11 @@ class GovAgentService(
 ) {
     fun answer(account: Account, clientIp: String, question: GovAgentQuestion): GovAgentResult {
         if (!account.isAdmin) throw AdminAccessDeniedException()
+        // 경로 선택과 검색 조건 해석의 OpenAI 사용량을 이 관리자와 Gov 에이전트로 기록합니다. 원문 답변은 이용량 차감 안에서 EVIDENCE_QUESTION으로 바뀝니다.
+        return AiUsageContextHelper.attribute(account.id, AiUsageFeature.GOV_AGENT) { decideAndRun(account, clientIp, question) }
+    }
+
+    private fun decideAndRun(account: Account, clientIp: String, question: GovAgentQuestion): GovAgentResult {
         val decision = client.decide(AiGovAgentRequest(
             AssistantPiiMasker.mask(question.message), question.selectedProgram != null,
             question.context.query?.let(AssistantPiiMasker::mask),

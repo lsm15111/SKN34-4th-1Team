@@ -35,6 +35,7 @@ import ai.govbiz.core.supportprogram.service.detail.exception.SupportProgramNotF
 import java.security.MessageDigest
 import org.springframework.stereotype.Service
 import org.slf4j.LoggerFactory
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 /** 사용자가 선택한 지원 공고의 제공처별 공식 첨부를 분석해 재사용 가능한 양식 스냅샷을 만듭니다. */
 @Service
@@ -81,7 +82,11 @@ class ApplicationFormDiscoveryService(
             if (items.size <= 1) return items.map(block)
             val executor = java.util.concurrent.Executors.newFixedThreadPool(minOf(items.size, DISCOVERY_CONCURRENCY))
             try {
-                val futures = items.map { item -> executor.submit(java.util.concurrent.Callable { block(item) }) }
+                // AI 사용 기록이 같은 계정·기능에 붙도록 부른 스레드의 표시를 넘깁니다.
+                val attribution = AiUsageContextHelper.current()
+                val futures = items.map { item ->
+                    executor.submit(java.util.concurrent.Callable { AiUsageContextHelper.within(attribution) { block(item) } })
+                }
                 return futures.map { future ->
                     try { future.get() } catch (error: java.util.concurrent.ExecutionException) { throw error.cause ?: error }
                 }

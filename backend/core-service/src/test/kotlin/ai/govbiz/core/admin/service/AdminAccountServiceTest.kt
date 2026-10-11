@@ -35,6 +35,14 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.junit.jupiter.MockitoExtension
+import ai.govbiz.core.account.service.WithdrawalMarkService
+import ai.govbiz.core.aiusage.domain.AiUsageTotals
+import ai.govbiz.core.aiusage.service.AiUsageService
+import ai.govbiz.core.planusage.domain.AccountPlan
+import ai.govbiz.core.planusage.domain.PlanCode
+import ai.govbiz.core.planusage.service.PlanUsageService
+import ai.govbiz.core.planusage.service.dto.PlanUsageResult
+import org.mockito.Mockito.lenient
 
 @ExtendWith(MockitoExtension::class)
 class AdminAccountServiceTest {
@@ -48,13 +56,22 @@ class AdminAccountServiceTest {
     @Mock
     private lateinit var accessLog: AdminAccessLogService
 
+    @Mock
+    private lateinit var planUsage: PlanUsageService
+
+    @Mock
+    private lateinit var withdrawalMarks: WithdrawalMarkService
+
+    @Mock
+    private lateinit var aiUsage: AiUsageService
+
     private lateinit var service: AdminAccountService
 
     private val actor = AdminActor(ADMIN_ID, "198.51.100.7", "Mozilla/5.0")
 
     @BeforeEach
     fun setUp() {
-        service = AdminAccountService(repository, accountRepository, accessLog, AccountTestHelper.FIXED_CLOCK)
+        service = AdminAccountService(repository, accountRepository, accessLog, AccountTestHelper.FIXED_CLOCK, planUsage, withdrawalMarks, aiUsage)
     }
 
     @Test
@@ -199,11 +216,34 @@ class AdminAccountServiceTest {
         verifyNoInteractions(accountRepository)
     }
 
+    @Test
+    fun theDetailShowsThePlanUsageTrialsInheritanceAndThisMonthsAiCost() {
+        stubDetail(MEMBER_ID)
+        val usage = PlanUsageResult(PlanCode.FREE, null, emptyList(), trialsAvailable = listOf(PlanCode.PREMIUM))
+        doReturn(usage).`when`(planUsage).memberUsage(MEMBER_ID)
+        doReturn(setOf(PlanCode.PLUS)).`when`(planUsage).usedTrials(MEMBER_ID)
+        doReturn(listOf(7L)).`when`(withdrawalMarks).inheritedFrom(MEMBER_ID)
+        val totals = AiUsageTotals(3, 1200, 1000, 80, java.math.BigDecimal("0.000123"), 0)
+        doReturn(totals).`when`(aiUsage).monthTotals(MEMBER_ID)
+
+        val plan = service.detail(actor, MEMBER_ID).plan
+
+        assertEquals(usage, plan.usage)
+        assertEquals(setOf(PlanCode.PLUS), plan.usedTrials)
+        assertEquals(listOf(7L), plan.inheritedFrom)
+        assertEquals(totals, plan.aiUsageThisMonth)
+    }
+
     private fun stubDetail(accountId: Long) {
         doReturn(summary(accountId)).`when`(repository).findSummary(accountId)
         doReturn(null).`when`(repository).findCompany(accountId)
         doReturn(AdminAccountActivity(0, 0, 0, 0)).`when`(repository).findActivity(accountId, NOW.toLocalDate(), NOW)
         doReturn(emptyList<Any>()).`when`(repository).findActions(accountId, AdminAccountService.ACTION_HISTORY_LIMIT)
+        lenient().doReturn(AccountPlan.FREE).`when`(planUsage).assignment(accountId)
+        lenient().doReturn(PlanUsageResult(PlanCode.FREE, null, emptyList())).`when`(planUsage).memberUsage(accountId)
+        lenient().doReturn(emptySet<PlanCode>()).`when`(planUsage).usedTrials(accountId)
+        lenient().doReturn(emptyList<Long>()).`when`(withdrawalMarks).inheritedFrom(accountId)
+        lenient().doReturn(AiUsageTotals.EMPTY).`when`(aiUsage).monthTotals(accountId)
     }
 
     private fun summary(accountId: Long): AdminAccountSummary =

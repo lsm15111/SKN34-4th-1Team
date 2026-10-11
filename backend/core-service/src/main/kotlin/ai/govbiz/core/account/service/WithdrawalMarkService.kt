@@ -48,6 +48,9 @@ class WithdrawalMarkService(
         return predecessors
     }
 
+    /** 이 계정이 탈퇴 표식으로 이어받은 탈퇴 계정입니다. */
+    fun inheritedFrom(accountId: Long): List<Long> = repository.findInheritedAccountIds(accountId)
+
     /** 보관 기간이 지난 표식을 지웁니다. 한 번에 [limit]줄까지 지우고 지운 수를 돌려줍니다. */
     @Transactional
     fun purgeExpired(limit: Int = 500): Int = repository.deleteExpired(LocalDateTime.now(clock), limit)

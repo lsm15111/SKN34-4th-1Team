@@ -41,5 +41,8 @@ interface WithdrawalMarkMapper {
         @Param("now") now: LocalDateTime,
     ): Int
 
+    /** 이 계정이 이어받은 탈퇴 계정입니다. */
+    fun findInheritedAccountIds(@Param("successorId") successorId: Long): List<Long>
+
     fun deleteExpired(@Param("now") now: LocalDateTime, @Param("limit") limit: Int): Int
 }

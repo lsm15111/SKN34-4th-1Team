@@ -32,6 +32,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 /** HTTP는 입력 스냅샷만 접수한다. 큐 소비자가 DB transaction 밖에서 수집·파싱·AI를 실행한다. */
 @Service
@@ -146,7 +148,9 @@ class CombinationReviewRunService(
             val configuration = ai.configuration(properties.reviewContractVersion)
             runs.saveConfiguration(run.id, configuration)
             analysisStarted = true
-            val analysis = ai.analyze(run.input, evidence, configuration)
+            val analysis = AiUsageContextHelper.attribute(runs.findOwnerId(run.id), AiUsageFeature.COMBINATION_REVIEW) {
+                ai.analyze(run.input, evidence, configuration)
+            }
             runs.succeed(run.id, analysis)
         } catch (error: Exception) {
             val code = failureCode(error)

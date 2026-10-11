@@ -121,4 +121,7 @@
         UPDATE combination_review_run SET status = 'FAILED', failure_code = 'RUN_OUTCOME_UNKNOWN_EXPIRED'
         WHERE status = 'UNKNOWN' AND finished_at &lt;= DATE_SUB(#{now}, INTERVAL #{ttlSeconds} SECOND)
     </update>
+    <select id="findOwnerId" resultType="long">
+        SELECT r.owner_account_id FROM combination_review_run rr JOIN combination_review r ON r.id = rr.review_id WHERE rr.id = #{runId}
+    </select>
 </mapper>

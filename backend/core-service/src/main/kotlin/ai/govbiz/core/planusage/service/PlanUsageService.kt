@@ -24,6 +24,8 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 /**
  * 요금제 한도를 집행합니다. 요청마다 세는 기능(AI 대화 검색·원문 질문)은 AI를 부르기 전에 한 번을 먼저 빼고 실패하면 돌려주고,
@@ -63,7 +65,7 @@ class PlanUsageService(
             reserveMember(account.id, feature, now)
         }
         try {
-            return action()
+            return AiUsageContextHelper.attribute(account?.id, AiUsageFeature.valueOf(feature.name), action)
         } catch (error: Throwable) {
             try {
                 release()
@@ -104,7 +106,7 @@ class PlanUsageService(
     fun <T> consumeDraftProgram(accountId: Long, sourceCode: String, sourceProgramId: String, action: () -> T): T {
         val recordId = transactions.execute { _ -> reserveDraftProgram(accountId, PlanUsageJob.DraftProgram(sourceCode, sourceProgramId)) }
         try {
-            return action()
+            return AiUsageContextHelper.attribute(accountId, AiUsageFeature.APPLICATION_DRAFT, action)
         } catch (error: Throwable) {
             if (recordId != null) {
                 try {
@@ -171,16 +173,22 @@ class PlanUsageService(
                 ),
             )
         }
-        val plan = planOf(account.id, now)
+        return memberUsage(account.id)
+    }
+
+    /** 회원의 현재 요금제와 기능별 사용량입니다. 관리자 계정 상세도 같은 값을 봅니다. */
+    fun memberUsage(accountId: Long): PlanUsageResult {
+        val now = now()
+        val plan = planOf(accountId, now)
         val windows = PlanUsageFeature.entries.associateWith { plan.windowOf(it, now) }
-        val counts = repository.findCounts(account.id, windows.values.map { it.key })
+        val counts = repository.findCounts(accountId, windows.values.map { it.key })
         val items = PlanUsageFeature.entries.map { feature ->
             val window = windows.getValue(feature)
             val counted = counts[feature to window.key] ?: 0
-            val used = if (feature.perRequest) counted else counted + repository.countJobs(account.id, feature, window)
+            val used = if (feature.perRequest) counted else counted + repository.countJobs(accountId, feature, window)
             PlanUsageItem(feature, window.period, plan.limitOf(feature), used, window.resetsAt)
         }
-        return PlanUsageResult(plan.code, plan.endsAt, items, plan.source, PlanTrial.available(plan, repository.findTrialPlans(account.id)))
+        return PlanUsageResult(plan.code, plan.endsAt, items, plan.source, PlanTrial.available(plan, repository.findTrialPlans(accountId)))
     }
 
     /**
@@ -198,6 +206,12 @@ class PlanUsageService(
             if (used > 0) repository.addCount(successorId, feature, window.key, used)
         }
     }
+
+    /** 관리자 화면이 보는 배정 그대로의 요금제입니다. 끝난 배정도 그대로 돌려줍니다. */
+    fun assignment(accountId: Long): AccountPlan = repository.findPlan(accountId)
+
+    /** 이 계정이 이미 시작한 체험 요금제입니다. */
+    fun usedTrials(accountId: Long): Set<PlanCode> = repository.findTrialPlans(accountId)
 
     /**
      * 출시 전 무료 체험을 시작합니다. 계정 행을 잠근 짧은 transaction에서 자격을 확인하고 체험 기록과 이용권을 함께 씁니다.

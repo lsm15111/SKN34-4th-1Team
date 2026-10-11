@@ -42,6 +42,7 @@ RUNTIME_FILES = (
         for name in (
             "bootstrap",
             "main",
+            "openai_usage",
             "config",
             "tracing",
             "support_program_embedding",

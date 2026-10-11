@@ -68,6 +68,7 @@ RAG_GENERATION_FILES = (
         for name in (
             "bootstrap",
             "main",
+            "openai_usage",
             "support_program_embedding",
             "support_program_evidence/service",
             "support_program_evidence/router",

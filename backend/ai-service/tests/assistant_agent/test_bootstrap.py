@@ -9,6 +9,7 @@ from app.assistant_agent.service import AssistantAgentService
 from app.bootstrap import build_application_container
 from app.config import Settings, SettingsConfigurationError
 from app.gov_agent.agent import GovAgentSupervisor
+from app.openai_usage import record_openai_usage
 
 
 SETTINGS = Settings(
@@ -67,6 +68,11 @@ async def test_agent_models_tool_client_and_service_are_wired_and_closed(monkeyp
         assert application.kwargs["store"] is False
         assert combination.kwargs["max_tokens"] == 6000
         assert combination.kwargs["timeout"] == 60
+        # 두 모델은 공유 OpenAI HTTP 클라이언트로 불러 요청별 사용량을 Core에 돌려준다.
+        http_client = classify.kwargs.pop("http_async_client")
+        assert agent.kwargs.pop("http_async_client") is http_client
+        assert http_client.event_hooks["response"] == [record_openai_usage]
+        await http_client.aclose()
         # 분류는 도우미와 같은 싼 모델·low, 계획·답은 전용 모델. 둘 다 저장 안 함·재시도 없음·도우미 제한 시간.
         assert classify.kwargs == {"model": "gpt-5-nano", "api_key": "private-key", "use_responses_api": True, "store": False,
                                    "reasoning": {"effort": assistant_reasoning_effort or "low"}, "timeout": 1.25, "max_retries": 0}
@@ -74,6 +80,8 @@ async def test_agent_models_tool_client_and_service_are_wired_and_closed(monkeyp
                                 "reasoning": {"effort": "low"}, "timeout": 1.25, "max_retries": 0}
         assert isinstance(container.gov_agent_supervisor, GovAgentSupervisor)
         assert container.gov_agent_supervisor._model.bound is supervisor
+        # Gov 에이전트의 경로 선택도 같은 공유 클라이언트로 불러 사용량을 Core에 돌려준다.
+        assert supervisor.kwargs.pop("http_async_client") is http_client
         assert supervisor.kwargs == {"model": "gpt-5-nano", "api_key": "private-key", "use_responses_api": True, "store": False,
                                      "reasoning": {"effort": assistant_reasoning_effort or "low"}, "timeout": 1.25, "max_retries": 0}
         assert "reasoning" not in container.gov_agent_supervisor._model.kwargs

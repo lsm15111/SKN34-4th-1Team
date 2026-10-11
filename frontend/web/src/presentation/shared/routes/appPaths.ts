@@ -33,6 +33,8 @@ export const appPaths = {
   adminAccountDetail: `${APP_PREFIX}/admin/accounts/detail`,
   /** 관리자 감사 기록(회원 정보 조회·계정 조치·권한 변경 접속기록)입니다. */
   adminAuditLogs: `${APP_PREFIX}/admin/audit-logs`,
+  /** 관리자 AI 비용(요청별 추정 비용과 OpenAI 실제 비용)입니다. */
+  adminAiCosts: `${APP_PREFIX}/admin/ai-costs`,
   supportProgramDetail: `${APP_PREFIX}/support-programs/detail`,
   supportProgramQuestion: `${APP_PREFIX}/support-programs/detail/question`,
 } as const

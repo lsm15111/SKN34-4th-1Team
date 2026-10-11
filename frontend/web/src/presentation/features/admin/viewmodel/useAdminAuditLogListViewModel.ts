@@ -46,6 +46,7 @@ const actionTones: Record<AdminAuditAction, WorkspaceTagTone> = {
   ACCOUNT_ADMIN_GRANT: 'warn',
   ACCOUNT_ADMIN_REVOKE: 'warn',
   AUDIT_LOG_LIST: 'muted',
+  AI_COST_VIEW: 'muted',
 }
 
 /** 입력칸의 계정 ID입니다. 비우면 null, 숫자가 아니면 undefined입니다. */

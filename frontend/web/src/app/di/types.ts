@@ -30,6 +30,13 @@ import type {
 } from '../../domain/usecases/PartnerRecruitmentUseCases'
 import type { AdminAccountRepository } from '../../domain/repositories/AdminAccountRepository'
 import type { AdminAuditLogRepository } from '../../domain/repositories/AdminAuditLogRepository'
+import type { AdminAiCostRepository } from '../../domain/repositories/AdminAiCostRepository'
+import type {
+  AddAdminAiModelPriceUseCase,
+  GetAdminAiCostSummaryUseCase,
+  GetAdminAiModelPricesUseCase,
+  SyncAdminAiCostsUseCase,
+} from '../../domain/usecases/AdminAiCostUseCases'
 import type { BrowseAdminAuditLogsUseCase } from '../../domain/usecases/AdminAuditLogUseCases'
 import type { SavedSupportProgramRepository } from '../../domain/repositories/SavedSupportProgramRepository'
 import type {
@@ -104,6 +111,7 @@ export type AppCradle = {
   askAssistantUseCase: AskAssistantUseCase
   adminAccountRepository: AdminAccountRepository
   adminAuditLogRepository: AdminAuditLogRepository
+  adminAiCostRepository: AdminAiCostRepository
   savedSupportProgramRepository: SavedSupportProgramRepository
   browseSavedSupportProgramsUseCase: BrowseSavedSupportProgramsUseCase
   checkSavedSupportProgramUseCase: CheckSavedSupportProgramUseCase
@@ -114,6 +122,10 @@ export type AppCradle = {
   getAdminAccountDetailUseCase: GetAdminAccountDetailUseCase
   takeAdminAccountActionUseCase: TakeAdminAccountActionUseCase
   browseAdminAuditLogsUseCase: BrowseAdminAuditLogsUseCase
+  getAdminAiCostSummaryUseCase: GetAdminAiCostSummaryUseCase
+  syncAdminAiCostsUseCase: SyncAdminAiCostsUseCase
+  getAdminAiModelPricesUseCase: GetAdminAiModelPricesUseCase
+  addAdminAiModelPriceUseCase: AddAdminAiModelPriceUseCase
   browsePartnerProposalsUseCase: BrowsePartnerProposalsUseCase
   browsePartnerRecruitmentsUseCase: BrowsePartnerRecruitmentsUseCase
   companyRepository: CompanyRepository

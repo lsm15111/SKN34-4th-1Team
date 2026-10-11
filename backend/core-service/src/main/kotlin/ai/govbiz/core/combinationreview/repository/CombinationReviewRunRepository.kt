@@ -67,6 +67,9 @@ class CombinationReviewRunRepository(
 
     /** QUEUED에서 한 번만 실행권을 얻는다. RUNNING/UNKNOWN 재전달은 절대 재실행하지 않는다. */
     @Transactional
+    /** 실행을 만든 검토의 소유 계정입니다. AI 사용 기록에 계정을 붙일 때 씁니다. */
+    fun findOwnerId(runId: Long): Long? = mapper.findOwnerId(runId)
+
     fun claim(runId: Long, runnerId: String): StoredCombinationReviewRun? {
         if (mapper.claim(runId, runnerId, now()) != 1) return null
         return requireNotNull(mapper.findById(runId)).toDomain()

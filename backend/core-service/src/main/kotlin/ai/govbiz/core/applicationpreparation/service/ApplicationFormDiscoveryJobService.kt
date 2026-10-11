@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import org.slf4j.LoggerFactory
+import ai.govbiz.core.aiusage.domain.AiUsageFeature
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 @Service
 class ApplicationFormDiscoveryJobService(
@@ -62,9 +64,11 @@ class ApplicationFormDiscoveryJobService(
                 val job = repository.claim(id) ?: return@executeBackground
                 var aiStarted = false
                 val result = try {
-                    discovery.discoverQueued(job.sourceCode, job.sourceProgramId) {
-                        check(repository.beginAi(id)) { "Discovery execution is no longer active" }
-                        aiStarted = true
+                    AiUsageContextHelper.attribute(job.ownerAccountId, AiUsageFeature.APPLICATION_DRAFT) {
+                        discovery.discoverQueued(job.sourceCode, job.sourceProgramId) {
+                            check(repository.beginAi(id)) { "Discovery execution is no longer active" }
+                            aiStarted = true
+                        }
                     }
                 } catch (error: Exception) {
                     val root = generateSequence(error as Throwable) { it.cause }.last()

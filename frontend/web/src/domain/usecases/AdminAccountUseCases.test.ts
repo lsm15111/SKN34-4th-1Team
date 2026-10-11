@@ -21,6 +21,10 @@ const detail: AdminAccountDetail = {
   company: null,
   activity: { recruitmentCount: 0, openRecruitmentCount: 0, sentProposalCount: 0, activeSessionCount: 1 },
   actions: [],
+  plan: {
+    plan: 'FREE', planEndsAt: null, assignedPlan: 'FREE', assignedSource: null, assignedAt: null, assignedEndsAt: null,
+    items: [], usedTrials: [], inheritedFromAccountIds: [], aiUsageThisMonth: { calls: 0, estimatedUsd: '0.000000', unpricedCalls: 0 },
+  },
   isSelf: false,
 }
 
@@ -48,7 +52,8 @@ describe('AdminAccountUseCases', () => {
   })
 
   it('offers suspension and admin grants for active members, only unsuspension for suspended ones, only revocation for admins, and nothing for yourself', () => {
-    expect(availableAdminAccountActions(detail)).toEqual(['suspend', 'revoke-sessions', 'grant-admin'])
+    // 관리자 권한 부여와 요금제 배정은 화면에서 하지 않습니다.
+    expect(availableAdminAccountActions(detail)).toEqual(['suspend', 'revoke-sessions'])
     expect(availableAdminAccountActions({ ...detail, account: { ...detail.account, status: 'SUSPENDED' } })).toEqual(['unsuspend'])
     expect(availableAdminAccountActions({ ...detail, account: { ...detail.account, role: 'ADMIN', tier: 'ADMIN' } })).toEqual(['revoke-admin'])
     expect(availableAdminAccountActions({ ...detail, isSelf: true })).toEqual([])

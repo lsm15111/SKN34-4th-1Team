@@ -457,6 +457,11 @@ V59 `account_plan.ends_at`이 지나면 FREE 기준으로 돌아갑니다. 사�
 체험 기록과 무료 기준 오늘·이번 달 사용량을 새 계정에 한 번 이어 적용합니다. 사업자등록번호 조회 같은 외부 호출은 그 transaction 밖에서 끝냅니다.
 [한도·세는 규칙·판단 근거](plan-usage-limits.md)를 참고하세요.
 
+AI 비용은 `ai-service OpenAI 응답 → 사용량 헤더(X-GovBiz-OpenAI-Usage) → Core AiUsageRecordingInterceptor → AiUsageService(REQUIRES_NEW)
+→ AiUsageRepository → MyBatis → MySQL(V63)` 순서로 요청마다 남고, 계정·기능은 AI를 부른 기능이 `AiUsageContextHelper`로 표시합니다.
+추정 비용은 가격표(V63 `ai_model_price`)로 계산하고, 실제 비용은 조직 관리자 키가 있을 때만 `AiCostSyncService → OpenAiCostsClient → OpenAI Costs API`
+로 전체 기간을 읽은 뒤 짧은 transaction에서 바꿉니다. 관리자는 `/app/admin/ai-costs`(사이드바 메뉴는 잠시 숨김, 주소로 열림)와 계정 상세의 요금제 패널에서 봅니다.
+
 ## 검색·상세 조회·원문 근거 질문
 
 공개 대화 해석·검색·근거 질문은 입력 검증 뒤 Controller에서 `SupportProgramRequestAdmissionService`를 거쳐

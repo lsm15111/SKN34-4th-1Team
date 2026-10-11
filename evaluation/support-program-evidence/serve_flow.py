@@ -110,8 +110,11 @@ def build_evaluation_app(output_dir: Path, qdrant_url: str, max_api_calls: int, 
 
     client = httpx2.AsyncClient(event_hooks={"request": [before_request], "response": [after_response]})
     # Evaluation-only construction hook: keep the existing production object graph and explicit SDK retry=0.
+    # The app passes its shared OpenAI HTTP client explicitly, so that seam returns the guarded client too.
     original = bootstrap.AsyncOpenAI
+    original_http_client = bootstrap.usage_http_client
     bootstrap.AsyncOpenAI = partial(AsyncOpenAI, base_url="https://api.openai.com/v1", http_client=client)
+    bootstrap.usage_http_client = lambda: client
     try:
         app = create_app(settings=Settings(
             openai_api_key=key, openai_model=DEFAULT_OPENAI_MODEL,
@@ -120,6 +123,7 @@ def build_evaluation_app(output_dir: Path, qdrant_url: str, max_api_calls: int, 
         ))
     finally:
         bootstrap.AsyncOpenAI = original
+        bootstrap.usage_http_client = original_http_client
 
     if rag_budget is not None:
         rag_budget.sdk = app.state.container.openai_client

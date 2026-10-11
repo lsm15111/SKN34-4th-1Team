@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
+import ai.govbiz.core.aiusage.helper.AiUsageContextHelper
 
 /**
  * 관심 공고 묶음 질문의 두 번째 에이전트 호출에 실을 원문 청크 허용 목록을 만듭니다.
@@ -38,7 +39,8 @@ class AssistantSavedProgramDocumentService(
         val saved = savedSupportProgramService.list(accountId).take(MAX_DOCUMENTS)
         if (saved.isEmpty()) return PreparedDocuments(emptyList(), emptyMap())
         val started = System.nanoTime()
-        val tasks = saved.map { item -> Callable { prepareOne(item) } }
+        val attribution = AiUsageContextHelper.current()
+        val tasks = saved.map { item -> Callable { AiUsageContextHelper.within(attribution) { prepareOne(item) } } }
         val futures = executor.invokeAll(tasks, properties.documentPrepareTimeout.toMillis(), TimeUnit.MILLISECONDS)
         val chunkTexts = mutableMapOf<String, List<String>>()
         val documents = saved.zip(futures).map { (item, future) ->

@@ -226,6 +226,10 @@ services:
       ACCOUNT_DEV_LOGIN_EMAIL: ${ACCOUNT_DEV_LOGIN_EMAIL:-admin@govbiz.local}
       ACCOUNT_DEV_LOGIN_MEMBER_EMAIL: ${ACCOUNT_DEV_LOGIN_MEMBER_EMAIL:-member@govbiz.local}
       ACCOUNT_DEV_LOGIN_PASSWORD: ${ACCOUNT_DEV_LOGIN_PASSWORD:-govbiz-admin1}
+      # 관리자 AI 비용 화면의 실제 비용(OpenAI Costs API). 조직 관리자 키가 있을 때만 가져오고, 비우면 추정 비용만 보입니다.
+      OPENAI_ADMIN_KEY: ${OPENAI_ADMIN_KEY:-}
+      OPENAI_PROJECT_ID: ${OPENAI_PROJECT_ID:-}
+      AI_COST_KRW_PER_USD: ${AI_COST_KRW_PER_USD:-}
       # 로컬 데모 시드 계정(개발 로그인 2 + 데모 회원 4)은 요금제 한도 없이 씁니다. 빈 값으로 두면 끕니다.
       PLAN_USAGE_UNLIMITED_ACCOUNT_EMAILS: ${PLAN_USAGE_UNLIMITED_ACCOUNT_EMAILS-admin@govbiz.local,member@govbiz.local,jihoon.park@demo.govbiz.local,hana.choi@demo.govbiz.local,dohyun.jung@demo.govbiz.local,yuna.kang@demo.govbiz.local}
       ACCOUNT_PASSWORD_RESET_MAIL_ENABLED: ${ACCOUNT_PASSWORD_RESET_MAIL_ENABLED:-false}

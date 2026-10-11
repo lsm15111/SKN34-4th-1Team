@@ -16,12 +16,11 @@ import { getCoreApiBaseUrl } from './coreApiConfig'
 
 const ADMIN_ACCOUNTS_PATH = '/api/v1/admin/accounts'
 
-/** 조치별 서버 경로와 사유 외에 함께 보낼 본문입니다. 권한 부여·해제는 같은 경로에 새 역할을 보냅니다. */
+/** 조치별 서버 경로와 사유 외에 함께 보낼 본문입니다. 권한 해제는 역할 변경 경로에 새 역할을 보냅니다. */
 const actionRequests: Record<AdminAccountActionKind, { path: string; body: Record<string, string> }> = {
   suspend: { path: 'suspend', body: {} },
   unsuspend: { path: 'unsuspend', body: {} },
   'revoke-sessions': { path: 'sessions/revoke', body: {} },
-  'grant-admin': { path: 'role', body: { role: 'ADMIN' } },
   'revoke-admin': { path: 'role', body: { role: 'USER' } },
 }
 
@@ -76,7 +75,7 @@ export async function getAdminAccountApi(id: number, signal?: AbortSignal): Prom
   return adminAccountDetailDtoSchema.parse(await response.json())
 }
 
-/** 정지·정지 해제·강제 로그아웃·관리자 권한 부여·해제입니다. 사유를 함께 보내고 바뀐 상세를 돌려받습니다. */
+/** 정지·정지 해제·강제 로그아웃·관리자 권한 해제입니다. 사유를 함께 보내고 바뀐 상세를 돌려받습니다. */
 export async function takeAdminAccountActionApi(
   id: number,
   kind: AdminAccountActionKind,
