@@ -29,6 +29,7 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
     isGovAgent,
     govProgram,
     selectGovProgram,
+    attachGovPreparation,
     evidenceUsage,
     isRestoredHistory,
     displayProposal,
@@ -249,10 +250,13 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
               {message.govApplication ? (isGovAgent && layout === 'workspace' && message.id === latestApplicationMessageId
                 && govProgram?.sourceCode === message.govApplication.program.sourceCode
                 && govProgram.sourceProgramId === message.govApplication.program.sourceProgramId
-                ? <ApplicationPreparationInline key={`${accountEmail}:${message.id}`} program={message.govApplication.program} />
+                ? <ApplicationPreparationInline key={`${accountEmail}:${message.id}:${message.govApplication.preparationId ?? 'new'}`} program={message.govApplication.program}
+                  preparationId={message.govApplication.preparationId} onPrepared={(id) => attachGovPreparation(message.id, id)} />
                 : <div className="mt-3 rounded-xl border border-line p-4 text-sm">
                   <p className="mb-2 font-semibold">신청 준비 · {message.govApplication.program.title}</p>
-                  <Link className="text-brand-primary underline" to={`${appPaths.applicationPreparationNew}?${new URLSearchParams({
+                  <Link className="text-brand-primary underline" to={message.govApplication.preparationId
+                    ? `${appPaths.applicationPreparations}/${message.govApplication.preparationId}`
+                    : `${appPaths.applicationPreparationNew}?${new URLSearchParams({
                     sourceCode: message.govApplication.program.sourceCode, sourceProgramId: message.govApplication.program.sourceProgramId,
                   })}`}>신청 준비 화면에서 이어서 보기</Link>
                 </div>) : null}

@@ -38,4 +38,7 @@ describe('Gov agent public contract', () => {
     expect(govAgentApplicationSchema.parse({ ...application, approved: true, requestKey: 'injected' })).toEqual(application)
     expect(govAgentApplicationSchema.safeParse({ ...application, program: { ...application.program, sourceCode: '../' } }).success).toBe(false)
   })
+  it.each([null, '12', 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN])('rejects invalid saved preparation id %s', (preparationId) => {
+    expect(govAgentApplicationSchema.safeParse({ program: { ...program, title: '공고' }, message: '신청 준비', preparationId }).success).toBe(false)
+  })
 })

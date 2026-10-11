@@ -24,6 +24,7 @@ import {
   draftChanged,
   govProgramSelected,
   govMessageSucceeded,
+  govApplicationPrepared,
   interpretationStarted,
   interpretationSucceeded,
   interpretationFailed,
@@ -74,6 +75,7 @@ export function useSupportProgramChat(
 ) {
   const dispatchToStore = useAppDispatch()
   const isGovAgent = useAppSelector((state) => state.auth.status === 'authenticated' && state.auth.account?.role === 'ADMIN')
+  const accountEmail = useAppSelector((state) => state.auth.account?.email)
   const govProgram = useAppSelector((state) => state.chat.govProgram)
   const conversationCount = useAppSelector(selectConversationCount)
   const draft = useAppSelector(selectChatDraft)
@@ -354,6 +356,9 @@ export function useSupportProgramChat(
     isGovAgent,
     govProgram,
     selectGovProgram: (program: GovAgentProgram | null) => { if (isGovAgent) dispatchToStore(govProgramSelected(program)) },
+    attachGovPreparation: (messageId: string, preparationId: number) => {
+      if (isGovAgent && accountEmail) dispatchToStore(govApplicationPrepared({ accountEmail, messageId, preparationId }))
+    },
     isRestoredHistory,
     confirmedContext,
     interpretation,

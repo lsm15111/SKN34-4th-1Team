@@ -188,6 +188,7 @@ export function useChatPageViewModel() {
     isGovAgent: chat.isGovAgent,
     govProgram: chat.govProgram,
     selectGovProgram: chat.selectGovProgram,
+    attachGovPreparation: chat.attachGovPreparation,
     evidenceUsage,
     isRestoredHistory: chat.isRestoredHistory,
     displayProposal,

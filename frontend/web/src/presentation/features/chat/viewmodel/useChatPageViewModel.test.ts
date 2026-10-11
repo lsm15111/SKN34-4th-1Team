@@ -403,6 +403,7 @@ function createChatHook(overrides: Partial<ChatHook> = {}): ChatHook {
     isGovAgent: false,
     govProgram: null,
     selectGovProgram: vi.fn(),
+    attachGovPreparation: vi.fn(),
     isRestoredHistory: false,
     confirmedContext: emptyConversationContext,
     conversationQuery: null,

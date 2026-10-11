@@ -8,7 +8,8 @@ import { isOfficialSupportProgramSourceUrl } from './SupportProgramDto'
 const identitySchema = z.object({ sourceCode: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/),
   sourceProgramId: z.string().min(1).refine((value) => Array.from(value).length <= 255 && value.trim() === value && !/\p{C}/u.test(value)) })
 export const govAgentProgramSchema = identitySchema.extend({ title: z.string().min(1).max(1_000) })
-export const govAgentApplicationSchema = z.object({ program: govAgentProgramSchema, message: z.string().min(1).max(1_000) })
+export const govAgentApplicationSchema = z.object({ program: govAgentProgramSchema, message: z.string().min(1).max(1_000),
+  preparationId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional() })
 export const govAgentEvidenceSchema = z.object({ program: govAgentProgramSchema, answer: supportProgramEvidenceAnswerDtoSchema })
   .refine((value) => value.answer.citations.every((citation) => isOfficialSupportProgramSourceUrl(value.program.sourceCode, citation.sourceUrl)),
     '근거는 선택한 제공처의 공식 원문이어야 합니다.')

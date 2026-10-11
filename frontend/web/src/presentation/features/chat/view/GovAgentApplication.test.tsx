@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { Provider } from 'react-redux'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 import { appContainer } from '../../../../app/appContainer'
 import { createAppStore } from '../../../../app/store'
 import { supportProgramDetails, supportPrograms } from '../../../../data/fixtures/supportPrograms'
 import { completeSearchResult } from '../../../../data/fixtures/supportProgramSearchResult'
 import { emptyConversationContext } from '../../../../data/fixtures/supportProgramConversation'
-import type { ApplicationForm, ApplicationFormAvailability, ApplicationFormDiscoveryJob, ApplicationPreparation } from '../../../../domain/entities/ApplicationPreparation'
+import type { ApplicationDocumentGenerationJob, ApplicationForm, ApplicationFormAvailability, ApplicationFormDiscoveryJob, ApplicationPreparation } from '../../../../domain/entities/ApplicationPreparation'
 import { chooseOption } from '../../../../test/selectField'
 import { signedIn } from '../../../shared/auth/state/authSlice'
-import { conversationHistoryOpened, conversationReset, createChatConversationSnapshot, govMessageSucceeded, govProgramSelected, interpretationStarted, searchStarted, searchSucceeded } from '../state/chatSlice'
+import { conversationHistoryOpened, conversationReset, createChatConversationSnapshot, govApplicationPrepared, govMessageSucceeded, govProgramSelected, interpretationStarted, searchStarted, searchSucceeded } from '../state/chatSlice'
 import { ChatPage } from './ChatPage'
 
 vi.mock('../hooks/useSupportProgramSearchReadiness', () => ({ useSupportProgramSearchReadiness: () => ({
@@ -20,9 +20,12 @@ vi.mock('../hooks/useSupportProgramSearchReadiness', () => ({ useSupportProgramS
 vi.mock('../viewmodel/useSearchResultInterests', async (importOriginal) => ({
   ...await importOriginal<typeof import('../viewmodel/useSearchResultInterests')>(), useSearchResultInterests: () => null,
 }))
-vi.mock('../../../shared/plan-usage/usePlanUsage', () => ({ usePlanUsage: () => ({ usage: null, reload: vi.fn() }) }))
+vi.mock('../../../shared/plan-usage/usePlanUsage', () => {
+  const usage = { usage: null, reload: vi.fn() }
+  return { usePlanUsage: () => usage }
+})
 
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 const account = { email: 'admin@govbiz.local', role: 'ADMIN' as const, tier: 'ADMIN' as const,
   emailVerified: true, hasPassword: true, accountType: null, onboarded: true, company: null }
@@ -56,8 +59,13 @@ function mockPreparation(items: ApplicationForm[] = [form]) {
   const poll = vi.spyOn(useCase, 'discoveryJob').mockResolvedValue(job('SUCCEEDED'))
   const discover = vi.spyOn(useCase, 'discover').mockResolvedValue(job('SUCCEEDED'))
   const create = vi.spyOn(useCase, 'create').mockResolvedValue(created)
+  const get = vi.spyOn(useCase, 'get').mockResolvedValue(created)
+  const documents = vi.spyOn(useCase, 'documents').mockResolvedValue([])
+  const documentJobs = vi.spyOn(useCase, 'documentJobs').mockResolvedValue([])
+  const submit = vi.spyOn(useCase, 'submitDocumentJob')
+  vi.spyOn(useCase, 'markDocumentJobsSeen').mockResolvedValue(undefined)
   vi.spyOn(useCase, 'markDiscoveryJobsSeen').mockResolvedValue(undefined)
-  return { useCase, detail, lookup, jobs, poll, discover, create }
+  return { useCase, detail, lookup, jobs, poll, discover, create, get, documents, documentJobs, submit }
 }
 
 function addApplication(store: ReturnType<typeof createAppStore>) {
@@ -65,32 +73,36 @@ function addApplication(store: ReturnType<typeof createAppStore>) {
   store.dispatch(started)
   store.dispatch(govMessageSucceeded({ requestId: started.payload.requestId, message: '양식을 확인하고 신청 준비를 시작해 주세요.',
     application: { program, message: '양식을 확인하고 신청 준비를 시작해 주세요.' } }))
+  return `${started.payload.requestId}-answer`
 }
 
-async function mount(restored = false) {
+function Location() { const location = useLocation(); return <output data-testid="location">{location.pathname}{location.search}</output> }
+
+async function mount(restored = false, preparationId?: number) {
   const store = createAppStore()
   store.dispatch(signedIn(account))
   const search = searchStarted('사업')
   store.dispatch(search)
   store.dispatch(searchSucceeded({ ...completeSearchResult({ query: '사업', programs: [supportPrograms[0]] }), requestId: search.payload.requestId }))
   store.dispatch(govProgramSelected(program))
-  addApplication(store)
+  const messageId = addApplication(store)
+  if (preparationId !== undefined) store.dispatch(govApplicationPrepared({ accountEmail: account.email, messageId, preparationId }))
   if (restored) {
     const snapshot = createChatConversationSnapshot(store.getState().chat)
     store.dispatch(conversationReset())
     store.dispatch(conversationHistoryOpened({ accountEmail: account.email, snapshot }))
   }
-  await act(async () => { render(<Provider store={store}><MemoryRouter initialEntries={['/app/chat']}><Routes>
+  await act(async () => { render(<Provider store={store}><MemoryRouter initialEntries={['/app/chat']}><Location /><Routes>
     <Route path="/app/chat" element={<ChatPage layout="workspace" />} />
     <Route path="/app/application-preparations/:id" element={<p>신청 문서 편집기</p>} />
   </Routes></MemoryRouter></Provider>) })
   return store
 }
 
-it('restores the card, chooses a stored form and service field, and opens the existing editor only on explicit create', async () => {
+it('restores the card, chooses a stored form and service field, and keeps the created editor in the chat', async () => {
   const second = { ...form, formVersionId: 'second-form-v1', formTitle: '수출 계획서', supportedServiceFields: ['CONSULTING', 'MARKETING'] as ApplicationForm['supportedServiceFields'] }
   const api = mockPreparation([form, second])
-  await mount(true)
+  const store = await mount(true)
   expect(screen.getByRole('heading', { name: `신청 준비 · ${program.title}` })).toBeTruthy()
   expect(api.discover).not.toHaveBeenCalled()
   expect(api.create).not.toHaveBeenCalled()
@@ -102,8 +114,92 @@ it('restores the card, chooses a stored form and service field, and opens the ex
   await act(async () => fireEvent.click(screen.getByRole('button', { name: '작성 시작' })))
   expect(api.create).toHaveBeenLastCalledWith({ sourceCode: program.sourceCode, sourceProgramId: program.sourceProgramId,
     formVersionId: second.formVersionId, serviceField: 'MARKETING' }, expect.any(AbortSignal))
-  expect(screen.getByText('신청 문서 편집기')).toBeTruthy()
+  expect(screen.getByRole('heading', { name: '답변 입력' })).toBeTruthy()
+  expect(screen.getByTestId('location').textContent).toBe('/app/chat')
+  expect(createChatConversationSnapshot(store.getState().chat).messages.at(-1)?.govApplication?.preparationId).toBe(12)
   expect(api.discover).not.toHaveBeenCalled()
+})
+
+it('saves answers, submits once, follows the job and downloads without leaving the chat', async () => {
+  vi.useFakeTimers()
+  const api = mockPreparation()
+  let current: ApplicationPreparation = { ...created, form: { ...form, sections: [{
+    key: 'company', title: '기업 개요', locator: '문단 1', description: '기업을 설명합니다.', status: 'NOT_STARTED', facts: [],
+    fields: [{ key: 'name', label: '기업명', guidance: '공식 기업명', required: true }],
+  }] } }
+  api.get.mockImplementation(async () => structuredClone(current))
+  const save = vi.spyOn(api.useCase, 'replaceInputs').mockImplementation(async (_id, _section, input) => {
+    current = { ...current, inputRevision: input.expectedRevision + 1, form: { ...current.form,
+      sections: current.form.sections.map((section) => ({ ...section, status: 'INPUT_CONFIRMED',
+        facts: input.facts.map((fact, index) => ({ ...fact, id: index + 1, inputRevision: input.expectedRevision + 1, updatedAt: created.updatedAt })) })) } }
+    return structuredClone(current)
+  })
+  const file = { id: 81, inputRevision: 1, fileName: '사업계획서_초안.hwpx', mediaType: 'application/hwp+zip', size: 400,
+    filledAnswerCount: 1, unfilledAnswerCount: 0, unfilledAnswers: [] }
+  const queued: ApplicationDocumentGenerationJob = { id: 501, preparationId: 12, expectedRevision: 1,
+    status: 'QUEUED', stage: null, fileIds: [], failureCode: null, failureMessage: null,
+    mappingMigration: null, createdAt: created.createdAt, finishedAt: null }
+  api.submit.mockResolvedValue(queued)
+  const poll = vi.spyOn(api.useCase, 'documentJob').mockImplementation(async () => {
+    api.documents.mockResolvedValue([file])
+    return { ...queued, status: 'SUCCEEDED', stage: 'SAVING', fileIds: [81], finishedAt: created.updatedAt }
+  })
+  const download = vi.spyOn(api.useCase, 'downloadDocument').mockResolvedValue(new Blob(['hwpx'], { type: file.mediaType }))
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:test'), revokeObjectURL: vi.fn() }))
+  const anchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    expect(this.download).toBe(file.fileName)
+  })
+  await mount()
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: '작성 시작' })))
+  fireEvent.change(screen.getByRole('textbox', { name: '답변 입력' }), { target: { value: '합성기업' } })
+  fireEvent.click(screen.getByRole('button', { name: '다음 →' }))
+  await act(async () => vi.advanceTimersByTimeAsync(500))
+  expect(api.submit).not.toHaveBeenCalled()
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: '초안 만들기' })))
+  expect(save).toHaveBeenCalledWith(12, 'company', { expectedRevision: 0,
+    facts: [{ fieldKey: 'name', status: 'PROVIDED', value: '합성기업', sourceText: '기업명: 합성기업' }] }, expect.any(AbortSignal), undefined)
+  expect(api.submit).toHaveBeenCalledExactlyOnceWith(12, 1, expect.any(AbortSignal))
+  expect(screen.getByRole('status', { name: '문서 생성 진행' })).toBeTruthy()
+  await act(async () => vi.advanceTimersByTimeAsync(2000))
+  expect(poll).toHaveBeenCalledOnce()
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: `초안 다운로드: ${file.fileName}` })))
+  expect(download).toHaveBeenCalledWith(12, 81, expect.any(AbortSignal))
+  expect(anchor).toHaveBeenCalledOnce()
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: '답변 입력으로' })))
+  expect((screen.getByRole('textbox', { name: '답변 입력' }) as HTMLTextAreaElement).value).toBe('합성기업')
+  expect(screen.getByTestId('location').textContent).toBe('/app/chat')
+  expect(api.create).toHaveBeenCalledOnce()
+  expect(api.submit).toHaveBeenCalledOnce()
+})
+
+it('reopens a saved preparation by ID without creating or generating again', async () => {
+  const api = mockPreparation()
+  await mount(true, 12)
+  expect(screen.getByRole('heading', { name: '답변 입력' })).toBeTruthy()
+  expect(api.get).toHaveBeenCalledWith(12, expect.any(AbortSignal))
+  expect(api.lookup).not.toHaveBeenCalled()
+  expect(api.create).not.toHaveBeenCalled()
+  expect(api.discover).not.toHaveBeenCalled()
+  expect(api.submit).not.toHaveBeenCalled()
+})
+
+it.each(['selection', 'reset', 'account', 'new-card'] as const)('does not attach a late created preparation after %s changes', async (change) => {
+  const api = mockPreparation()
+  let finish!: (value: ApplicationPreparation) => void
+  api.create.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+  const store = await mount()
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: '작성 시작' })))
+  const signal = api.create.mock.calls[0][1]!
+  act(() => {
+    if (change === 'selection') store.dispatch(govProgramSelected(null))
+    else if (change === 'reset') store.dispatch(conversationReset())
+    else if (change === 'new-card') addApplication(store)
+    else store.dispatch(signedIn({ ...account, email: 'other@govbiz.local' }))
+  })
+  expect(signal.aborted).toBe(true)
+  await act(async () => finish(created))
+  expect(store.getState().chat.messages.some((message) => message.govApplication?.preparationId !== undefined)).toBe(false)
+  expect(api.get).not.toHaveBeenCalled()
 })
 
 it('retries stored-form lookup and starts paid analysis only on a click, then shows the existing job progress and result', async () => {

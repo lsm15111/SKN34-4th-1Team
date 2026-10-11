@@ -5,6 +5,7 @@ import type {
   ApplicationForm,
   ApplicationFormAvailability,
   ApplicationFormDiscoveryJob,
+  ApplicationPreparation,
   ApplicationServiceField,
 } from '../../../../domain/entities/ApplicationPreparation'
 import { ApplicationPreparationError } from '../../../../domain/errors/ApplicationPreparationError'
@@ -131,7 +132,7 @@ const activeJobStatuses: ApplicationFormDiscoveryJob['status'][] = ['QUEUED', 'R
  * 새 문서(24) 화면의 상태입니다. ① 공고를 고르면 저장된 양식을 조회하고(AI 호출 없음), ② 양식·지원 분야를 고르거나
  * 저장된 양식이 없으면 사용자가 누를 때만 입력칸별 분석 작업을 시작합니다.
  */
-export function useApplicationPreparationNewViewModel(addressSourceCode: string, addressProgramId: string) {
+export function useApplicationPreparationNewViewModel(addressSourceCode: string, addressProgramId: string, onCreated?: (preparation: ApplicationPreparation) => void) {
   const useCase = appContainer.resolve('applicationPreparationUseCase')
   const programDetailUseCase = appContainer.resolve('getSupportProgramDetailUseCase')
   const navigate = useNavigate()
@@ -385,7 +386,12 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
         formVersionId: selectedForm.formVersionId,
         serviceField,
       }, controller.signal)
-      if (!controller.signal.aborted) navigate(`${appPaths.applicationPreparations}/${created.id}`, { replace: true })
+      if (controller.signal.aborted) return
+      if (created.form.sourceCode !== selectedForm.sourceCode || created.form.sourceProgramId !== selectedForm.sourceProgramId) {
+        throw new Error('생성한 신청 문서의 공고가 일치하지 않습니다. 신청 준비 목록에서 확인해 주세요.')
+      }
+      if (onCreated) onCreated(created)
+      else navigate(`${appPaths.applicationPreparations}/${created.id}`, { replace: true })
     } catch (caught) {
       if (!controller.signal.aborted) setCreateError(asError(caught))
     } finally {
@@ -395,7 +401,7 @@ export function useApplicationPreparationNewViewModel(addressSourceCode: string,
         setSubmitting(false)
       }
     }
-  }, [navigate, selectedForm, serviceField, useCase])
+  }, [navigate, onCreated, selectedForm, serviceField, useCase])
 
   const dismissToast = useCallback(() => setToast(null), [])
   /** 공고 고르기 패널에서 행을 고를 때마다 그 공고의 저장된 양식을 조회합니다(AI 호출 없음). [이 공고 선택]은 조회를 마쳐야 누를 수 있습니다. */

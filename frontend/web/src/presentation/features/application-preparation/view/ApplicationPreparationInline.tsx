@@ -1,15 +1,33 @@
 import type { GovAgentProgram } from '@govbiz/shared/domain/entities/GovAgent'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router'
 import { appPaths } from '../../../shared/routes/appPaths'
 import { WorkspaceToast } from '../../../shared/workspace/WorkspaceToast'
 import { useApplicationPreparationNewViewModel } from '../viewmodel/useApplicationPreparationNewViewModel'
 import { newPreparationStyles as n } from './ApplicationPreparation.styles'
 import { ApplicationPreparationStartAction, FormSectionBody } from './ApplicationPreparationNewPage'
+import { ApplicationPreparationEditorPanel } from './ApplicationPreparationPages'
+import { ApplicationDocumentPanel } from './ApplicationDocumentPage'
 
-/** 선택한 공고의 신청 준비를 기존 새 문서 흐름 그대로 대화 안에서 진행합니다. */
-export function ApplicationPreparationInline({ program }: { program: GovAgentProgram }) {
-  const vm = useApplicationPreparationNewViewModel(program.sourceCode, program.sourceProgramId)
+/** 대화 기록에는 준비 건 ID만 보관하고, 답변과 문서는 기존 API에서 다시 읽습니다. */
+export function ApplicationPreparationInline({ program, preparationId, onPrepared }: {
+  program: GovAgentProgram
+  preparationId?: number
+  onPrepared: (id: number) => void
+}) {
+  const [documents, setDocuments] = useState<{ revision?: number } | null>(null)
+  if (preparationId === undefined) return <ApplicationPreparationStart program={program} onPrepared={onPrepared} />
+  return <section className="mt-3 flex flex-col gap-4" aria-label={`신청 준비 · ${program.title}`}>
+    {documents === null
+      ? <ApplicationPreparationEditorPanel id={preparationId} program={program} onDocuments={(revision) => setDocuments({ revision })} />
+      : <ApplicationDocumentPanel key={`${preparationId}:${documents.revision ?? 'saved'}`} id={preparationId}
+        program={program} requestedRevision={documents.revision} onEdit={() => setDocuments(null)} />}
+    <Link className={n.ghost} to={`${appPaths.applicationPreparations}/${preparationId}`}>신청 준비 화면에서 열기</Link>
+  </section>
+}
+
+function ApplicationPreparationStart({ program, onPrepared }: { program: GovAgentProgram; onPrepared: (id: number) => void }) {
+  const vm = useApplicationPreparationNewViewModel(program.sourceCode, program.sourceProgramId, (created) => onPrepared(created.id))
   const headingId = useId()
   const path = `${appPaths.applicationPreparationNew}?${new URLSearchParams({ sourceCode: program.sourceCode, sourceProgramId: program.sourceProgramId })}`
   return <section className="mt-3 flex flex-col gap-4" aria-labelledby={headingId}>
