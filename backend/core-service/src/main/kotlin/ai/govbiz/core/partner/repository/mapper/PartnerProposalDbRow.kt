@@ -38,6 +38,7 @@ data class PartnerProposalDbRow(
     var proposerIndustry: String = "",
     var proposerFoundedYear: Int = 0,
     var proposerHomepageUrl: String? = null,
+    var proposerDeletedAt: LocalDateTime? = null,
     var ownerAccountId: Long = 0L,
     var ownerEmail: String = "",
     var ownerEmailVerifiedAt: LocalDateTime? = null,
@@ -47,4 +48,5 @@ data class PartnerProposalDbRow(
     var ownerIndustry: String = "",
     var ownerFoundedYear: Int = 0,
     var ownerHomepageUrl: String? = null,
+    var ownerDeletedAt: LocalDateTime? = null,
 )

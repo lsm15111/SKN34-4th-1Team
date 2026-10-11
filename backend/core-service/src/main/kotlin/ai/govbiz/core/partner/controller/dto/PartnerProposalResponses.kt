@@ -60,11 +60,15 @@ data class PartnerProposalRecruitmentResponse(
     val recruitmentDeadline: String,
 )
 
-/** 상대 기업입니다. 기본정보는 프로필 공유를 켰거나 수락됐을 때, 담당자 이메일은 수락됐을 때만 채웁니다. */
+/**
+ * 상대 기업입니다. 기본정보는 프로필 공유를 켰거나 수락됐을 때, 담당자 이메일은 수락됐을 때만 채웁니다.
+ * 상대가 탈퇴했으면 기업명만 남기고 기본정보·연락처는 수락된 제안이어도 비웁니다.
+ */
 data class PartnerProposalCounterpartResponse(
     val companyName: String,
     val isEmailVerified: Boolean,
     val isBusinessVerified: Boolean,
+    val isWithdrawn: Boolean,
     val profile: PartnerProposalCounterpartProfileResponse?,
     val contact: PartnerProposalContactResponse?,
 ) {
@@ -72,9 +76,10 @@ data class PartnerProposalCounterpartResponse(
         fun from(party: PartnerProposalParty, showsProfile: Boolean, revealsContact: Boolean): PartnerProposalCounterpartResponse =
             PartnerProposalCounterpartResponse(
                 companyName = party.companyName,
-                isEmailVerified = party.isEmailVerified,
-                isBusinessVerified = true,
-                profile = if (showsProfile || revealsContact) {
+                isEmailVerified = party.isEmailVerified && !party.isWithdrawn,
+                isBusinessVerified = !party.isWithdrawn,
+                isWithdrawn = party.isWithdrawn,
+                profile = if (!party.isWithdrawn && (showsProfile || revealsContact)) {
                     PartnerProposalCounterpartProfileResponse(
                         region = party.region,
                         industry = party.industry,
@@ -84,7 +89,7 @@ data class PartnerProposalCounterpartResponse(
                 } else {
                     null
                 },
-                contact = if (revealsContact) {
+                contact = if (!party.isWithdrawn && revealsContact) {
                     PartnerProposalContactResponse(email = party.email, businessNumber = party.businessNumber)
                 } else {
                     null

@@ -113,7 +113,10 @@ export function CollaborationScreen({ view, onViewChange, onPendingCount, onOpen
 
   async function openProposal(proposal: PartnerProposal) {
     if (!token) { onLogin(); return }
-    setSelection({ owner: token, proposal }); setDetailLoading(true); setDetailError(null)
+    setSelection({ owner: token, proposal }); setDetailError(null)
+    // 탈퇴한 상대와의 제안은 상세 API가 더 열어 주지 않으므로 목록에 온 내용만 보여 줍니다.
+    if (proposal.counterpart.isWithdrawn) return
+    setDetailLoading(true)
     try {
       const latest = await getProposal(proposal.id, token)
       setSelection((current) => current?.owner === token && current.proposal.id === latest.id
@@ -215,7 +218,7 @@ export function CollaborationScreen({ view, onViewChange, onPendingCount, onOpen
         {selected.isSent ? <Button label="제안 철회" variant="danger" disabled={actionBusy} onPress={() => confirmAction('withdraw')} />
           : <><Button label="거절" variant="danger" disabled={actionBusy} onPress={() => confirmAction('decline')} />
             <Button label="수락" disabled={actionBusy} busy={actionBusy} onPress={() => confirmAction('accept')} /></>}
-      </> : selected?.status === 'ACCEPTED' ? <Button label="메일 앱 열기" onPress={() => {
+      </> : selected?.status === 'ACCEPTED' && !selected.counterpart.isWithdrawn ? <Button label="메일 앱 열기" onPress={() => {
         const email = selected.counterpart.contact?.email
         if (!email) { setDetailError('공개된 연락처를 확인하지 못했습니다.'); return }
         void Linking.openURL(`mailto:${encodeURIComponent(email)}`).catch(() => setDetailError('메일 앱을 열지 못했습니다.'))
@@ -226,6 +229,7 @@ export function CollaborationScreen({ view, onViewChange, onPendingCount, onOpen
         <View style={local.statusPill}><StatusBadge label={partnerProposalStatusLabels[selected.status]}
           tone={selected.status === 'ACCEPTED' ? 'success' : selected.status === 'PENDING' ? 'info' : 'neutral'} /></View>
         <View style={local.detailPanel}><Card><Text style={styles.heading}>{selected.counterpart.companyName}</Text>
+          {selected.counterpart.isWithdrawn && <Text style={styles.muted}>탈퇴한 기업이라 기본정보와 연락처를 볼 수 없어요</Text>}
           {selected.counterpart.profile && <Text style={styles.muted}>{selected.counterpart.profile.region} · {selected.counterpart.profile.industry} · {selected.counterpart.profile.foundedYear}년 설립</Text>}</Card></View>
         <View style={local.detailPanel}><Card><Text style={styles.muted}>연결된 모집 공고</Text><Text style={styles.heading}>{selected.recruitment.title}</Text>
           <Button label="모집글 상세 보기" variant="ghost" onPress={() => { setSelection(null); onOpenRecruitment(selected.recruitment.id) }} /></Card></View>
@@ -236,8 +240,8 @@ export function CollaborationScreen({ view, onViewChange, onPendingCount, onOpen
           {selected.status === 'ACCEPTED' && selected.counterpart.contact
             ? <><Text style={styles.body}>이메일 {selected.counterpart.contact.email}</Text>
               <Text style={styles.body}>사업자번호 {selected.counterpart.contact.businessNumber}</Text></>
-            : <Text style={styles.muted}>{selected.status === 'ACCEPTED'
-              ? '연락처를 확인하지 못했습니다.' : '수락하면 공개돼요'}</Text>}</Card></View>
+            : <Text style={styles.muted}>{selected.counterpart.isWithdrawn ? '탈퇴한 기업이라 연락처를 볼 수 없어요'
+              : selected.status === 'ACCEPTED' ? '연락처를 확인하지 못했습니다.' : '수락하면 공개돼요'}</Text>}</Card></View>
       </>}
     </PartnerSheet>
   </View>
@@ -269,6 +273,7 @@ function ProposalCard({ item, onOpen }: { item: PartnerProposal; onOpen(): void 
   return <Card>
     <View style={local.cardTop}><Text style={local.avatar}>{item.counterpart.companyName.slice(0, 1)}</Text>
       <Text style={styles.heading}>{item.counterpart.companyName}</Text>
+      {item.counterpart.isWithdrawn && <StatusBadge label="탈퇴한 기업" tone="neutral" />}
       <View style={{ flex: 1 }} /><StatusBadge label={partnerProposalStatusLabels[item.status]}
         tone={item.status === 'ACCEPTED' ? 'success' : item.status === 'PENDING' ? 'info' : 'neutral'} /></View>
     <Text style={styles.muted} numberOfLines={1}>{item.recruitment.title}</Text>

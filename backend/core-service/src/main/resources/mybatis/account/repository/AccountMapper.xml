@@ -75,7 +75,7 @@
         SELECT
             <include refid="accountColumns" />
         FROM account
-        LEFT JOIN company ON company.account_id = account.id
+        LEFT JOIN company ON company.account_id = account.id AND company.deleted_at IS NULL
         WHERE account.id = #{id}
           AND account.deleted_at IS NULL
     </select>
@@ -84,7 +84,7 @@
         SELECT
             <include refid="accountColumns" />
         FROM account
-        LEFT JOIN company ON company.account_id = account.id
+        LEFT JOIN company ON company.account_id = account.id AND company.deleted_at IS NULL
         WHERE account.email = #{email}
           AND account.deleted_at IS NULL
     </select>

@@ -12,6 +12,7 @@ export const receivedPendingProposal: PartnerProposal = {
     companyName: '데이터브릿지 주식회사',
     isEmailVerified: true,
     isBusinessVerified: true,
+    isWithdrawn: false,
     profile: { region: '서울특별시', industry: '정보통신업', foundedYear: 2021, homepageUrl: null },
     contact: null,
   },
@@ -29,6 +30,7 @@ export const receivedAcceptedProposal: PartnerProposal = {
     companyName: '그린푸드랩',
     isEmailVerified: false,
     isBusinessVerified: true,
+    isWithdrawn: false,
     profile: { region: '부산광역시', industry: '제조업', foundedYear: 2018, homepageUrl: 'https://greenfood.example' },
     contact: { email: 'manager@greenfood.example', businessNumber: '1234567890' },
   },
@@ -46,6 +48,7 @@ export const sentPendingProposal: PartnerProposal = {
     companyName: '데이터브릿지 주식회사',
     isEmailVerified: true,
     isBusinessVerified: true,
+    isWithdrawn: false,
     profile: { region: '서울특별시', industry: '정보통신업', foundedYear: 2021, homepageUrl: null },
     contact: null,
   },
@@ -59,7 +62,7 @@ const sentDeclinedProposal: PartnerProposal = {
   id: 304,
   status: 'DECLINED',
   recruitment: { id: 102, title: '스마트공장 고도화 과제, 제조 현장 보유 기업과 함께 하실 분', status: 'OPEN', recruitmentDeadline: '2026-09-24' },
-  counterpart: { companyName: '비전솔루션', isEmailVerified: true, isBusinessVerified: true, profile: null, contact: null },
+  counterpart: { companyName: '비전솔루션', isEmailVerified: true, isBusinessVerified: true, isWithdrawn: false, profile: null, contact: null },
   respondedAt: '2026-09-09T09:30:00',
 }
 

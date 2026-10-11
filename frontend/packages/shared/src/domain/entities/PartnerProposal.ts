@@ -25,11 +25,15 @@ export const proposalMessageMaxLength = 500
 /** 받은 제안함과 보낸 제안함입니다. */
 export type PartnerProposalBox = 'received' | 'sent'
 
-/** 상대 기업입니다. 기본정보는 프로필 공유를 켰거나 수락됐을 때, 담당자 연락처는 수락됐을 때만 옵니다. */
+/**
+ * 상대 기업입니다. 기본정보는 프로필 공유를 켰거나 수락됐을 때, 담당자 연락처는 수락됐을 때만 옵니다.
+ * 상대가 탈퇴했으면 기업명만 오고 기본정보·연락처는 비어 있으며, 그 제안에는 더 응답할 수 없습니다.
+ */
 export type PartnerProposalCounterpart = {
   companyName: string
   isEmailVerified: boolean
   isBusinessVerified: boolean
+  isWithdrawn: boolean
   profile: { region: string; industry: string; foundedYear: number; homepageUrl: string | null } | null
   contact: { email: string; businessNumber: string } | null
 }

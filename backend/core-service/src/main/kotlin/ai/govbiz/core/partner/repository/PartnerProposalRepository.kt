@@ -114,6 +114,7 @@ class PartnerProposalRepository(
                 foundedYear = proposerFoundedYear,
                 homepageUrl = proposerHomepageUrl,
                 isEmailVerified = proposerEmailVerifiedAt != null,
+                isWithdrawn = proposerDeletedAt != null,
             ),
             owner = PartnerProposalParty(
                 accountId = ownerAccountId,
@@ -125,6 +126,7 @@ class PartnerProposalRepository(
                 foundedYear = ownerFoundedYear,
                 homepageUrl = ownerHomepageUrl,
                 isEmailVerified = ownerEmailVerifiedAt != null,
+                isWithdrawn = ownerDeletedAt != null,
             ),
             content = PartnerProposalInput(message = message, shareProfile = shareProfile),
             decision = decision?.let(PartnerProposalDecision::valueOf),

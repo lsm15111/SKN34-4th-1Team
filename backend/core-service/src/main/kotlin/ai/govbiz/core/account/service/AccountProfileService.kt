@@ -75,7 +75,7 @@ class AccountProfileService(
 
         proposalRepository.withdrawAllPendingByProposer(account.id, now)
         recruitmentRepository.closeAllByAccountId(account.id, now)
-        companyRepository.deleteByAccountId(account.id)
+        companyRepository.softDeleteByAccountId(account.id)
         oauthLinks.filter { it.provider == OAuthProvider.KAKAO }.forEach { unlinkRepository.enqueue(account.id, it.subject) }
         accountRepository.deleteNonKakaoIdentities(account.id)
         accountRepository.deleteAllSessionsByAccountId(account.id)

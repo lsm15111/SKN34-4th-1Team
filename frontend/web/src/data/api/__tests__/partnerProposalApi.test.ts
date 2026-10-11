@@ -32,6 +32,20 @@ describe('partnerProposalApi', () => {
     expect(calls.every(([, init]) => init.credentials === 'include')).toBe(true)
   })
 
+  it('reads a withdrawn counterpart and treats a response without the flag as not withdrawn', async () => {
+    const { isWithdrawn: _omitted, ...legacyCounterpart } = sentPendingProposal.counterpart
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ ...sentPendingProposal, counterpart: legacyCounterpart }, 201))
+      .mockResolvedValueOnce(jsonResponse({ ...sentPendingProposal, status: 'ACCEPTED',
+        counterpart: { ...sentPendingProposal.counterpart, isWithdrawn: true, profile: null, contact: null } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(sendPartnerProposalApi(101, { message: '제안', shareProfile: true }))
+      .resolves.toMatchObject({ counterpart: { isWithdrawn: false } })
+    await expect(respondPartnerProposalApi(303, 'withdraw'))
+      .resolves.toMatchObject({ counterpart: { isWithdrawn: true, contact: null } })
+  })
+
   it('rejects a box that differs from the request and responses missing the contract', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ ...receivedProposalBox, box: 'sent' }))

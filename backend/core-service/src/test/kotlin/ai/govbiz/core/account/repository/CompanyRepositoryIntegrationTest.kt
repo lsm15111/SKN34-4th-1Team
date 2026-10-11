@@ -85,7 +85,7 @@ class CompanyRepositoryIntegrationTest {
         val sameNumber = assertThrows(DuplicateKeyException::class.java) {
             companyRepository.createCompany(newCompany(second.id, "1248100998"))
         }
-        assertTrue(sameNumber.message.orEmpty().contains("uq_company_business_number"))
+        assertTrue(sameNumber.message.orEmpty().contains("uq_company_active_business_number"))
         assertNull(companyRepository.findByAccountId(second.id))
     }
 
@@ -130,15 +130,38 @@ class CompanyRepositoryIntegrationTest {
     }
 
     @Test
-    fun deletingTheCompanyDropsTheTierAndFreesTheBusinessNumber() {
+    fun softDeletingTheCompanyKeepsTheRowButDropsTheTierAndFreesTheBusinessNumber() {
         val first = createAccount("first@company.co.kr")
         val second = createAccount("second@company.co.kr")
-        companyRepository.createCompany(newCompany(first.id, "1248100998"))
+        val third = createAccount("third@company.co.kr")
+        val created = companyRepository.createCompany(newCompany(first.id, "1248100998"))
+        companyRepository.updateProfile(first.id, created.profile.copy(homepageUrl = "https://example.co.kr"))
+        jdbcTemplate.update(
+            """
+            INSERT INTO company_partner_profile (company_id, roles, interest_areas, introduction, capabilities, created_at, updated_at)
+            VALUES (?, '["LEAD"]', '[]', '소개', '[]', NOW(6), NOW(6))
+            """.trimIndent(),
+            created.id,
+        )
 
-        assertTrue(companyRepository.deleteByAccountId(first.id))
-        assertFalse(companyRepository.deleteByAccountId(first.id))
+        assertTrue(companyRepository.softDeleteByAccountId(first.id))
+        assertFalse(companyRepository.softDeleteByAccountId(first.id))
+        assertNull(companyRepository.findByAccountId(first.id))
+        assertNull(companyRepository.updateProfile(first.id, created.profile))
         assertEquals(AccountTier.MEMBER, requireNotNull(accountRepository.findById(first.id)).tier)
+        // 모집글·제안이 참조하는 행은 남기고 홈페이지와 협업 설정만 지웁니다.
+        val kept = jdbcTemplate.queryForMap("SELECT company_name, homepage_url, deleted_at FROM company WHERE id = ?", created.id)
+        assertEquals("삼성전자(주)", kept["company_name"])
+        assertNull(kept["homepage_url"])
+        assertNotNull(kept["deleted_at"])
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM company_partner_profile WHERE company_id = ?", Int::class.java, created.id))
+
+        // 탈퇴한 기업의 번호는 다시 등록할 수 있고, 다시 등록된 번호는 다른 계정이 쓸 수 없습니다.
         assertNotNull(companyRepository.createCompany(newCompany(second.id, "1248100998")))
+        val duplicate = assertThrows(DuplicateKeyException::class.java) {
+            companyRepository.createCompany(newCompany(third.id, "1248100998"))
+        }
+        assertTrue(duplicate.message.orEmpty().contains("uq_company_active_business_number"))
     }
 
     private fun createAccount(email: String): Account =

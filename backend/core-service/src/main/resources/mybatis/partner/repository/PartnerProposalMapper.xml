@@ -39,6 +39,7 @@
         <result column="proposer_industry" property="proposerIndustry" />
         <result column="proposer_founded_year" property="proposerFoundedYear" />
         <result column="proposer_homepage_url" property="proposerHomepageUrl" />
+        <result column="proposer_deleted_at" property="proposerDeletedAt" />
         <result column="owner_account_id" property="ownerAccountId" />
         <result column="owner_email" property="ownerEmail" />
         <result column="owner_email_verified_at" property="ownerEmailVerifiedAt" />
@@ -48,6 +49,7 @@
         <result column="owner_industry" property="ownerIndustry" />
         <result column="owner_founded_year" property="ownerFoundedYear" />
         <result column="owner_homepage_url" property="ownerHomepageUrl" />
+        <result column="owner_deleted_at" property="ownerDeletedAt" />
     </resultMap>
 
     <sql id="proposalColumns">
@@ -84,6 +86,7 @@
         proposer_company.industry AS proposer_industry,
         proposer_company.founded_year AS proposer_founded_year,
         proposer_company.homepage_url AS proposer_homepage_url,
+        proposer.deleted_at AS proposer_deleted_at,
         owner.id AS owner_account_id,
         owner.email AS owner_email,
         owner.email_verified_at AS owner_email_verified_at,
@@ -92,7 +95,8 @@
         owner_company.region AS owner_region,
         owner_company.industry AS owner_industry,
         owner_company.founded_year AS owner_founded_year,
-        owner_company.homepage_url AS owner_homepage_url
+        owner_company.homepage_url AS owner_homepage_url,
+        owner.deleted_at AS owner_deleted_at
     </sql>
 
     <sql id="proposalJoins">
@@ -148,7 +152,6 @@
             <include refid="proposalColumns" />
         <include refid="proposalJoins" />
         WHERE proposal.proposer_account_id = #{accountId}
-          AND owner.deleted_at IS NULL
         ORDER BY proposal.created_at DESC, proposal.id DESC
     </select>
 
@@ -157,7 +160,6 @@
             <include refid="proposalColumns" />
         <include refid="proposalJoins" />
         WHERE recruitment.account_id = #{accountId}
-          AND proposer.deleted_at IS NULL
         ORDER BY proposal.created_at DESC, proposal.id DESC
     </select>
 

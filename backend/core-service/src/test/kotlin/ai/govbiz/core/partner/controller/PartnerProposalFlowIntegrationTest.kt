@@ -8,6 +8,7 @@ import ai.govbiz.core.account.helper.SignupTestHelper
 import jakarta.servlet.http.Cookie
 import java.time.LocalDate
 import java.time.ZoneId
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.doReturn
@@ -21,6 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -240,6 +242,52 @@ class PartnerProposalFlowIntegrationTest {
         mockMvc.perform(post("/api/v1/partners/recruitments/$recruitmentId/proposals").cookie(proposer).origin().json(proposalBody()))
             .andExpect(status().isUnprocessableContent())
             .andExpect(jsonPath("$.code").value("RECRUITMENT_CLOSED"))
+    }
+
+    @Test
+    fun withdrawingAnAccountKeepsTheOtherMembersProposalsAndShowsTheCompanyAsWithdrawn() {
+        val owner = signUpWithCompany("owner@company.co.kr", "124-81-00998", "서울특별시")
+        val proposer = signUpWithCompany("proposer@company.co.kr", "220-81-62517", "부산광역시")
+        val recruitmentId = objectMapper.readTree(
+            mockMvc.perform(
+                post("/api/v1/partners/recruitments").cookie(owner).origin().json(
+                    """{"sourceCode":"TESTSRC","sourceProgramId":"open-program","title":"AI 실증 참여기관 구합니다","body":"본문",
+                       "ownRole":"LEAD","seekingRole":"PARTICIPANT","seekingCount":1,"region":"서울","capabilities":[],
+                       "recruitmentDeadline":"${today.plusDays(10)}"}""",
+                ),
+            ).andExpect(status().isCreated()).andReturn().response.contentAsString,
+        ).get("id").asLong()
+        val proposalId = objectMapper.readTree(
+            mockMvc.perform(post("/api/v1/partners/recruitments/$recruitmentId/proposals").cookie(proposer).origin().json(proposalBody()))
+                .andExpect(status().isCreated()).andReturn().response.contentAsString,
+        ).get("id").asLong()
+        mockMvc.perform(post("/api/v1/partners/proposals/$proposalId/accept").cookie(owner).origin())
+            .andExpect(status().isOk())
+
+        mockMvc.perform(delete("/api/v1/me").cookie(owner).origin().json("""{"password":"password1"}"""))
+            .andExpect(status().isNoContent())
+
+        // 기업 행을 지우던 때에는 CASCADE로 모집글과 이 제안이 함께 지워졌습니다.
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM partner_recruitment WHERE id = ?", Int::class.java, recruitmentId))
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM partner_proposal WHERE id = ?", Int::class.java, proposalId))
+        mockMvc.perform(get("/api/v1/me/proposals").param("box", "sent").cookie(proposer))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.pendingCount").value(0))
+            .andExpect(jsonPath("$.proposals[0].id").value(proposalId))
+            .andExpect(jsonPath("$.proposals[0].status").value("ACCEPTED"))
+            .andExpect(jsonPath("$.proposals[0].counterpart.companyName").value("삼성전자(주)"))
+            .andExpect(jsonPath("$.proposals[0].counterpart.isWithdrawn").value(true))
+            .andExpect(jsonPath("$.proposals[0].counterpart.isBusinessVerified").value(false))
+            .andExpect(jsonPath("$.proposals[0].counterpart.profile").doesNotExist())
+            .andExpect(jsonPath("$.proposals[0].counterpart.contact").doesNotExist())
+        // 탈퇴한 상대와의 제안에는 더 이상 행동할 수 없고, 모집글도 목록·상세에서 사라집니다.
+        mockMvc.perform(post("/api/v1/partners/proposals/$proposalId/withdraw").cookie(proposer).origin())
+            .andExpect(status().isNotFound())
+        mockMvc.perform(get("/api/v1/partners/recruitments/$recruitmentId"))
+            .andExpect(status().isNotFound())
+
+        // 같은 사업자번호로 다시 가입해 기업을 등록할 수 있습니다.
+        signUpWithCompany("owner-again@company.co.kr", "124-81-00998", "서울특별시")
     }
 
     private fun proposalBody(shareProfile: Boolean = true) =
