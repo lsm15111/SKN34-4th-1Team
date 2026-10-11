@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { withdrawalCarryOverNotice } from '@govbiz/shared/domain/entities/PlanUsage'
 import { ApiError, apiRequest } from '../api/client'
 import { useAuth } from '../auth/session'
 import { AccountScreen } from './AccountScreen'
@@ -21,6 +22,7 @@ test('email deletion reads the actual preview and needs explicit confirmation pl
   render(<AccountScreen onCompany={jest.fn()} />)
   fireEvent.press(screen.getByLabelText('계정 삭제'))
   await screen.findByText('내 모집글 2건 마감 · 받은 대기 제안 3건 만료')
+  expect(screen.getByText(withdrawalCarryOverNotice)).toBeTruthy()
   expect(apiRequest).toHaveBeenCalledWith('/api/v1/me/deletion-preview', expect.objectContaining({ accessToken: 'owner' }))
   expect(jest.mocked(apiRequest).mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
   expect(screen.queryByLabelText('삭제 확인용 현재 비밀번호')).toBeNull()

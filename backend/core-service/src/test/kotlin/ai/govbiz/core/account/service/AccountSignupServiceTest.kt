@@ -2,12 +2,14 @@ package ai.govbiz.core.account.service
 
 import ai.govbiz.core.account.domain.NewAccount
 import ai.govbiz.core.account.domain.NewAccountSession
+import ai.govbiz.core.account.domain.WithdrawnIdentity
 import ai.govbiz.core.account.helper.AccountTestHelper
 import ai.govbiz.core.account.helper.AccountTestHelper.NOW
 import ai.govbiz.core.account.repository.AccountRepository
 import ai.govbiz.core.account.service.exception.EmailAlreadyRegisteredException
 import ai.govbiz.core.account.service.exception.EmailVerificationRequiredException
 import ai.govbiz.core.account.service.exception.LoginRateLimitedException
+import ai.govbiz.core.planusage.PlanUsageTestHelper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -39,6 +41,9 @@ class AccountSignupServiceTest {
     @Mock
     private lateinit var verificationService: AccountSignupEmailVerificationService
 
+    @Mock
+    private lateinit var withdrawalMarks: WithdrawalMarkService
+
     private val passwordEncoder = BCryptPasswordEncoder(4)
     private val passToken = "a".repeat(43)
 
@@ -53,6 +58,8 @@ class AccountSignupServiceTest {
             AccountLoginAttemptGuard(AccountTestHelper.FIXED_CLOCK),
             verificationService,
             AccountTestHelper.FIXED_CLOCK,
+            withdrawalMarks,
+            PlanUsageTestHelper.noTransactions(),
         )
     }
 
@@ -86,6 +93,8 @@ class AccountSignupServiceTest {
         assertEquals(7L, result.account.id)
         assertNotNull(storedSession)
         assertEquals(NOW.plus(AccountTestHelper.SESSION_SHORT_TTL), storedSession?.expiresAt)
+        // 같은 이메일로 1년 안에 탈퇴한 계정이 있으면 새 계정이 그 사용 기록을 이어받습니다.
+        verify(withdrawalMarks).inherit(7L, listOf(WithdrawnIdentity.email("manager@company.co.kr")))
     }
 
     @Test

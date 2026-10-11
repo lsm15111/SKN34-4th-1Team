@@ -3,6 +3,7 @@ package ai.govbiz.core.account.service
 import ai.govbiz.core.account.helper.PasswordValidationHelper
 
 import ai.govbiz.core.account.domain.NewAccount
+import ai.govbiz.core.account.domain.WithdrawnIdentity
 import ai.govbiz.core.account.helper.normalizeEmail
 import ai.govbiz.core.account.repository.AccountRepository
 import ai.govbiz.core.account.service.dto.AccountSessionResult
@@ -14,6 +15,8 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 인증번호로 확인한 이메일과 비밀번호로 회원(T1) 계정을 만들고 바로 로그인 세션을 발급합니다.
@@ -28,7 +31,10 @@ class AccountSignupService(
     private val attemptGuard: AccountLoginAttemptGuard,
     private val verificationService: AccountSignupEmailVerificationService,
     @param:Qualifier("seoulClock") private val clock: Clock,
+    private val withdrawalMarks: WithdrawalMarkService,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val transactions = TransactionTemplate(transactionManager)
 
     fun signUp(email: String, password: String, emailPassToken: String, clientAddress: String): AccountSessionResult {
         PasswordValidationHelper.requireNewPassword(password)
@@ -41,15 +47,14 @@ class AccountSignupService(
         val passId = verificationService.findVerifiedPassId(normalizedEmail, emailPassToken, now)
             ?: throw EmailVerificationRequiredException()
 
+        val passwordHash = requireNotNull(passwordEncoder.encode(password)) { "password hash must not be null" }
         val account = try {
-            repository.createAccount(
-                NewAccount(
-                    email = normalizedEmail,
-                    passwordHash = requireNotNull(passwordEncoder.encode(password)) { "password hash must not be null" },
-                    termsAgreedAt = now,
-                    emailVerifiedAt = now,
-                ),
-            )
+            // 같은 이메일로 1년 안에 탈퇴한 계정이 있으면 체험 이력과 이번 하루·달 사용량을 같은 transaction에서 이어받습니다.
+            requireNotNull(transactions.execute { _ ->
+                repository.createAccount(
+                    NewAccount(email = normalizedEmail, passwordHash = passwordHash, termsAgreedAt = now, emailVerifiedAt = now),
+                ).also { withdrawalMarks.inherit(it.id, listOf(WithdrawnIdentity.email(normalizedEmail))) }
+            })
         } catch (_: DuplicateKeyException) {
             throw EmailAlreadyRegisteredException()
         }

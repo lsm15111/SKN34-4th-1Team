@@ -149,6 +149,10 @@ V54 `account_plan`에 운영자가 배정한 계정만 PLUS·PREMIUM입니다. �
 기본 빈 값)에 적은 계정은 사용량만 세고 막지 않으며(`limit: null`), 로컬 Compose는 데모 시드 계정 6개를 넣고 운영은 비웁니다.
 출시 전 무료 체험은 `PlanTrialController → PlanUsageService.startTrial(TransactionTemplate, 계정 행 잠금) → PlanUsageRepository → MyBatis → MySQL`
 순서로 V60 `plan_trial`에 (계정, 요금제)마다 한 번 기록하고 `account_plan`에 `source = TRIAL`, 14일 이용권을 배정합니다.
+탈퇴할 때 `AccountProfileService → WithdrawalMarkService.record → WithdrawalMarkRepository → MyBatis → MySQL` 순서로 이메일·소셜 연결·사업자등록번호의
+HMAC-SHA256을 V62 `account_withdrawal_mark`에 1년 남깁니다. 1년 안에 같은 식별자로 이메일·소셜 가입하거나 기업을 등록하면 계정·기업을 만드는
+transaction에서 `WithdrawalMarkService.inherit → PlanUsageService.inherit`가 탈퇴 계정의 체험 기록과 무료 기준 오늘·이번 달 사용량을 새 계정에
+이어 적용하고 표식을 사용 처리합니다(탈퇴 계정마다 한 번). 만료 표식은 `WithdrawalMarkPurgeScheduler`가 매일 서울 04:30에 지웁니다.
 배정 SQL과 판단 근거는 [요금제 사용량 한도](../../docs/plan-usage-limits.md)를 참고하세요.
 
 | 기능 | 로그인 전 | FREE | PLUS | PREMIUM | 세는 방법 |
@@ -513,7 +517,7 @@ Controller의 `SupportProgramRequestAdmissionService.execute`가 공개 요청 �
 | `PUT /api/v1/me/onboarding` | 최초 로그인 환영 화면의 답 저장. `accountType`(INDIVIDUAL·BUSINESS, 필수). 다시 부르면 유형을 바꿈. 시드 계정은 미리 채워짐(관리자 개인, 회원 기업) |
 | `PUT /api/v1/me/password` | 로그인 세션으로 본인을 확인해 새 비밀번호만 받아 변경. 요청한 세션만 남기고 다른 기기 세션 종료 |
 | `POST /api/v1/auth/password-reset`, `POST …/verify`, `POST …/confirm` | 로그인 없이 가입 이메일로 10분짜리 6자리 인증번호 요청(이메일 가입 계정은 204, 미가입 이메일은 404, 소셜 전용 계정은 409), 인증번호 확인으로 30분 통행 토큰 발급, 통행 토큰으로 새 비밀번호 저장(모든 세션 종료) |
-| `GET /api/v1/me/deletion-preview`, `DELETE /api/v1/me` | 삭제 시 닫히는 모집글·제안 수 미리 보기와 계정 삭제(제안 철회·모집글 마감·기업 삭제·세션 삭제·`deleted_at`) |
+| `GET /api/v1/me/deletion-preview`, `DELETE /api/v1/me` | 삭제 시 닫히는 모집글·제안 수 미리 보기와 계정 삭제(탈퇴 표식·제안 철회·모집글 마감·기업 삭제·세션 삭제·`deleted_at`) |
 | `GET /api/v1/auth/oauth/providers` | 키가 설정된 소셜 로그인 공급자(카카오·Google)와 시작 주소. 설정 확인용이며 화면은 이 목록을 기다리지 않고 두 버튼을 바로 그림 |
 | `GET /api/v1/auth/oauth/{provider}/authorize`, `GET …/callback` | 소셜 로그인 시작(서명한 state 쿠키와 함께 공급자로 302)과 콜백(코드 교환·ID 토큰 확인 뒤 `sub`로 로그인 또는 가입, 세션 쿠키와 함께 프런트로 302). 같은 이메일의 기존 계정에는 자동 연결하지 않음 |
 | `POST /api/v1/auth/dev-login` | `ACCOUNT_DEV_LOGIN_ENABLED=true`일 때만 등록되는 개발용 시드 로그인 |
@@ -833,6 +837,8 @@ Compose는 일부 주소·CORS 값을 내부 네트워크에 맞게 덮어씁니
 | `ACCOUNT_SESSION_SHORT_TTL` | `PT12H` | "로그인 상태 유지"를 끈 세션의 절대 만료 기간. 쿠키는 브라우저 세션 쿠키 |
 | `ACCOUNT_SESSION_IDLE_TTL` | `P7D` | 마지막 사용 뒤 세션을 끝내는 유휴 기간 |
 | `ACCOUNT_JWT_SECRET` | 없음(필수) | 세션 JWT HS256 서명 비밀키(32자 이상). 코드에 기본값이 없어 비어 있으면 기동 실패. Compose·`.env.example`은 로컬 개발용 값을 넣음 |
+| `ACCOUNT_IDENTITY_HMAC_KEY` | 빈 값 | 탈퇴 표식(이메일·소셜 연결·사업자등록번호) HMAC 키. 비어 있으면 `ACCOUNT_JWT_SECRET`을 씀. 따로 두면 JWT 비밀을 바꿔도 이전 표식이 계속 맞음 |
+| `ACCOUNT_WITHDRAWAL_MARK_PURGE_ENABLED` | `true` | 보관 기간(1년)이 지난 탈퇴 표식을 매일 서울 04:30에 지우는 작업 |
 | `ACCOUNT_COOKIE_SECURE` | `true` | 세션 쿠키 `Secure` 속성. HTTPS가 없는 로컬 개발에서만 `false` |
 | `ACCOUNT_DEV_LOGIN_ENABLED` | `false` | `true`이면 `POST /api/v1/auth/dev-login`이 등록되어 비밀번호 없이 시드 계정 세션 발급 |
 | `ACCOUNT_DEV_LOGIN_EMAIL` | `admin@govbiz.local` | 개발용 관리자 시드 계정 이메일. 없으면 ADMIN 역할·이메일 인증 완료로 생성 |
@@ -973,11 +979,11 @@ supportprogram/
 account/
 ├── controller            # 로그인·로그아웃·내 계정, 개발용 로그인, 기업 등록·수정 HTTP 진입점
 │   └── dto               # 공개 요청·응답 계약
-├── service               # 회원가입, 로그인 검증·시도 제한, JWT 세션, 소셜 로그인, 비밀번호 변경·계정 삭제, 기업 등록(사업자등록번호 조회)
+├── service               # 회원가입, 로그인 검증·시도 제한, JWT 세션, 소셜 로그인, 비밀번호 변경·계정 삭제·탈퇴 표식, 기업 등록(사업자등록번호 조회)
 ├── client/bizno          # Bizno 사업자등록번호 조회 HTTP·오류 변환
 │   └── mapper            # 원문 JSON 검증·정규화 → domain/RegisteredBusiness 변환
 ├── client/oauth          # 카카오·Google 인가 주소·코드 교환·ID 토큰 클레임 확인, 카카오 연결 끊기
-├── repository            # 계정·세션·소셜 로그인 연결·기업 저장과 조회, DbRow 변환
+├── repository            # 계정·세션·소셜 로그인 연결·기업·탈퇴 표식 저장과 조회, DbRow 변환
 │   └── mapper            # MyBatis Mapper, DbRow
 ├── domain                # 계정·역할·세션·소셜 로그인 공급자·기업·등록 사업자 업무 모델
 ├── helper                # HS256 JWT 발급·검증·해시, 세션·소셜 로그인 상태 쿠키 발급·읽기, 이메일 정규화

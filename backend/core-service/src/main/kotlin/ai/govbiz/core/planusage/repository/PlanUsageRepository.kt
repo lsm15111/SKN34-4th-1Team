@@ -34,6 +34,11 @@ class PlanUsageRepository(
         } ?: AccountPlan.FREE
     }
 
+    /** 탈퇴 계정 [fromAccountId]의 체험 기록을 [toAccountId]에 복사해 같은 요금제를 다시 체험하지 못하게 합니다. */
+    fun copyTrials(fromAccountId: Long, toAccountId: Long) {
+        store { mapper.copyTrials(fromAccountId, toAccountId) }
+    }
+
     /** 이 계정이 체험을 시작한 적 있는 요금제입니다. */
     fun findTrialPlans(accountId: Long): Set<PlanCode> = store {
         mapper.findTrialPlanCodes(accountId).map(PlanCode::valueOf).toSet()

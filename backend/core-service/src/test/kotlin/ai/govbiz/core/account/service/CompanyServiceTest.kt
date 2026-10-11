@@ -4,6 +4,7 @@ import ai.govbiz.core.account.domain.RegisteredBusiness
 import ai.govbiz.core.account.domain.Company
 import ai.govbiz.core.account.domain.CompanyProfileInput
 import ai.govbiz.core.account.domain.NewCompany
+import ai.govbiz.core.account.domain.WithdrawnIdentity
 import ai.govbiz.core.account.helper.AccountTestHelper
 import ai.govbiz.core.account.helper.AccountTestHelper.NOW
 import ai.govbiz.core.account.repository.CompanyPartnerProfileRepository
@@ -13,6 +14,7 @@ import ai.govbiz.core.account.service.exception.BusinessNumberAlreadyRegisteredE
 import ai.govbiz.core.account.service.exception.CompanyAlreadyRegisteredException
 import ai.govbiz.core.account.service.exception.CompanyNotRegisteredException
 import ai.govbiz.core.account.service.exception.CompanyProfileInvalidException
+import ai.govbiz.core.planusage.PlanUsageTestHelper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
@@ -39,13 +41,18 @@ class CompanyServiceTest {
     @Mock
     private lateinit var lookupService: BusinessLookupService
 
+    @Mock
+    private lateinit var withdrawalMarks: WithdrawalMarkService
+
     private lateinit var service: CompanyService
 
     private val account = AccountTestHelper.account(id = 7L)
 
     @BeforeEach
     fun setUp() {
-        service = CompanyService(companyRepository, partnerProfileRepository, lookupService, AccountTestHelper.FIXED_CLOCK)
+        service = CompanyService(
+            companyRepository, partnerProfileRepository, lookupService, AccountTestHelper.FIXED_CLOCK, withdrawalMarks, PlanUsageTestHelper.noTransactions(),
+        )
     }
 
     @Test
@@ -68,6 +75,8 @@ class CompanyServiceTest {
         assertEquals(NOW, newCompany.businessVerifiedAt)
         assertEquals(profile(), newCompany.profile)
         assertEquals(company(), company)
+        // 이 사업자등록번호로 1년 안에 탈퇴한 계정이 있으면 이 계정이 그 사용 기록을 이어받습니다.
+        verify(withdrawalMarks).inherit(7L, listOf(WithdrawnIdentity.businessNumber("1248100998")))
     }
 
     @Test

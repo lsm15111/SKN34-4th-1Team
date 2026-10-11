@@ -269,6 +269,24 @@ class PlanUsageServiceTest {
     }
 
     @Test
+    fun aReturningMemberInheritsUsedTrialsAndTodaysAndThisMonthsFreeUsage() {
+        val keys = listOf(today.key, today.key, thisMonth.key, thisMonth.key)
+        Mockito.doReturn(mapOf((PlanUsageFeature.AI_SEARCH to today.key) to 4, (PlanUsageFeature.APPLICATION_DRAFT to thisMonth.key) to 1))
+            .`when`(repository).findCounts(3, keys)
+        Mockito.doReturn(2).`when`(repository).countJobs(3, PlanUsageFeature.APPLICATION_DRAFT, thisMonth, null, null)
+        Mockito.doReturn(0).`when`(repository).countJobs(3, PlanUsageFeature.COMBINATION_REVIEW, thisMonth, null, null)
+
+        service.inherit(3, 9)
+
+        Mockito.verify(repository).copyTrials(3, 9)
+        // 요청마다 센 사용량은 그대로, 작업으로 센 사용량은 남은 작업 수까지 더해 새 계정의 남긴 사용량으로 옮깁니다.
+        Mockito.verify(repository).addCount(9, PlanUsageFeature.AI_SEARCH, today.key, 4)
+        Mockito.verify(repository).addCount(9, PlanUsageFeature.APPLICATION_DRAFT, thisMonth.key, 3)
+        Mockito.verify(repository, Mockito.never()).addCount(9, PlanUsageFeature.EVIDENCE_QUESTION, today.key, 0)
+        Mockito.verify(repository, Mockito.never()).countJobs(3, PlanUsageFeature.AI_SEARCH, today, null, null)
+    }
+
+    @Test
     fun reportsTheGuestTrialFreeUsageAndAPassWithItsPeriodAndEnd() {
         Mockito.doReturn(2).`when`(guests).used("192.0.2.9", today)
         val guest = service.usage(null, "192.0.2.9")

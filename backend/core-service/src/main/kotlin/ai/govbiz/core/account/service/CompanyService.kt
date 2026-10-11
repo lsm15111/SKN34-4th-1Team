@@ -6,6 +6,7 @@ import ai.govbiz.core.account.domain.CompanyPartnerProfile
 import ai.govbiz.core.account.domain.CompanyPartnerProfileInput
 import ai.govbiz.core.account.domain.CompanyProfileInput
 import ai.govbiz.core.account.domain.NewCompany
+import ai.govbiz.core.account.domain.WithdrawnIdentity
 import ai.govbiz.core.account.repository.CompanyPartnerProfileRepository
 import ai.govbiz.core.account.repository.CompanyRepository
 import ai.govbiz.core.account.service.exception.BusinessNotActiveException
@@ -18,6 +19,8 @@ import java.time.LocalDateTime
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 회원의 기업 등록·조회·수정입니다. 사업자등록번호는 [BusinessLookupService]의 사업자등록번호 조회로 확인하고 계속·휴업 사업자를 등록하며 폐업자는 거절합니다.
@@ -29,7 +32,10 @@ class CompanyService(
     private val partnerProfileRepository: CompanyPartnerProfileRepository,
     private val lookupService: BusinessLookupService,
     @param:Qualifier("seoulClock") private val clock: Clock,
+    private val withdrawalMarks: WithdrawalMarkService,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val transactions = TransactionTemplate(transactionManager)
 
     fun findMine(account: Account): Company =
         companyRepository.findByAccountId(account.id) ?: throw CompanyNotRegisteredException()
@@ -44,17 +50,20 @@ class CompanyService(
         if (!business.canRegister) throw BusinessNotActiveException(business.businessStatus)
 
         return try {
-            companyRepository.createCompany(
-                NewCompany(
-                    accountId = account.id,
-                    businessNumber = business.businessNumber,
-                    companyName = business.companyName,
-                    businessStatus = business.businessStatus,
-                    businessStatusCode = business.businessStatusCode,
-                    profile = profile,
-                    businessVerifiedAt = LocalDateTime.now(clock),
-                ),
-            )
+            // 이 사업자등록번호로 1년 안에 탈퇴한 계정이 있으면 체험 이력과 이번 하루·달 사용량을 같은 transaction에서 이어받습니다.
+            requireNotNull(transactions.execute { _ ->
+                companyRepository.createCompany(
+                    NewCompany(
+                        accountId = account.id,
+                        businessNumber = business.businessNumber,
+                        companyName = business.companyName,
+                        businessStatus = business.businessStatus,
+                        businessStatusCode = business.businessStatusCode,
+                        profile = profile,
+                        businessVerifiedAt = LocalDateTime.now(clock),
+                    ),
+                ).also { withdrawalMarks.inherit(account.id, listOf(WithdrawnIdentity.businessNumber(business.businessNumber))) }
+            })
         } catch (exception: DuplicateKeyException) {
             // 같은 계정의 동시 등록은 계정 UNIQUE, 다른 계정이 먼저 쓴 번호는 사업자번호 UNIQUE에 걸립니다.
             if (exception.message?.contains(ACCOUNT_UNIQUE_CONSTRAINT) == true) throw CompanyAlreadyRegisteredException()

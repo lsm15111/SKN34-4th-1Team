@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, View } from 'react-native'
 import type { SignupEmailVerification } from '@govbiz/shared/domain/entities/Account'
 import type { AccountDeletionPreview } from '@govbiz/shared/domain/entities/AccountDeletionPreview'
 import type { OAuthProviderId } from '@govbiz/shared/domain/entities/OAuthProvider'
+import { withdrawalCarryOverNotice } from '@govbiz/shared/domain/entities/PlanUsage'
 import { isEmailAddress, normalizeEmail } from '@govbiz/shared/domain/entities/EmailAddress'
 import { signUpPasswordIssue } from '@govbiz/shared/domain/usecases/SignUpUseCase'
 import { changePassword, deleteAccount, getDeletionPreview, readOAuthProviders, sendSignupEmailCode, verifySignupEmailCode } from '../api/account'
@@ -192,6 +193,7 @@ export function AccountScreen({ onCompany, onSettings, initialMode = 'login', au
             <Text>{preview.hasCompany ? '등록한 기업 정보를 삭제해요.' : '등록한 기업 정보가 없어요.'}</Text>
             <Text>내 모집글 {preview.openRecruitmentCount}건 마감 · 받은 대기 제안 {preview.receivedPendingProposalCount}건 만료</Text>
             <Text>보낸 대기 제안 {preview.sentPendingProposalCount}건 철회 · 로그인 세션 종료</Text>
+            <Text style={{ color: colors.muted }}>{withdrawalCarryOverNotice}</Text>
             {confirmDeletion && (auth.session.account.hasPassword !== false
               ? <Field label="삭제 확인용 현재 비밀번호" value={currentPassword} onChangeText={setCurrentPassword} secureTextEntry maxLength={72} editable={!busy} autoCapitalize="none" />
               : <Notice>비밀번호가 없는 소셜 계정이에요. 현재 로그인 세션으로 본인을 확인해요.</Notice>)}

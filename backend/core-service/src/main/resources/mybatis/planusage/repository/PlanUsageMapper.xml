@@ -76,6 +76,11 @@
           AND used_count &gt; 0
     </update>
 
+    <insert id="copyTrials">
+        INSERT IGNORE INTO plan_trial (account_id, plan_code, started_at, ends_at)
+        SELECT #{toAccountId}, plan_code, started_at, ends_at FROM plan_trial WHERE account_id = #{fromAccountId}
+    </insert>
+
     <insert id="addCount">
         INSERT INTO plan_usage_counter (account_id, feature, period_key, used_count, updated_at)
         VALUES (#{accountId}, #{feature}, #{periodKey}, #{amount}, #{now})

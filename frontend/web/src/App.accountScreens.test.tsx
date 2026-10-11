@@ -19,6 +19,7 @@ import { resetPasswordMessages } from './presentation/features/auth/viewmodel/us
 import { signupMessages } from './presentation/features/auth/viewmodel/useSignupViewModel'
 import { sessionRestored } from './presentation/shared/auth/state/authSlice'
 import { chooseOption, optionLabels, selectedValue } from './test/selectField'
+import { withdrawalCarryOverNotice } from '@govbiz/shared/domain/entities/PlanUsage'
 
 vi.mock('./presentation/shared/core-api-status/CoreApiConnectionStatus', () => ({
   CoreApiConnectionStatus: () => null,
@@ -1098,6 +1099,8 @@ describe('계정 보안 모달', () => {
     fireEvent.click(within(account).getByRole('button', { name: '계정 삭제' }))
     const dialog = screen.getByRole('dialog', { name: '계정을 삭제할까요?' })
     expect(dialog.textContent).toContain('member@govbiz.local')
+    // 1년 안에 다시 가입하면 쓴 체험과 이용량이 이어진다는 것을 삭제 전에 알립니다.
+    expect(dialog.textContent).toContain(withdrawalCarryOverNotice)
     // "삭제되는 것" 목록은 문구 확정 전까지 화면에서 숨겨 두었습니다. 미리 보기 조회는 그대로 일어납니다.
     await waitFor(() => expect(appContainer.resolve('getAccountDeletionPreviewUseCase').execute).toHaveBeenCalled())
     expect(within(dialog).queryByRole('status', { name: '삭제되는 것' })).toBeNull()

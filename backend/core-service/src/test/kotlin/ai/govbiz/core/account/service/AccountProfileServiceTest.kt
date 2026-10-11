@@ -4,6 +4,9 @@ import ai.govbiz.core.account.domain.AccountCredential
 import ai.govbiz.core.account.domain.OAuthLink
 import ai.govbiz.core.account.domain.OAuthProvider
 import ai.govbiz.core.account.domain.AccountRole
+import ai.govbiz.core.account.domain.Company
+import ai.govbiz.core.account.domain.CompanyProfileInput
+import ai.govbiz.core.account.domain.WithdrawnIdentity
 import ai.govbiz.core.account.helper.AccountTestHelper
 import ai.govbiz.core.account.helper.AccountTestHelper.NOW
 import ai.govbiz.core.account.helper.SessionTokenHelper
@@ -55,6 +58,8 @@ class AccountProfileServiceTest {
 
     @Mock private lateinit var eventPublisher: ApplicationEventPublisher
 
+    @Mock private lateinit var withdrawalMarks: WithdrawalMarkService
+
     private val passwordEncoder = BCryptPasswordEncoder(4)
 
     private val account = AccountTestHelper.account(id = 7L)
@@ -65,7 +70,7 @@ class AccountProfileServiceTest {
     fun setUp() {
         service = AccountProfileService(
             accountRepository, companyRepository, recruitmentRepository, proposalRepository, passwordEncoder, unlinkRepository, eventPublisher,
-            AccountTestHelper.FIXED_CLOCK,
+            AccountTestHelper.FIXED_CLOCK, withdrawalMarks,
         )
     }
 
@@ -141,6 +146,31 @@ class AccountProfileServiceTest {
     }
 
     @Test
+    fun deleteAccountLeavesWithdrawalMarksForTheEmailSocialLinksAndBusinessNumberBeforeRemovingThem() {
+        stubCredential()
+        doReturn(listOf(OAuthLink(OAuthProvider.KAKAO, "4012345678"), OAuthLink(OAuthProvider.GOOGLE, "g-123")))
+            .`when`(accountRepository).findOAuthLinks(7L)
+        doReturn(company()).`when`(companyRepository).findByAccountId(7L)
+
+        service.deleteAccount(account, "password1")
+
+        val order = inOrder(withdrawalMarks, companyRepository, accountRepository)
+        order.verify(withdrawalMarks).record(
+            7L,
+            listOf(
+                WithdrawnIdentity.email("manager@company.co.kr"),
+                WithdrawnIdentity.oauth(OAuthProvider.KAKAO, "4012345678"),
+                WithdrawnIdentity.oauth(OAuthProvider.GOOGLE, "g-123"),
+                WithdrawnIdentity.businessNumber("1248100998"),
+            ),
+            NOW,
+        )
+        order.verify(companyRepository).softDeleteByAccountId(7L)
+        order.verify(accountRepository).deleteNonKakaoIdentities(7L)
+        order.verify(accountRepository).markDeleted(7L, NOW)
+    }
+
+    @Test
     fun deleteAccountRejectsAWrongPasswordWithoutTouchingAnything() {
         stubCredential()
         assertThrows(CurrentPasswordMismatchException::class.java) { service.deleteAccount(account, "wrong-password") }
@@ -148,6 +178,7 @@ class AccountProfileServiceTest {
         verify(companyRepository, never()).softDeleteByAccountId(anyLong())
         verify(recruitmentRepository, never()).closeAllByAccountId(anyLong(), AccountTestHelper.anyValue())
         verify(accountRepository, never()).markDeleted(anyLong(), AccountTestHelper.anyValue())
+        verifyNoInteractions(withdrawalMarks)
     }
 
     @Test
@@ -180,6 +211,19 @@ class AccountProfileServiceTest {
 
         verify(accountRepository, never()).markDeleted(anyLong(), AccountTestHelper.anyValue())
     }
+
+    private fun company() = Company(
+        id = 3L,
+        accountId = 7L,
+        businessNumber = "1248100998",
+        companyName = "주식회사 예시",
+        businessStatus = "계속사업자",
+        businessStatusCode = "01",
+        profile = CompanyProfileInput(region = "서울특별시", industry = "정보통신업", foundedYear = 2020, homepageUrl = null),
+        businessVerifiedAt = NOW,
+        createdAt = NOW,
+        updatedAt = NOW,
+    )
 
     private fun stubCredential() {
         doReturn(AccountCredential(account, requireNotNull(passwordEncoder.encode("password1"))))

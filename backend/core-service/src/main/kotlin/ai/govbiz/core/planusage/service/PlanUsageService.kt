@@ -184,6 +184,22 @@ class PlanUsageService(
     }
 
     /**
+     * 탈퇴한 계정 [predecessorId]를 같은 사람이 다시 가입한 [successorId]가 이어받습니다. 이미 쓴 체험을 복사하고, 무료 기준의 이번 하루·달
+     * 사용량(요청마다 센 양과 작업으로 센 양)을 새 계정의 남긴 사용량으로 더합니다. 탈퇴 표식을 잠근 호출자의 transaction 안에서 부릅니다.
+     */
+    fun inherit(predecessorId: Long, successorId: Long) {
+        val now = now()
+        repository.copyTrials(predecessorId, successorId)
+        val windows = PlanUsageFeature.entries.associateWith { AccountPlan.FREE.windowOf(it, now) }
+        val counted = repository.findCounts(predecessorId, windows.values.map { it.key })
+        for ((feature, window) in windows) {
+            val jobs = if (feature.perRequest) 0 else repository.countJobs(predecessorId, feature, window)
+            val used = (counted[feature to window.key] ?: 0) + jobs
+            if (used > 0) repository.addCount(successorId, feature, window.key, used)
+        }
+    }
+
+    /**
      * 출시 전 무료 체험을 시작합니다. 계정 행을 잠근 짧은 transaction에서 자격을 확인하고 체험 기록과 이용권을 함께 씁니다.
      * 이메일 인증을 마친 회원만, 요금제마다 한 번, 지금보다 높은 요금제만 시작할 수 있습니다(운영자 배정 유료 요금제를 쓰는 동안은 안 됨).
      */
