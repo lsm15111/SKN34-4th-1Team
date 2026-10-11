@@ -10,5 +10,5 @@ export type GovAgentResult =
   | { outcome: 'APPLICATION'; program: SupportProgramIdentity; message: string }
   | { outcome: 'NEEDS_PROGRAM' | 'UNSUPPORTED'; message: string }
 export type GovAgentEvidence = { program: GovAgentProgram; answer: SupportProgramEvidenceAnswer }
-/** 선택 공고의 신청 준비 진입점입니다. 실행 권한·양식·작업 결과는 기존 신청 준비 API에서 다시 확인합니다. */
-export type GovAgentApplication = { program: GovAgentProgram; message: string }
+/** 선택 공고와 생성한 준비 건의 연결입니다. 소유권·양식·작업 결과는 기존 신청 준비 API에서 다시 확인합니다. */
+export type GovAgentApplication = { program: GovAgentProgram; message: string; preparationId?: number }

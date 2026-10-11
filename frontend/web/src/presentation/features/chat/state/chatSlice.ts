@@ -143,6 +143,16 @@ const chatSlice = createSlice({
       state.interpretation = { status: 'idle' }
       state.unseenOutcome = 'interpretation-answered'
     },
+    govApplicationPrepared(state, action: PayloadAction<{ accountEmail: string; messageId: string; preparationId: number }>) {
+      const { accountEmail, messageId, preparationId } = action.payload
+      if (state.accountEmail !== accountEmail || !Number.isSafeInteger(preparationId) || preparationId <= 0) return
+      const message = state.messages.findLast((item) => item.govApplication)
+      if (message?.id !== messageId || !message.govApplication || message.govApplication.preparationId !== undefined) return
+      const application = message.govApplication
+      if (state.govProgram?.sourceCode !== application.program.sourceCode
+        || state.govProgram.sourceProgramId !== application.program.sourceProgramId) return
+      application.preparationId = preparationId
+    },
     interpretationStarted: {
       reducer(state, action: PayloadAction<{ requestId: string; messageId: string; request: SupportProgramInterpretRequest }>) {
         if (isBusy(state)) return
@@ -348,6 +358,7 @@ export const {
   draftChanged,
   govProgramSelected,
   govMessageSucceeded,
+  govApplicationPrepared,
   interpretationStarted,
   interpretationSucceeded,
   interpretationFailed,

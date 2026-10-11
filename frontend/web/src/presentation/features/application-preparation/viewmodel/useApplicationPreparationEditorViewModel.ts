@@ -59,8 +59,22 @@ function sameFacts(saved: ApplicationFormSection['facts'], next: NewApplicationP
 }
 
 /** 답변 입력(25) 화면의 상태입니다. 저장된 신청 준비 건을 불러오고 답변을 항목 단위로 자동 저장합니다. */
-export function useApplicationPreparationEditorViewModel(id: number) {
+export function useApplicationPreparationEditorViewModel(id: number, options?: {
+  program?: { sourceCode: string; sourceProgramId: string }
+  /** 대화 패널은 현재 계정이 문서를 열었던 계정과 같은지 저장 직전에 확인합니다. */
+  canSave?: () => boolean
+}) {
   const useCase = appContainer.resolve('applicationPreparationUseCase')
+  const sourceCode = options?.program?.sourceCode
+  const sourceProgramId = options?.program?.sourceProgramId
+  const canSave = options?.canSave
+  const disposed = useRef(false)
+  const validatePreparation = useCallback((result: ApplicationPreparation) => {
+    if (result.id !== id || (sourceCode !== undefined && (result.form.sourceCode !== sourceCode || result.form.sourceProgramId !== sourceProgramId))) {
+      throw new Error('선택한 공고와 신청 문서가 일치하지 않습니다. 신청 준비를 다시 시작해 주세요.')
+    }
+    return result
+  }, [id, sourceCode, sourceProgramId])
   const [preparation, setPreparation] = useState<ApplicationPreparation | null>(null)
   const [documentCount, setDocumentCount] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -96,10 +110,12 @@ export function useApplicationPreparationEditorViewModel(id: number) {
     const request = useCase.get(id, controller.signal)
     void request.then((result) => {
       if (controller.signal.aborted || sequence !== loadSequence.current) return
-      preparationRef.current = result as ApplicationPreparation
-      setPreparation(result as ApplicationPreparation)
+      preparationRef.current = validatePreparation(result)
+      setPreparation(result)
     }).catch((caught: unknown) => {
       if (controller.signal.aborted || sequence !== loadSequence.current) return
+      preparationRef.current = null
+      setPreparation(null)
       setError(asError(caught))
     }).finally(() => {
       if (controller.signal.aborted || sequence !== loadSequence.current) return
@@ -112,7 +128,7 @@ export function useApplicationPreparationEditorViewModel(id: number) {
       .catch(() => {})
 
     return controller
-  }, [id, useCase])
+  }, [id, useCase, validatePreparation])
 
   useEffect(() => {
     const controller = load()
@@ -152,6 +168,7 @@ export function useApplicationPreparationEditorViewModel(id: number) {
    */
   const runSave = useCallback(async (keepalive = false) => {
     while (saveTask.current) await saveTask.current
+    if (canSave && !canSave()) return
     const current = preparationRef.current
     if (!current || dirtySections.current.size === 0) return
     const sectionKeys = [...dirtySections.current]
@@ -162,6 +179,7 @@ export function useApplicationPreparationEditorViewModel(id: number) {
       let latest = current
       let touched = false
       for (const sectionKey of sectionKeys) {
+        if (canSave && !canSave()) return
         const section = latest.form.sections.find((candidate) => candidate.key === sectionKey)
         if (!section) continue
         const snapshot = { ...messagesRef.current }
@@ -179,10 +197,17 @@ export function useApplicationPreparationEditorViewModel(id: number) {
           continue
         }
         setAutosave({ status: 'saving' })
+        if (canSave && !canSave()) return
         const updated = await useCase.replaceInputs(latest.id, sectionKey, { expectedRevision: latest.inputRevision, facts: built.facts },
           controller?.signal, keepalive ? { keepalive: true } : undefined)
-        if (controller?.signal.aborted) return
-        latest = updated
+        if (controller?.signal.aborted || (canSave && !canSave())) return
+        try { latest = validatePreparation(updated) }
+        catch (caught) {
+          preparationRef.current = null
+          setPreparation(null)
+          setError(asError(caught))
+          throw caught
+        }
         preparationRef.current = updated
         setPreparation(updated)
         // 저장하는 동안 다시 바뀐 칸이 있으면 그 항목을 다음 저장 대상으로 남깁니다.
@@ -192,7 +217,7 @@ export function useApplicationPreparationEditorViewModel(id: number) {
       setFieldError(null)
       setAutosave((previous) => touched || previous.status === 'saving' ? { status: 'saved', savedAt: Date.now() } : previous)
     })().catch((caught: unknown) => {
-      if (controller?.signal.aborted) return
+      if (controller?.signal.aborted || (canSave && !canSave())) return
       for (const key of sectionKeys) dirtySections.current.add(key)
       const conflict = caught instanceof ApplicationPreparationError && caught.code === 'APPLICATION_PREPARATION_REVISION_CONFLICT'
       setAutosave({ status: 'failed', error: asError(caught), conflict })
@@ -204,7 +229,7 @@ export function useApplicationPreparationEditorViewModel(id: number) {
     })
     saveTask.current = task
     await task
-  }, [clearPending, load, useCase])
+  }, [canSave, clearPending, load, useCase, validatePreparation])
 
   const cancelAutosaveTimer = () => {
     if (autosaveTimer.current !== null) { clearTimeout(autosaveTimer.current); autosaveTimer.current = null }
@@ -221,21 +246,25 @@ export function useApplicationPreparationEditorViewModel(id: number) {
     cancelAutosaveTimer()
     await runSave()
     while (saveTask.current) await saveTask.current
-    return dirtySections.current.size === 0
-  }, [runSave])
+    return !disposed.current && (!canSave || canSave()) && dirtySections.current.size === 0
+  }, [canSave, runSave])
 
-  // 화면을 떠나는 순간(탭 닫기 · 다른 탭으로 · 다른 화면으로) 남은 입력을 keepalive로 보냅니다. 언마운트 정리도 같은 저장입니다.
+  // 정상 이탈은 남은 입력을 keepalive로 보냅니다. 대화 패널의 계정이 바뀌었으면 이전 계정의 저장을 이어 보내지 않습니다.
   useEffect(() => {
-    const flushOnLeave = () => { if (dirtySections.current.size > 0) { cancelAutosaveTimer(); void runSave(true) } }
+    disposed.current = false
+    const flushOnLeave = () => { if (dirtySections.current.size > 0 && (!canSave || canSave())) { cancelAutosaveTimer(); void runSave(true) } }
     const onVisibility = () => { if (document.visibilityState === 'hidden') flushOnLeave() }
     window.addEventListener('pagehide', flushOnLeave)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
       window.removeEventListener('pagehide', flushOnLeave)
       document.removeEventListener('visibilitychange', onVisibility)
-      flushOnLeave()
+      disposed.current = true
+      cancelAutosaveTimer()
+      if (!canSave || canSave()) flushOnLeave()
+      else saveController.current?.abort()
     }
-  }, [runSave])
+  }, [canSave, runSave])
 
   const setSectionMessage = useCallback((key: string, message: string) => {
     messagesRef.current = { ...messagesRef.current, [key]: message }
