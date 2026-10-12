@@ -437,12 +437,17 @@ function expectLoadingCard(phase: 'interpretation' | 'search') {
   const card = screen.getByRole('group', {
     name: isInterpreting ? '조건 해석 진행 중' : '지원사업 검색 진행 중',
   })
-  expect(within(card).getByText(isInterpreting
-    ? '조건 변경안을 해석하고 있어요. 아직 검색하지 않았습니다…'
-    : '공고를 찾아보고 있어요…')).toBeTruthy()
+  if (isInterpreting) {
+    expect(within(card).getByText('조건 변경안을 해석하고 있어요. 아직 검색하지 않았습니다…')).toBeTruthy()
+  } else {
+    // 검색은 화면이 아는 단계(조건 정리 완료)만 끝난 것으로 두고 서버 단계는 보통 걸리는 시간만 보여 줍니다.
+    const steps = within(within(card).getByRole('list', { name: '검색 단계' })).getAllByRole('listitem')
+    expect(steps.map((step) => step.textContent)).toEqual(['조건 정리완료', '공고 찾기보통 5초 안팎', '자격 확인보통 20초 안팎'])
+  }
   expect(card.querySelector('span[aria-hidden="true"]')?.children).toHaveLength(3)
   expect(card.querySelector('div[aria-hidden="true"]')?.children).toHaveLength(1)
-  expect(card.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2)
+  // 점 세 개·진행 막대에 더해 검색은 단계 표시 원 세 개가 장식입니다.
+  expect(card.querySelectorAll('[aria-hidden="true"]')).toHaveLength(isInterpreting ? 2 : 5)
   expect(screen.getAllByRole('status')).toHaveLength(1)
   expect(card.contains(screen.getByRole('status'))).toBe(false)
   expect(screen.queryByRole('group', {

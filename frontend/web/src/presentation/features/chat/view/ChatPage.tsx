@@ -18,6 +18,7 @@ import { GovApplicationCard, GovPartnerBrief, GovReviewCard, GovWorkInline } fro
 import { EvidenceQuestionFeedback } from '../../support-program-detail/view/EvidenceQuestionFeedback'
 import { ZeroResultHelp } from './ZeroResultHelp'
 import { SearchIntroTitle } from './SearchIntroTitle'
+import { SearchProgress } from './SearchProgress'
 import { govToolTexts, type ChatSearchOptions } from '../state/chatSlice'
 import {
   chatMessageBubbleClassName,
@@ -72,6 +73,7 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
     readiness,
     refetchReadiness,
     searchError,
+    searchStartedAt,
     inputError,
     interests,
     searchStatusAnnouncement,
@@ -415,9 +417,11 @@ export function ChatPage({ layout = 'landing' }: { layout?: ChatPageLayout }) {
                 ))}
               </span>
             </div>
-            <p className={chatPageStyles.loadingDescription}>
-              {isInterpreting ? isGovAgent ? '요청에 맞는 기능으로 처리하고 있어요…' : '조건 변경안을 해석하고 있어요. 아직 검색하지 않았습니다…' : '공고를 찾아보고 있어요…'}
-            </p>
+            {isInterpreting ? (
+              <p className={chatPageStyles.loadingDescription}>
+                {isGovAgent ? '요청에 맞는 기능으로 처리하고 있어요…' : '조건 변경안을 해석하고 있어요. 아직 검색하지 않았습니다…'}
+              </p>
+            ) : <SearchProgress startedAt={searchStartedAt} />}
             <div className={chatPageStyles.loadingTrack} aria-hidden="true">
               <span className={chatPageStyles.loadingSweep} />
             </div>

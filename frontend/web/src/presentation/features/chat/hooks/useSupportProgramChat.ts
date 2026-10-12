@@ -53,6 +53,7 @@ import {
   selectChatState,
   selectConversationCount,
   selectChatUnseenOutcome,
+  selectChatSearchStartedAt,
   selectIsChatSearching,
   selectIsReadyToSubmit,
 } from '../state/chatSlice'
@@ -88,6 +89,7 @@ export function useSupportProgramChat(
   const draft = useAppSelector(selectChatDraft)
   const isReadyToSubmit = useAppSelector(selectIsReadyToSubmit)
   const isSearching = useAppSelector(selectIsChatSearching)
+  const searchStartedAt = useAppSelector(selectChatSearchStartedAt)
   const messages = useAppSelector(selectChatMessages)
   const isRestoredHistory = useAppSelector((state) => state.chat.isRestoredHistory)
   const canRetrySearch = useAppSelector(selectCanRetryChatSearch)
@@ -417,6 +419,7 @@ export function useSupportProgramChat(
     draft,
     isReadyToSubmit,
     isSearching,
+    searchStartedAt,
     messages,
     cancelSearch,
     searchError,
