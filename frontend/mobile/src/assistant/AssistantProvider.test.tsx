@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { AppState, Keyboard, Platform, Text, View, type AppStateStatus } from 'react-native'
+import { AppState, Keyboard, Linking, Platform, Text, View, type AppStateStatus } from 'react-native'
 import { useAuth } from '../auth/session'
 import { assistantUseCase } from '../api/assistant'
 import { ApiError } from '../api/client'
@@ -333,4 +333,36 @@ test('a late preference restore cannot overwrite a position the user already cho
   await act(async () => resolve({ edge: 'right', height: .2 }))
   fireEvent(screen.getByLabelText('GovBiz 도우미 열기'), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } })
   expect(saveAssistantPosition).toHaveBeenLastCalledWith('https://api.example.test', 'owner@example.test', { edge: 'left', height: expect.closeTo(.86) })
+})
+
+describe('Kakao channel contact', () => {
+  const originalChannel = process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID
+  afterEach(() => { if (originalChannel === undefined) delete process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID; else process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID = originalChannel })
+
+  test('a configured channel adds the contact item and opens the 1:1 chat without asking AI', async () => {
+    process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID = '_GovBiz1'
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
+    render(<App />); await open()
+    fireEvent.press(screen.getByLabelText('담당자에게 문의'))
+    expect(screen.getByText('카카오톡 채널에서 담당자에게 문의를 남길 수 있어요. 답변은 채널 운영시간에 순서대로 드려요.')).toBeTruthy()
+    fireEvent.press(screen.getByLabelText('카카오톡으로 문의하기'))
+    await act(async () => undefined)
+    expect(openURL).toHaveBeenCalledWith('https://pf.kakao.com/_GovBiz1/chat')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  test('a failed hand-off to Kakao is shown as an error', async () => {
+    process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID = '_GovBiz1'
+    jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no handler'))
+    render(<App />); await open()
+    fireEvent.press(screen.getByLabelText('담당자에게 문의'))
+    fireEvent.press(screen.getByLabelText('카카오톡으로 문의하기'))
+    await waitFor(() => expect(screen.getByText('카카오톡 채널을 열지 못했어요. 잠시 후 다시 시도해 주세요.')).toBeTruthy())
+  })
+
+  test.each([undefined, '', 'GovBiz1', '_a/b'])('channel ID %p hides the contact item', async value => {
+    if (value === undefined) delete process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID; else process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID = value
+    render(<App />); await open()
+    expect(screen.queryByLabelText('담당자에게 문의')).toBeNull()
+  })
 })

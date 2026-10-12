@@ -10,13 +10,16 @@ import type { AssistantOrigin } from '../assistant/assistantNavigation'
 
 export type AssistantAction = { label: string; href: Href; searchQuery?: string; programQuestion?: string }
 export type MobileAssistantMessage = { id: string; role: 'USER' | 'ASSISTANT'; text: string; answer?: AssistantAnswer;
-  helpId?: string; origin: AssistantOrigin; question?: string; failed?: boolean }
+  helpId?: string; contactUrl?: string; origin: AssistantOrigin; question?: string; failed?: boolean }
 
-export function AssistantScreen({ origin, messages, draft, onDraft, onSend, onClose, onStop, onReset, onHelp, busy, error, retryRemaining, aiEnabled, showHelp, actionsFor, onNavigate }: {
+export function AssistantScreen({ origin, messages, draft, onDraft, onSend, onClose, onStop, onReset, onHelp, busy, error, retryRemaining, aiEnabled, showHelp, actionsFor, onNavigate,
+  contactUrl, onContact, onOpenContact }: {
   origin: AssistantOrigin
   messages: MobileAssistantMessage[]; draft: string; onDraft(value: string): void; onSend(): void; onClose(): void; onStop(): void; onReset(): void
   onHelp(id: string): void; busy: boolean; error: string | null; retryRemaining: number; aiEnabled: boolean; showHelp: boolean
   actionsFor(message: MobileAssistantMessage): { actions: AssistantAction[]; invalid: boolean }; onNavigate(action: AssistantAction, message: MobileAssistantMessage): void
+  /** 카카오톡 채널 문의 주소. 없으면 문의 항목을 두지 않습니다. */
+  contactUrl: string | null; onContact(): void; onOpenContact(url: string): void
 }) {
   const insets = useSafeAreaInsets()
   const [keyboardVisible, setKeyboardVisible] = useState(() => Keyboard.isVisible())
@@ -36,6 +39,7 @@ export function AssistantScreen({ origin, messages, draft, onDraft, onSend, onCl
   const otherQuestions = topic ? assistantHelpEntries.filter(entry => entry.topic === topic && !pageHelp.questions.some(question => question.id === entry.id)) : []
   useEffect(() => { setTopic(null); setOtherTopics(false) }, [origin.path])
   function chooseHelp(id: string) { nearBottom.current = true; pendingScroll.current = true; onHelp(id) }
+  function chooseContact() { nearBottom.current = true; pendingScroll.current = true; onContact() }
   return <KeyboardAvoidingView testID="assistant-keyboard-container" accessibilityViewIsModal style={[local.page, { paddingTop: insets.top }]}
     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <View style={local.header}><View style={local.mark}><Text style={local.markText}>G</Text></View><Text style={local.title}>GovBiz 도우미</Text>
@@ -45,7 +49,8 @@ export function AssistantScreen({ origin, messages, draft, onDraft, onSend, onCl
     {showHelp && <View style={local.pageHelp}>
       <Text style={local.pageLabel}>{origin.pageLabel ?? pageHelp.label}에서 열었어요</Text>
       <View style={local.quickQuestions}>{pageHelp.questions.map(entry => <Button key={entry.id} label={entry.question}
-        variant="secondary" size="small" style={local.quickQuestion} disabled={busy} onPress={() => chooseHelp(entry.id)} />)}</View>
+        variant="secondary" size="small" style={local.quickQuestion} disabled={busy} onPress={() => chooseHelp(entry.id)} />)}
+        {contactUrl && <Button label="담당자에게 문의" variant="secondary" size="small" style={local.quickQuestion} disabled={busy} onPress={chooseContact} />}</View>
       <Pressable accessibilityRole="button" accessibilityLabel="다른 주제 보기" accessibilityState={{ expanded: otherTopics, disabled: busy }}
         disabled={busy} onPress={() => { pendingScroll.current = true; setOtherTopics(value => !value) }} style={local.otherTopics}>
         <Text style={local.otherLabel}>{otherTopics ? '다른 주제 접기' : '다른 주제 보기'}</Text>
@@ -58,6 +63,7 @@ export function AssistantScreen({ origin, messages, draft, onDraft, onSend, onCl
         ? '위 질문을 선택하거나 궁금한 내용을 직접 입력해 주세요.' : '위 질문을 선택해 주세요. 다른 주제의 질문도 확인할 수 있어요.'}</Text></>}
       {messages.map(message => {
         const destinations = message.role === 'ASSISTANT' ? actionsFor(message) : { actions: [], invalid: false }
+        const contact = message.role === 'ASSISTANT' ? message.contactUrl : undefined
         return <View key={message.id} style={message.role === 'USER' ? local.user : local.answer}>
           {message.role === 'ASSISTANT' && <Text style={local.botName}>GovBiz 도우미</Text>}
           <Text selectable style={styles.body}>{message.text}</Text>
@@ -72,6 +78,7 @@ export function AssistantScreen({ origin, messages, draft, onDraft, onSend, onCl
           })}
           {destinations.invalid && <Notice error>이 답변의 이동 경로를 확인하지 못했어요. 메뉴에서 해당 기능을 열어 주세요.</Notice>}
           {destinations.actions.map((action, index) => <Button key={`${message.id}:${index}`} label={action.label} variant="secondary" disabled={busy} onPress={() => onNavigate(action, message)} />)}
+          {contact && <Button label="카카오톡으로 문의하기" variant="secondary" onPress={() => onOpenContact(contact)} />}
         </View>
       })}
       {busy && <View accessibilityLiveRegion="polite" style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={styles.body}>답변을 확인하는 중이에요.</Text></View>}

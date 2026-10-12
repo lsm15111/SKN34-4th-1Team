@@ -30,7 +30,8 @@ function AssistantHost() {
   const [draft, setDraft] = useState('')
   return <AssistantScreen origin={assistantOrigin('/', {})} messages={[]} draft={draft} onDraft={setDraft} onSend={onSend}
     onClose={jest.fn()} onStop={jest.fn()} onReset={jest.fn()} onHelp={jest.fn()} busy={false} error={null} retryRemaining={0}
-    aiEnabled showHelp actionsFor={() => ({ actions: [], invalid: false })} onNavigate={jest.fn()} />
+    aiEnabled showHelp actionsFor={() => ({ actions: [], invalid: false })} onNavigate={jest.fn()}
+    contactUrl={null} onContact={jest.fn()} onOpenContact={jest.fn()} />
 }
 const containerStyle = () => StyleSheet.flatten(screen.getByTestId('assistant-keyboard-container').props.style)
 const safeAreaHeight = () => StyleSheet.flatten(screen.getByTestId('assistant-bottom-safe-area').props.style).height

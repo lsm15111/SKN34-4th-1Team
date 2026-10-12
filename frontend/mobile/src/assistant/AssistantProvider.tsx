@@ -1,7 +1,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AppState, Keyboard, Modal, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { AppState, Keyboard, Linking, Modal, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { kakaoChannelChatUrl } from '@govbiz/shared/domain/entities/KakaoChannel'
 import { useAuth, type MobileSession } from '../auth/session'
 import { ApiError, getApiBaseUrl } from '../api/client'
 import { assistantUseCase, AssistantResponseError } from '../api/assistant'
@@ -74,6 +75,7 @@ const AuthenticatedAssistant = forwardRef<AssistantHandle, {
   const id = () => `${Date.now()}-${++sequence.current}`
   const api = getApiBaseUrl(), useCase = useMemo(() => assistantUseCase(session.accessToken), [session.accessToken])
   const aiEnabled = process.env.EXPO_PUBLIC_ASSISTANT_AI_ENABLED === 'true'
+  const contactUrl = kakaoChannelChatUrl(process.env.EXPO_PUBLIC_KAKAO_CHANNEL_ID)
   const retryRemaining = Math.max(0, Math.ceil((retryUntil - clock) / 1000))
   function stop(message: string) {
     if (!work.current) return
@@ -160,6 +162,17 @@ const AuthenticatedAssistant = forwardRef<AssistantHandle, {
     setMessages(previous => [...previous, { id: id(), role: 'USER', text: entry.question, origin: entryOrigin },
       { id: id(), role: 'ASSISTANT', text: [entry.summary, ...entry.body, entry.limitation].filter(Boolean).join('\n\n'), helpId, origin: entryOrigin }])
   }
+  function contact() {
+    if (!contactUrl || busy) return
+    setShowHelp(false)
+    setError(null)
+    setMessages(previous => [...previous, { id: id(), role: 'USER', text: '담당자에게 문의', origin: entryOrigin },
+      { id: id(), role: 'ASSISTANT', text: '카카오톡 채널에서 담당자에게 문의를 남길 수 있어요. 답변은 채널 운영시간에 순서대로 드려요.', contactUrl, origin: entryOrigin }])
+  }
+  function openContact(url: string) {
+    setError(null)
+    void Linking.openURL(url).catch(() => { if (live.current) setError('카카오톡 채널을 열지 못했어요. 잠시 후 다시 시도해 주세요.') })
+  }
   function actionsFor(message: MobileAssistantMessage) {
     const actions: AssistantAction[] = []; let invalid = false
     const answer = message.answer
@@ -198,7 +211,8 @@ const AuthenticatedAssistant = forwardRef<AssistantHandle, {
         <AssistantScreen origin={entryOrigin} messages={messages} draft={draft} onDraft={setDraft} onSend={() => void send()} onClose={close}
           onStop={() => stop('답변 대기를 중지했어요. 서버에서 이미 시작한 처리나 비용이 취소되는 것은 아니에요. 입력은 유지돼요.')}
           onReset={() => { setMessages([]); setDraft(''); setError(null); setShowHelp(true) }} onHelp={help} busy={busy} error={error} retryRemaining={retryRemaining}
-          aiEnabled={aiEnabled} showHelp={showHelp} actionsFor={actionsFor} onNavigate={navigate} />
+          aiEnabled={aiEnabled} showHelp={showHelp} actionsFor={actionsFor} onNavigate={navigate}
+          contactUrl={contactUrl} onContact={contact} onOpenContact={openContact} />
       </SafeAreaProvider>}
     </Modal>
   </>
