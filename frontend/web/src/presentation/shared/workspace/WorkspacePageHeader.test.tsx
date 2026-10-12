@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
-import { InChatSheetContext } from '../chat-sheet/useChatSheet'
+import { ChatSheetCloseContext } from '../chat-sheet/useChatSheet'
 import { WorkspacePageHeader } from './WorkspacePageHeader'
 
 afterEach(cleanup)
@@ -47,11 +47,22 @@ it('publishes its height to the scroll container so other sticky elements can si
   expect(container.style.getPropertyValue('--workspace-header-h')).toBe('')
 })
 
-it('hides the parent path and back link inside the chat sheet, whose close button returns to the chat', () => {
-  render(<MemoryRouter><InChatSheetContext.Provider value>
-    <WorkspacePageHeader parent={{ to: '/app/docs', label: '신청 문서 작성' }} title="답변 입력" />
-  </InChatSheetContext.Provider></MemoryRouter>)
-  expect(screen.queryByRole('navigation', { name: '상위 화면' })).toBeNull()
-  expect(screen.queryByRole('link')).toBeNull()
+it('keeps the parent path inside the chat sheet and adds a close button at the end of the row', () => {
+  const close = vi.fn()
+  render(<MemoryRouter><ChatSheetCloseContext.Provider value={close}>
+    <WorkspacePageHeader parent={{ to: '/app/docs', label: '신청 문서 작성' }} title="답변 입력" actions={<button type="button">다시 만들기</button>} />
+  </ChatSheetCloseContext.Provider></MemoryRouter>)
+  const crumbs = screen.getByRole('navigation', { name: '상위 화면' })
+  expect(within(crumbs).getByRole('link', { name: '신청 문서 작성' }).getAttribute('href')).toBe('/app/docs')
   expect(screen.getByRole('heading', { level: 1, name: '답변 입력' })).toBeTruthy()
+  // [닫기]는 오른쪽 동작 뒤 맨 끝에 붙습니다.
+  const buttons = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)
+  expect(buttons).toEqual(['다시 만들기', '닫기'])
+  fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+  expect(close).toHaveBeenCalledOnce()
+})
+
+it('has no close button outside the chat sheet', () => {
+  render(<MemoryRouter><WorkspacePageHeader title="신청 문서 작성" /></MemoryRouter>)
+  expect(screen.queryByRole('button', { name: '닫기' })).toBeNull()
 })

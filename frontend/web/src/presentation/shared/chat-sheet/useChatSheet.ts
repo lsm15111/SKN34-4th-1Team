@@ -23,11 +23,14 @@ export function chatSheetKind(pathname: string): string | null {
   return sheetScreens.find((screen) => matchPath(screen.path, pathname))?.kind ?? null
 }
 
-/** 시트 안에 그린 화면인지입니다. 작업 화면 머리글은 시트 안에서 상위 화면 경로를 숨깁니다. */
-export const InChatSheetContext = createContext(false)
+/**
+ * 시트 안에 그린 화면이면 시트를 닫는 함수, 아니면 null입니다. 시트는 따로 머리 줄을 두지 않으므로 화면의 원래 맨 위 줄이
+ * 닫기를 맡습니다(작업 화면 머리글의 [닫기], 공고 상세의 "‹ 공고 상세").
+ */
+export const ChatSheetCloseContext = createContext<(() => void) | null>(null)
 
-export function useInChatSheet(): boolean {
-  return useContext(InChatSheetContext)
+export function useChatSheetClose(): (() => void) | null {
+  return useContext(ChatSheetCloseContext)
 }
 
 /** 시트로 띄운 화면의 주소입니다. 시트가 없으면 null입니다. 뒤의 대화가 시트에서 저장한 검토를 작업 카드에 붙일 때 씁니다. */

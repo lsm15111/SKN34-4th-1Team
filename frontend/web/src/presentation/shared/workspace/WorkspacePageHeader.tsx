@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode, useLayoutEffect, useRef } from 'react'
 import { Link } from 'react-router'
 
-import { useInChatSheet } from '../chat-sheet/useChatSheet'
+import { useChatSheetClose } from '../chat-sheet/useChatSheet'
 import { workspacePageStyles } from './WorkspacePage.styles'
 
 /**
@@ -10,7 +10,7 @@ import { workspacePageStyles } from './WorkspacePage.styles'
  * - [parent]에 상위 화면 또는 순서대로 나열한 배열을 주면 제목 앞에 이동 링크가 붙습니다.
  * - 600px 미만에서는 경로를 숨기고, [parent]가 있으면 바로 위 화면으로 가는 [←]과 제목, 오른쪽 동작만 한 줄로 둡니다.
  * - [tabs]를 주면 제목 바로 옆 같은 줄에 화면을 오가는 탭이 붙습니다.
- * - 대화 위 시트 안에서는 상위 화면 경로와 [←]를 두지 않습니다(시트 머리의 [닫기]가 대화로 돌아감).
+ * - 대화 위 시트 안에서도 경로·[←]는 전체 화면과 같고, 오른쪽 끝에 시트를 닫고 대화로 돌아가는 [닫기]만 더합니다.
  * 머리글은 스크롤 칸 위쪽에 붙으므로, 같은 칸 안의 다른 sticky 요소가 그 아래에 붙을 수 있게
  * 머리글 높이를 부모(스크롤 칸)의 `--workspace-header-h`로 알립니다.
  */
@@ -41,13 +41,13 @@ export function WorkspacePageHeader({
     }
   }, [])
 
-  const inChatSheet = useInChatSheet()
-  const crumbs = parent && !inChatSheet ? (Array.isArray(parent) ? parent : [parent]) : []
+  const closeSheet = useChatSheetClose()
+  const crumbs = parent ? (Array.isArray(parent) ? parent : [parent]) : []
   const back = crumbs[crumbs.length - 1]
   const compact = back ? workspacePageStyles.headerCompactItem : ''
 
   return (
-    <header className={workspacePageStyles.header} ref={headerRef}>
+    <header className={closeSheet ? `${workspacePageStyles.header} ${workspacePageStyles.headerInSheet}` : workspacePageStyles.header} ref={headerRef}>
       <div className={`${workspacePageStyles.headerTitleGroup} ${compact}`}>
         {back ? (
           <Link className={workspacePageStyles.headerBackLink} to={back.to} aria-label={`${back.label}${directionParticle(back.label)} 돌아가기`}>
@@ -74,7 +74,14 @@ export function WorkspacePageHeader({
           <div className={workspacePageStyles.headerTabs}>{tabs}</div>
         </>
       ) : null}
-      {actions ? <div className={workspacePageStyles.headerActions}>{actions}</div> : null}
+      {actions || closeSheet ? <div className={workspacePageStyles.headerActions}>
+        {actions}
+        {closeSheet ? <button type="button" className={workspacePageStyles.headerClose} onClick={closeSheet} aria-label="닫기" title="닫기">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button> : null}
+      </div> : null}
     </header>
   )
 }

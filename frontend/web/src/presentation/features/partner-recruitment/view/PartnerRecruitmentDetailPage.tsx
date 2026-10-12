@@ -106,20 +106,27 @@ export function PartnerRecruitmentDetailPage() {
     </>
   }
 
+  // 불러오지 못했거나 없는 글도 머리글을 그려, 대화 위 시트에서는 머리글의 [닫기]로 돌아갈 수 있게 합니다.
   if (phase === 'failed') {
-    return <div className={workspacePageStyles.content}>
-      <h1 className={workspacePageStyles.title}>모집글을 불러오지 못했습니다</h1>
-      <p className={workspacePageStyles.emptyNote}>잠시 후 다시 시도해 주세요.</p>
-      <Link className={workspacePageStyles.secondaryButton} to={appPaths.partners}>파트너 모집 목록</Link>
-    </div>
+    return <>
+      <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 관리' }} title="모집글 상세" />
+      <div className={workspacePageStyles.content}>
+        <h2 className={workspacePageStyles.title}>모집글을 불러오지 못했습니다</h2>
+        <p className={workspacePageStyles.emptyNote}>잠시 후 다시 시도해 주세요.</p>
+        <Link className={workspacePageStyles.secondaryButton} to={appPaths.partners}>파트너 모집 목록</Link>
+      </div>
+    </>
   }
 
   if (!recruitment) {
-    return <div className={workspacePageStyles.content}>
-      <h1 className={workspacePageStyles.title}>모집글을 찾을 수 없습니다</h1>
-      <p className={workspacePageStyles.emptyNote}>삭제되었거나 주소가 잘못되었을 수 있어요.</p>
-      <Link className={workspacePageStyles.secondaryButton} to={appPaths.partners}>파트너 모집 목록</Link>
-    </div>
+    return <>
+      <WorkspacePageHeader parent={{ to: appPaths.partners, label: '파트너 관리' }} title="모집글 상세" />
+      <div className={workspacePageStyles.content}>
+        <h2 className={workspacePageStyles.title}>모집글을 찾을 수 없습니다</h2>
+        <p className={workspacePageStyles.emptyNote}>삭제되었거나 주소가 잘못되었을 수 있어요.</p>
+        <Link className={workspacePageStyles.secondaryButton} to={appPaths.partners}>파트너 모집 목록</Link>
+      </div>
+    </>
   }
 
   const isClosed = recruitment.status === 'CLOSED'

@@ -43,6 +43,13 @@ export const workspacePageStyles = {
   ),
   title: 'm-0 text-[1.25rem] font-bold tracking-[-0.04em] break-words text-ink',
   headerActions: 'ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2',
+  // 대화 위 시트 안에서는 [닫기]가 시트 오른쪽 모서리 가까이 오도록 머리글 오른쪽 여백만 줄여, 전체 화면과 같은 줄바꿈을 유지합니다.
+  headerInSheet: 'pr-3! max-chat:pr-2!',
+  // 대화 위 시트 안의 머리글 오른쪽 끝 [닫기]입니다. 머리글 버튼 높이(2.5rem)에 맞춘 둥근 아이콘 버튼입니다.
+  headerClose: classes(
+    'grid size-10 shrink-0 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-ink-muted hover:bg-surface-muted hover:text-ink',
+    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary',
+  ),
   content: classes(
     'flex flex-col gap-5 px-[clamp(1.25rem,5vw,4.5rem)] pt-8 pb-12',
     'max-chat:px-4 max-chat:pt-5 max-chat:pb-8',

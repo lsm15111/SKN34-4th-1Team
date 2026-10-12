@@ -48,7 +48,7 @@ function start(path = '/?mode=filter', authenticated = path.startsWith('/app/'))
 /** 작업 화면의 상세는 대화 위 시트라 [닫기]로, 비로그인 상세는 "‹ 공고 상세"(검색 결과로 돌아가기)로 검색에 돌아갑니다. */
 function returnToSearch() {
   const sheet = screen.queryByRole('dialog', { name: '공고 상세' })
-  fireEvent.click(sheet ? within(sheet).getByRole('button', { name: '닫기' }) : screen.getByRole('link', { name: '검색 결과로 돌아가기' }))
+  fireEvent.click(sheet ? within(sheet).getByRole('button', { name: '대화로 돌아가기' }) : screen.getByRole('link', { name: '검색 결과로 돌아가기' }))
 }
 
 describe('지원사업 직접 필터 검색', () => {
@@ -559,7 +559,9 @@ describe('지원사업 직접 필터 검색', () => {
     // 뒤의 검색 결과는 내려가지 않고 그대로 있으며, 시트가 열려 있는 동안 보조기기 · 포커스에서 빠집니다.
     expect(result.isConnected).toBe(true)
     expect(result.closest('[inert]')).not.toBeNull()
-    fireEvent.click(within(sheet).getByRole('button', { name: '닫기' }))
+    // 시트는 따로 머리 줄 없이 상세의 원래 "‹ 공고 상세" 줄을 그대로 두고, 그 줄이 시트를 닫습니다.
+    expect(within(sheet).queryByRole('heading', { level: 2, name: '공고 상세' })).toBeNull()
+    fireEvent.click(within(sheet).getByRole('button', { name: '대화로 돌아가기' }))
     expect(screen.queryByRole('dialog', { name: '공고 상세' })).toBeNull()
     expect(screen.getByRole('link', { name: program.title })).toBe(result)
     expect(screen.getByTestId('location').textContent).toBe('/app/chat?mode=filter&region=%EC%84%9C%EC%9A%B8')

@@ -48,7 +48,7 @@ afterEach(() => {
 /** 작업 화면의 상세는 대화 위 시트라 [닫기]로, 비로그인 상세는 "‹ 공고 상세"(검색 결과로 돌아가기)로 검색에 돌아갑니다. */
 function returnToSearch() {
   const sheet = screen.queryByRole('dialog', { name: '공고 상세' })
-  fireEvent.click(sheet ? within(sheet).getByRole('button', { name: '닫기' }) : screen.getByRole('link', { name: '검색 결과로 돌아가기' }))
+  fireEvent.click(sheet ? within(sheet).getByRole('button', { name: '대화로 돌아가기' }) : screen.getByRole('link', { name: '검색 결과로 돌아가기' }))
 }
 
 describe('App navigation', () => {
