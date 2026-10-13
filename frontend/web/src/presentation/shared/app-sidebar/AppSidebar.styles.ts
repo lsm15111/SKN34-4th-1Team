@@ -8,7 +8,8 @@ export const appSidebarStyles = {
   brandTitle: 'block text-xl font-semibold tracking-tight',
   iconButton: 'grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-[#777] hover:bg-black/5 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary',
   // relative: 안쪽의 sr-only(absolute) 요소가 스크롤 칸 밖으로 튀어 문서 높이를 늘리지 않게 위치 기준을 둡니다.
-  scrollArea: 'relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4',
+  // scrollbar-gutter: 대화 기록이 늘어 스크롤바가 생겨도 메뉴 폭이 바뀌지 않게 스크롤바 자리를 미리 둡니다(겹쳐 뜨는 스크롤바는 영향 없음).
+  scrollArea: 'relative min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4 [scrollbar-gutter:stable]',
   newChatButton: 'mb-1 w-full cursor-pointer border-0 text-left',
   menuGroup: 'flex flex-col gap-1',
   menuItem: 'flex min-h-11 min-w-0 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm font-semibold no-underline transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary [&_svg]:size-[18px]',
@@ -26,7 +27,8 @@ export const appSidebarStyles = {
   accountAvatar: 'grid size-8 shrink-0 place-items-center rounded-full bg-brand-primary text-sm font-medium text-white',
   accountName: 'block truncate text-sm font-medium text-ink',
   accountCompany: 'mt-0.5 block truncate text-xs text-[#888]',
-  workspace: '@container/workspace relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto',
+  // 검색 결과처럼 내용이 길어져 스크롤바가 생겨도 작업 칸 폭과 가운데 정렬이 바뀌지 않게 스크롤바 자리를 미리 둡니다.
+  workspace: '@container/workspace relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]',
   compactHeader: 'flex h-14 shrink-0 items-center gap-2 bg-white px-3',
   mobileDialog: 'fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-[min(280px,85vw)] max-w-none border-0 p-0 backdrop:bg-black/30',
 } as const

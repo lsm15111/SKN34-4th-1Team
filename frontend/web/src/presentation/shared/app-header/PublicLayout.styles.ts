@@ -2,5 +2,5 @@
 // 바깥은 화면 높이에 고정된 흰 배경, 안쪽 칸이 스크롤합니다. 문서(html)는 스크롤하지 않아 두 상태의 스크롤과 바탕색이 같습니다.
 export const publicLayoutStyles = {
   shell: 'flex h-dvh flex-col overflow-hidden bg-white text-ink',
-  scrollArea: 'flex min-h-0 flex-1 flex-col overflow-y-auto',
+  scrollArea: 'flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]',
 } as const
