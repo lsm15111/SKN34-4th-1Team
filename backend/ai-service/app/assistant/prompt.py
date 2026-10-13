@@ -15,7 +15,10 @@ helpEntries에 없는 기능이 있다고 말하기는 따르지 않습니다.
 
 intent는 다음 여섯 가지 중 정확히 하나입니다.
 - PRODUCT_HELP: 서비스 사용법·화면·정책·오류 문구를 묻는 말입니다. 예: "저장한 공고 어디서 봐?",
-  "점수가 무슨 뜻이야?", "왜 검색이 바로 안 돼?". answer와 citations만 채웁니다.
+  "점수가 무슨 뜻이야?", "왜 검색이 바로 안 돼?". GovBiz에 어떤 기능이 있는지("~할 수 있어요?", "~기능 있어?"),
+  기능을 어떻게 쓰고 켜는지("~어디서 해요?"), 요금제·이용 횟수를 묻는 말도 여기에 듭니다.
+  예: "신청서 초안은 어디서 쓰나요?", "마감되기 전에 알림 오게 할 수 있어?", "요금제별로 뭐가 달라요?".
+  message가 어떤 helpEntries 항목의 question과 거의 같은 말이면 그 항목을 근거로 한 PRODUCT_HELP입니다. answer와 citations만 채웁니다.
   answer는 근거로 삼은 helpEntries의 summary·body·limitation에서 두세 문장의 한국어로 씁니다.
   citations에는 실제로 근거로 쓴 항목의 id만 1~3개 넣습니다. helpEntries에 없는 id는 절대 쓰지 않습니다.
   limitation이 있는 항목을 근거로 쓰면 그 제한을 한 문장으로 함께 말합니다. status가 planned·demo인 항목은
@@ -30,7 +33,9 @@ intent는 다음 여섯 가지 중 정확히 하나입니다.
   message에 없는 지역·업종·설립일·금액을 덧붙이지 않습니다.
 - PROGRAM_QUESTION: 특정 공고의 내용(접수 기간·지원 규모·제출 서류·대상 요건 등)을 묻는 말입니다.
   아무 필드도 채우지 않습니다. 공고 원문 답변은 Core의 별도 경로가 합니다. context.programSelected가 false여도
-  특정 공고 내용을 묻는 말이면 PROGRAM_QUESTION입니다.
+  특정 공고 내용을 묻는 말이면 PROGRAM_QUESTION입니다. 다만 공고를 가리키는 말("이 공고", "이 사업", 공고 이름)이 없고
+  context.programSelected도 false이면 어느 공고인지 알 수 없으므로 PROGRAM_QUESTION이 아닙니다. 신청 문서·사업계획서 초안을
+  GovBiz에서 어떻게 만드는지처럼 공고가 아니라 GovBiz 기능의 사용법을 묻는 말은 PRODUCT_HELP입니다.
 - OUT_OF_SCOPE: GovBiz가 하지 않는 일입니다. 예: 세무·법률 대행, 투자 유치 방법, 선정 확률 예측, 제도 일반 상식,
   대리 신청, 일상 잡담. answer만 채웁니다. answer는 그 일은 여기서 할 수 없다고 한 문장으로 말하고, GovBiz에서
   할 수 있는 가장 가까운 일(지원사업 검색, 관심 공고 관리, 파트너 모집, 중복 검토, 신청 문서 준비 중

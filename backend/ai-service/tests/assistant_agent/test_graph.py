@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from app.assistant_agent.errors import AssistantAgentError, AssistantAgentTimeoutError
 from app.assistant_agent.graph import build_assistant_agent_graph
 from app.assistant_agent.models import SCHEMA_VERSION, AssistantAgentRequest
+from app.assistant_agent.nodes.classify import classification_schema
 from app.assistant_agent.nodes.verify import NO_COMPANY_ANSWER, TOOL_FAILURE_ANSWER
 from app.assistant_agent.service import AssistantAgentService
 from app.assistant_agent.tools import CoreToolClient
@@ -268,6 +269,17 @@ async def test_classification_citing_an_unknown_help_entry_is_an_error(request_d
     harness = Harness(classify=[{**empty_classification, "intent": "PRODUCT_HELP", "answer": "답", "citations": ["private-entry"]}], agent=[])
     with pytest.raises(AssistantAgentError):
         await harness.run(request_data)
+
+
+def test_classification_schema_only_offers_the_request_help_entry_ids_as_citations(request_data):
+    request = AssistantAgentRequest.model_validate(request_data)
+    help_ids = tuple(entry.id for entry in request.help_entries)
+
+    citations = classification_schema(help_ids).model_json_schema()["properties"]["citations"]
+
+    # 모델이 받는 구조화 출력 스키마 자체가 요청의 도움말 id만 고르게 해, 화면 경로를 닮은 id를 지어내지 못한다.
+    assert citations["items"]["enum"] == list(help_ids)
+    assert citations["maxItems"] == 3
 
 
 @pytest.mark.anyio

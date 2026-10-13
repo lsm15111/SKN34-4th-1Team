@@ -1,3 +1,4 @@
+import { pricingPlans, pricingUnlimitedNote } from '@govbiz/shared/design/pricingContent'
 import { describe, expect, it } from 'vitest'
 
 import { appPaths, publicPaths } from '../routes/appPaths'
@@ -42,6 +43,15 @@ describe('도움말 항목', () => {
       for (const route of entry.routes) expect(knownPaths.has(route), `${entry.id}의 route ${route}`).toBe(true)
       if (entry.action !== null) expect(knownPaths.has(pathOf(entry.action.to)), `${entry.id}의 action ${entry.action.to}`).toBe(true)
     }
+  })
+
+  it('요금제 도움말은 요금제 화면과 같은 횟수·가격을 쓴다', () => {
+    const text = findHelpEntry('pricing-plans')?.body.join(' ') ?? ''
+    for (const plan of pricingPlans) {
+      expect(text, plan.id).toContain(plan.price === '0원' ? plan.name : `${plan.name} 요금제는 ${plan.price}`)
+      for (const limit of plan.limits) expect(text, `${plan.id} ${limit}`).toContain(limit)
+    }
+    expect(text).toContain(pricingUnlimitedNote)
   })
 
 })

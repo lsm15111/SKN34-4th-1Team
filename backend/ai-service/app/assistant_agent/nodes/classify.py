@@ -1,11 +1,30 @@
+from functools import lru_cache
+from typing import Literal
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import Field, create_model
 
+from app.assistant.models import MAX_CITATIONS
 from app.assistant_agent.errors import AssistantAgentError
 from app.assistant_agent.models import TOOL_INTENTS, AssistantClassification
 from app.assistant_agent.nodes.common import request_payload, structured_call
 from app.assistant_agent.prompts import CLASSIFY_INSTRUCTIONS
 from app.assistant_agent.state import AgentState
+
+
+@lru_cache(maxsize=8)
+def classification_schema(help_ids: tuple[str, ...]) -> type[AssistantClassification]:
+    """인용을 이번 요청의 도움말 id로만 고를 수 있게 한 분류 출력 스키마.
+
+    싼 분류 모델이 `application-preparations`처럼 화면 경로를 닮은 id를 지어내 답 전체가 오류가 되는 일을 막는다.
+    도움말 묶음은 배포마다 거의 같아 만든 스키마를 다시 쓴다.
+    """
+    return create_model(
+        "AssistantClassification",
+        __base__=AssistantClassification,
+        citations=(list[Literal[help_ids]], Field(max_length=MAX_CITATIONS)),
+    )
 
 
 async def classify(state: AgentState, *, model: BaseChatModel) -> dict:
@@ -17,7 +36,8 @@ async def classify(state: AgentState, *, model: BaseChatModel) -> dict:
             request, "classify", helpEntries=[entry.model_dump(by_alias=True) for entry in request.help_entries],
         )),
     ]
-    parsed, counts = await structured_call(model, AssistantClassification, messages)
+    schema = classification_schema(tuple(entry.id for entry in request.help_entries))
+    parsed, counts = await structured_call(model, schema, messages)
     if parsed is None:
         raise AssistantAgentError("classification did not match the schema")
     classification = AssistantClassification.model_validate(parsed.model_dump(by_alias=True))
