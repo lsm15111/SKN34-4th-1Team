@@ -662,28 +662,30 @@ AI가 제안한 조건을 사용자가 확인하면, 키워드·의미 검색으
   <tr>
     <td align="center" valign="top" width="50%">
       <strong>① 질문 입력</strong><br>
-      <a href="docs/assets/screenshots/ai-search/01-new-question.jpg"><img src="docs/assets/screenshots/ai-search/01-new-question.jpg" alt="AI 대화 검색에 새 질문을 입력한 화면" width="320"></a><br>
+      <a href="docs/assets/screenshots/ai-search/01-new-question.gif"><img src="docs/assets/screenshots/ai-search/01-new-question.gif" alt="관리자 Gov 에이전트 입력창에 회사 조건과 필요한 지원을 입력하는 과정" width="320"></a><br>
       회사 조건과 필요한 지원을 입력합니다.
     </td>
     <td align="center" valign="top" width="50%">
       <strong>② 조건 확인</strong><br>
-      <a href="docs/assets/screenshots/ai-search/02-confirm-conditions.jpg"><img src="docs/assets/screenshots/ai-search/02-confirm-conditions.jpg" alt="AI가 제안한 조건과 이 조건으로 검색 버튼" width="320"></a><br>
+      <a href="docs/assets/screenshots/ai-search/02-confirm-conditions.gif"><img src="docs/assets/screenshots/ai-search/02-confirm-conditions.gif" alt="질문을 보내면 Gov 에이전트가 조건을 해석해 제안 카드를 보여 주고, 검색 조건 자세히를 펼쳐 검색어·접수 상태·소재지·업종·설립연도를 확인하는 과정" width="320"></a><br>
       제안된 조건을 확인하고 검색합니다.
     </td>
   </tr>
   <tr>
     <td align="center" valign="top" width="50%">
       <strong>③ 추천 결과</strong><br>
-      <a href="docs/assets/screenshots/ai-search/03-new-recommendations.jpg"><img src="docs/assets/screenshots/ai-search/03-new-recommendations.jpg" alt="새 검색으로 나온 추천 공고와 조건 검토 결과" width="320"></a><br>
+      <a href="docs/assets/screenshots/ai-search/03-new-recommendations.gif"><img src="docs/assets/screenshots/ai-search/03-new-recommendations.gif" alt="이 조건으로 검색을 누른 뒤 검색 중 표시와 추천 공고·조건 검토 결과, 이 공고로 작업·이 공고에 질문하기·상세 조건 보기 버튼이 나오는 과정" width="320"></a><br>
       추천 공고와 확인 필요 사항을 봅니다.
     </td>
     <td align="center" valign="top" width="50%">
-      <strong>④ 원문 근거 확인</strong><br>
-      <a href="docs/assets/screenshots/ai-search/04-source-evidence.jpg"><img src="docs/assets/screenshots/ai-search/04-source-evidence.jpg" alt="추천 공고의 원문 근거를 펼친 화면" width="320"></a><br>
-      인용 근거를 펼치고 공식 공고를 확인합니다.
+      <strong>④ 원문 근거·공고 선택</strong><br>
+      <a href="docs/assets/screenshots/ai-search/04-source-evidence.gif"><img src="docs/assets/screenshots/ai-search/04-source-evidence.gif" alt="추천 공고의 원문 근거를 펼쳐 인용 구절을 확인하고, 이 공고로 작업을 눌러 선택한 공고와 신청 문서 쓰기·중복 검토·파트너 찾기 칩을 띄우는 과정" width="320"></a><br>
+      근거를 확인하고 이어서 작업할 공고를 고릅니다.
     </td>
   </tr>
 </table>
+
+화면은 관리자 **Gov 에이전트**에서 진행한 같은 검색 흐름입니다. 일반 회원의 AI 대화 검색에는 [이 공고로 작업]과 작업 칩이 없습니다.
 
 <img src="docs/assets/readme/search-candidates-caption.svg" alt="검색 대상 준비·후보 검색 — 번호는 사용자가 조건을 확정한 뒤 core-service가 조회·검색을 요청하는 순서입니다." width="820">
 
