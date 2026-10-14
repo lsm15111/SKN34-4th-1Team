@@ -268,6 +268,9 @@ transaction에서 `WithdrawalMarkService.inherit → PlanUsageService.inherit`�
 정기 생성은 `V23`의 `daily_report_generation_job`에 리포트·예산과 함께 예약한 뒤 RabbitMQ로 전달합니다.
 `DailyReportOutboxScheduler → DailyReportQueueClient → RabbitMQ → DailyReportGenerationConsumer → DailyReportService`이며,
 Core 내부 소비자 1개가 기존 AI 경로를 재사용합니다. 웹 미리보기는 기존 동기 계약을 유지합니다.
+생성 실패는 저장 안내 문구는 같게 두고, 로그 `daily_report_generation_failed`에 `path`(preview·queued)·`report_id`·`job_id`·
+`stage`(eligibility·admission·readiness·search·analyze·content·save)·`error`(오류 코드·`AI_`실패 종류·`DATABASE`·예외 종류)·`root_cause`·`elapsed_ms`를
+남깁니다. 예외 메시지는 기업 조건이 섞일 수 있어 남기지 않습니다. 리포트가 부른 검색은 `support_program_search trace_id=… caller=daily_report:{id}`로 trace와 이어 봅니다.
 정기 예약은 `dailyReportTaskScheduler`의 전용 단일 스레드에서 시작 1분 후, 이전 실행 완료 후 5분 간격으로 수행합니다.
 공고 수집용 기본 스케줄러와 분리하며 `DAILY_REPORT_ENABLED=false`이면 예약 스케줄러 Bean도 생성하지 않습니다.
 V27부터 발송 큐를 켜면 `DailyReportScheduler → Repository`가 기존 리포트 행에 발송 대기를 저장하고,

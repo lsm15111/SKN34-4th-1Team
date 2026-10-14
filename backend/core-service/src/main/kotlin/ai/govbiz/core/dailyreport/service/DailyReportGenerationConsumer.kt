@@ -25,8 +25,8 @@ class DailyReportGenerationConsumer(private val reports: DailyReportService) {
             log.warn("Invalid daily report job message rejected")
             return
         }
-        val completed = try { reports.generateQueued(id) } catch (_: Exception) {
-            log.warn("Daily report processing outcome unconfirmed; jobId={}", id)
+        val completed = try { reports.generateQueued(id) } catch (error: Exception) {
+            log.warn("Daily report processing outcome unconfirmed; jobId={} error={}", id, error.javaClass.simpleName)
             false
         }
         // ACK 전 연결이 끊겨도 재전달된 작업은 DB 상태로 중복 실행을 막는다.

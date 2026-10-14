@@ -20,7 +20,15 @@ import ai.govbiz.core.supportprogram.service.dto.*
 import ai.govbiz.core.supportprogram.service.evidence.SupportProgramEvidenceService
 import ai.govbiz.core.supportprogram.service.readiness.SupportProgramSearchReadinessService
 import ai.govbiz.core.supportprogram.service.search.SupportProgramSearchService
+import ai.govbiz.core._common.exception.AiServiceCallException
+import ai.govbiz.core.supportprogram.helper.SupportProgramSearchTracingHelper
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import java.time.LocalDate
+import org.slf4j.LoggerFactory
+import org.slf4j.MDC
+import org.springframework.dao.DataAccessResourceFailureException
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -107,6 +115,52 @@ class DailyReportServiceTest {
         verify(repository).fail(report)
         verify(repository, never()).succeed(anyValue(), anyValue())
         verifyNoInteractions(evidence, mail)
+    }
+
+    @Test
+    fun generationFailureLogsStageKindAndElapsedWithoutTheExceptionMessage() {
+        prepareGeneration()
+        val logs = captureLogs()
+        doThrow(AiServiceCallException.timeout(IllegalStateException("서울 AI 정보통신업 수출"))).`when`(search).search(anyString(), eq(true), anyValue())
+        service.preview(account)
+        verify(repository).fail(report)
+        val line = logs.list.single { it.formattedMessage.startsWith("daily_report_generation_failed") }.formattedMessage
+        listOf("path=preview", "report_id=1", "job_id=-", "stage=search", "error=AI_TIMEOUT", "root_cause=IllegalStateException", "elapsed_ms=")
+            .forEach { assertTrue(it in line, "$it in $line") }
+        assertFalse("서울 AI" in line)
+    }
+
+    @Test
+    fun queuedSaveFailureIsLoggedAsTheSaveStageAndStillClosesTheJob() {
+        prepareGeneration()
+        val logs = captureLogs()
+        doReturn(account).`when`(accounts).findById(account.id)
+        doReturn(report).`when`(repository).claimGenerationJob(7)
+        doReturn(true).`when`(push).hasSubscriber(account.id)
+        doReturn(SupportProgramSearchResult("q", emptyList())).`when`(search).search(anyString(), eq(true), anyValue())
+        doThrow(DataAccessResourceFailureException("connection reset")).doNothing()
+            .`when`(repository).finishGenerationJob(eq(7L), equalValue(report), anyValue(), eq(false))
+        assertTrue(service.generateQueued(7))
+        verify(repository, times(2)).finishGenerationJob(eq(7L), equalValue(report), anyValue(), eq(false))
+        val line = logs.list.single { it.formattedMessage.startsWith("daily_report_generation_failed") }.formattedMessage
+        listOf("path=queued", "report_id=1", "job_id=7", "stage=save", "error=DATABASE").forEach { assertTrue(it in line, "$it in $line") }
+    }
+
+    @Test
+    fun searchRunsWithTheReportAsCallerAndTheMarkerIsClearedAfterwards() {
+        prepareGeneration()
+        var caller: String? = null
+        doAnswer { caller = MDC.get(SupportProgramSearchTracingHelper.CALLER_MDC_KEY); SupportProgramSearchResult("q", emptyList()) }
+            .`when`(search).search(anyString(), eq(true), anyValue())
+        service.preview(account)
+        assertEquals("daily_report:1", caller)
+        assertNull(MDC.get(SupportProgramSearchTracingHelper.CALLER_MDC_KEY))
+    }
+
+    private fun captureLogs(): ListAppender<ILoggingEvent> {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        (LoggerFactory.getLogger(DailyReportService::class.java) as Logger).addAppender(appender)
+        return appender
     }
 
     @Test

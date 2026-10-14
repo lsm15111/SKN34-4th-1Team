@@ -23,6 +23,10 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.util.concurrent.atomic.AtomicBoolean
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
+import org.springframework.dao.DataAccessException
+import ai.govbiz.core._common.exception.AiServiceCallException
+import ai.govbiz.core.supportprogram.helper.SupportProgramSearchTracingHelper
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 import ai.govbiz.core.aiusage.domain.AiUsageFeature
@@ -81,11 +85,14 @@ class DailyReportService(
             val reservation = repository.reserve(account.id, date, input, properties.maxReportsPerDay)
             val report = reservation.report
             if (!reservation.acquired) return report
+            val progress = GenerationProgress("search")
             try {
-                repository.succeed(report, generateContent(report, ready))
-            } catch (_: Exception) {
+                val content = generateContent(report, ready, progress)
+                progress.stage = "save"
+                repository.succeed(report, content)
+            } catch (error: Exception) {
                 repository.fail(report)
-                log.warn("Daily report generation failed; reportId={}", report.id)
+                logFailure("preview", report.id, null, progress, error)
             }
             return requireNotNull(repository.forDay(account.id, date))
         } finally {
@@ -98,6 +105,7 @@ class DailyReportService(
         if (!generating.compareAndSet(false, true)) return false
         try {
             val report = repository.claimGenerationJob(jobId) ?: return true
+            val progress = GenerationProgress("eligibility")
             try {
                 val account = accounts.findById(report.accountId)
                 val subscription = repository.subscription(report.accountId)
@@ -109,27 +117,37 @@ class DailyReportService(
                     repository.finishGenerationJob(jobId, report, null, skipped = true)
                     return true
                 }
+                progress.stage = "admission"
                 val content = admission.execute("daily-report:${report.accountId}") {
+                    progress.stage = "readiness"
                     val ready = readiness.get()
                     if (!ready.indexReady) throw DailyReportException(DailyReportErrorCode.SEARCH_NOT_READY)
-                    AiUsageContextHelper.attribute(report.accountId, AiUsageFeature.DAILY_REPORT) { generateContent(report, ready) }
+                    AiUsageContextHelper.attribute(report.accountId, AiUsageFeature.DAILY_REPORT) { generateContent(report, ready, progress) }
                 }
+                progress.stage = "save"
                 repository.finishGenerationJob(jobId, report, content)
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 repository.finishGenerationJob(jobId, report, null)
-                log.warn("Queued daily report generation failed; jobId={}", jobId)
+                logFailure("queued", report.id, jobId, progress, error)
             }
             return true
         } finally { generating.set(false) }
     }
 
-    private fun generateContent(report: DailyReport, ready: SupportProgramSearchReadinessResult): DailyReportContent {
+    private fun generateContent(report: DailyReport, ready: SupportProgramSearchReadinessResult, progress: GenerationProgress): DailyReportContent {
         // 재시도도 첫 생성 때 고정한 조건을 사용한다. 정확한 설립일은 보유하지 않아 전송하지 않는다.
         val conditions = SupportProgramCompanyConditions(region = report.input.region, industry = report.input.industry,
             supportPurpose = report.input.supportPurpose.takeIf(String::isNotBlank))
         val query = listOf(report.input.region, report.input.industry, report.input.supportPurpose, "지원사업")
             .filter(String::isNotBlank).joinToString(" ")
-        val programs = search.search(query, true, conditions).programs.take(properties.maxPrograms).map(::analyze)
+        progress.stage = "search"
+        // 검색 trace 로그 줄에 리포트 ID를 함께 남겨 실패한 리포트와 검색 trace를 이어 볼 수 있게 합니다.
+        val found = MDC.putCloseable(SupportProgramSearchTracingHelper.CALLER_MDC_KEY, "daily_report:${report.id}").use {
+            search.search(query, true, conditions)
+        }
+        progress.stage = "analyze"
+        val programs = found.programs.take(properties.maxPrograms).map(::analyze)
+        progress.stage = "content"
         val warnings = buildList {
             add("관련도 점수는 검색 조건과 공고의 관련성입니다. 선정확률이나 신청 자격 확정이 아닙니다.")
             add("정확한 설립일·매출·인력·제외 요건은 확인하지 않았습니다. 첨부 PDF·HWP와 제출서류 전체는 직접 확인해 주세요.")
@@ -216,5 +234,29 @@ class DailyReportService(
             item.citations.forEach { appendLine("근거: ${it.excerpt}\n출처: ${it.sourceUrl}") }
             appendLine("공식 공고: ${item.sourceUrl}")
         }
+    }
+    /**
+     * 실패를 단계·오류 종류·걸린 시간으로 남깁니다. 같은 안내 문구로 저장되는 실패를 로그에서는 구별하기 위한 것이며,
+     * 예외 메시지에는 기업 조건·질문이 섞일 수 있어 남기지 않고 종류만 남깁니다.
+     */
+    private fun logFailure(path: String, reportId: Long, jobId: Long?, progress: GenerationProgress, error: Exception) {
+        val root = generateSequence<Throwable>(error) { it.cause }.last()
+        log.warn(
+            "daily_report_generation_failed path={} report_id={} job_id={} stage={} error={} root_cause={} elapsed_ms={}",
+            path, reportId, jobId ?: "-", progress.stage, failureKind(error), root.javaClass.simpleName, progress.elapsedMs(),
+        )
+    }
+
+    private fun failureKind(error: Throwable): String = when (error) {
+        is DailyReportException -> error.code.name
+        is AiServiceCallException -> "AI_${error.failure.name}"
+        is DataAccessException -> "DATABASE"
+        else -> error.javaClass.simpleName
+    }
+
+    /** 생성 중 지금 어느 단계에 있는지입니다. 실패하면 마지막으로 들어간 단계를 실패 위치로 씁니다. */
+    private class GenerationProgress(var stage: String) {
+        private val startedAt = System.nanoTime()
+        fun elapsedMs(): Long = (System.nanoTime() - startedAt) / 1_000_000
     }
 }

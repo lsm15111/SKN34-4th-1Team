@@ -9,6 +9,7 @@ import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.context.Context
 import io.opentelemetry.context.ContextKey
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 
 /** 검색 단계의 본문 없는 span과 내부 AI HTTP 요청의 부모 문맥만 관리한다. */
 class SupportProgramSearchTracingHelper(
@@ -36,7 +37,8 @@ class SupportProgramSearchTracingHelper(
             throw error
         } finally {
             if (stage == "total" && span.isRecording) {
-                logger.info("support_program_search trace_id={}", span.spanContext.traceId)
+                // 다른 기능이 부른 검색이면 부른 쪽 식별자(예: daily_report:12)를 같은 줄에 남깁니다.
+                logger.info("support_program_search trace_id={} caller={}", span.spanContext.traceId, MDC.get(CALLER_MDC_KEY) ?: "-")
             }
             scope.close()
             span.end()
@@ -53,6 +55,8 @@ class SupportProgramSearchTracingHelper(
 
     companion object {
         private val SEARCH_CONTEXT = ContextKey.named<Boolean>("govbiz-search")
+        /** 검색을 부른 기능이 MDC에 넣는 식별자 키입니다. 검색 trace 로그에 함께 찍힙니다. */
+        const val CALLER_MDC_KEY = "search_caller"
         private val logger = LoggerFactory.getLogger(SupportProgramSearchTracingHelper::class.java)
 
         fun currentTraceParent(): String? {
