@@ -34,7 +34,7 @@ AI 프로젝트는 `>=3.12,<3.13`으로 제한하며 `.python-version`과 `uv.lo
 | Langfuse 추적 | Core→AI 검색의 단계·캐시·선택·임베딩/랭킹 사용량과 근거 답변 HTTP/평가 실행기의 모델·지연·오류 연결. 본문 수집 제외 |
 | 평가 파이프라인 | Prefect → pandas/Pandera 검증 → 지표 재계산 → Evidently 보고서·Langfuse 점수 등록 및 재조회 |
 | 과거 응답 비교 | 저장된 가상 6건 재현, 과거 두 실행의 공통 E01 비교, 모델·프롬프트·지표 차이와 미측정 값 표시 |
-| 운영 화면·인증 | React `/ops/evaluations`, Django API, 기존 Core 관리자 로그인·공유 로그아웃, CSRF·일반 회원 접근 차단 |
+| 운영 화면·인증 | React `/ops/*`(진입 `/ops/dashboard`), Django API, 기존 Core 관리자 로그인·공유 로그아웃, CSRF·일반 회원 접근 차단 |
 | 실행·결과 관리 | 요청 UUID 중복 방지, 백그라운드 상태 확인, 목록 자동 갱신·확인 지연 표시, 파일 해시 검증, 인증된 보고서·외부 기록 링크 |
 | 새 모델 평가 | 자료·모델·호출 수·출력 토큰 예산 확인 후 새 응답 생성, 중복 유료 실행 차단, 실패 시 부분 캡처·호출 시도 수 보존 |
 | GPT-6 Luna 실제 호출 | 환경변수 반영 후 E01 한 건을 실제 1회 호출. 토큰·trace·점수·보고서 확인. 전체 품질 평가로 해석하지 않음 |
@@ -707,8 +707,8 @@ search.total (Core가 생성한 trace ID)
   `usage_reported=false`는 사용량을 확인하지 못했다는 뜻이며 비용 0으로 해석하지 않는다.
 - 랭킹 캐시는 `miss/shared/hit`를 구분한다. 공유 요청에는 `shared_source_trace_id`를 남기고 모델 span은
   호출 소유자에게 한 번만 만든다. 임베딩 캐시도 `miss/coalesced/hit`를 구분한다.
-- Core 로그의 `trace_id`로 찾거나 React `/ops/evaluations`의 **AI 실행 추적 ↗**에서 Langfuse로 이동한다.
-  목록에서 `support-program-search`로 필터한다. 이 링크는 관리자에게 제공되며 Langfuse 자체 로그인이 필요하다.
+- Core 로그의 `trace_id`로 찾거나 React LLMOps 작업 메뉴의 **AI 실행 추적**(`/ops/traces`)에서 조회한다.
+  목록에서 `support-program-search`로 필터한다. 기존 관리자 세션으로 조회하며 Langfuse 자체 로그인은 필요하지 않다.
   평가 실행 상세의 점수 링크와는 용도가 다르며, 개별 검색의 trace ID를 React 공개 응답에 추가하지 않는다.
 - 범위는 일반 지원사업 검색과 기존 근거 답변이다. 색인 배치 전체, 상세 근거 RAG의 검색/생성 전체 연결,
   LangGraph 노드·도구 호출 전체 추적과 사람 검토 검색 품질 측정은 이번 구현에 포함하지 않는다.

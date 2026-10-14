@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { createEvaluationSchedule, getEvaluationSchedules, getLiveReadiness, OpsApiError, pauseEvaluationSchedule } from '../../../data/ops/opsApi'
 import type { EvaluationSchedule, LiveReadiness, EvaluationCatalog, ScheduleInput, SchedulesPage } from '../../../data/ops/opsApi'
 import { workspacePageStyles as styles } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime } from './opsFormat'
 import { ScheduleRuntimeCheck } from './ScheduleRuntimeCheck'
 
 const field = 'min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm'
@@ -177,7 +178,7 @@ export function EvaluationSchedulesPanel({ owner, datasets, onExpired, refreshKe
           <p>설정·예산 점검: {!selected ? '조회할 자료 없음' : readinessError ? '조회 실패' : !readiness ? '조회 중' : readiness.state === 'checked' ? '조회 완료' : '조회 완료 · 부족 조건 있음'}</p>
           {readinessError && <p role="alert">{readinessError} 정기 계획 새로고침으로 다시 확인하세요.</p>}
           {readiness && <>
-            <p className="text-xs text-ink-muted">조회 시각: {new Date(readiness.as_of).toLocaleString('ko-KR')} · 아래 잔여량은 조회 시점 기준입니다.</p>
+            <p className="text-xs text-ink-muted">조회 시각: {seoulDateTime(readiness.as_of)} (서울) · 아래 잔여량은 조회 시점 기준입니다.</p>
             <div className="overflow-x-auto"><table className="w-full min-w-[32rem] text-left text-xs [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2 [&_tbody_tr]:border-t [&_tbody_tr]:border-line">
               <caption className="sr-only">회당 최대량과 누적·일별 예산</caption>
               <thead><tr><th scope="col">항목</th><th scope="col">회당 최대량</th><th scope="col">누적 잔여</th><th scope="col">일별 한도</th><th scope="col">오늘 일별 잔여 · 서울</th></tr></thead>

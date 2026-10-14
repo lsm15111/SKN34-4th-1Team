@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { applyLegacyUsage, getLegacyUsagePreview, getUnaccountedRuns, OpsApiError, type LegacyUsageInput, type LegacyUsagePreview, type UnaccountedRuns } from '../../../data/ops/opsApi'
 import { workspacePageStyles as styles } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime } from './opsFormat'
 
-const date = (value: string) => new Date(value).toLocaleString('ko-KR')
+const date = (value: string) => `${seoulDateTime(value)} (서울)`
 const amounts = (value: { calls: number; input_tokens: number; output_tokens: number }) =>
   `${value.calls.toLocaleString('ko-KR')}회 · 입력 ${value.input_tokens.toLocaleString('ko-KR')} / 출력 ${value.output_tokens.toLocaleString('ko-KR')}토큰`
 

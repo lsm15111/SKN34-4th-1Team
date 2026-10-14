@@ -76,13 +76,13 @@ export async function checkRestoreBrowser(origin, responses, expected, reports, 
     assert.equal(await page.title(), 'GovBiz · 평가 이력')
     const menu = page.getByRole('navigation', { name: 'LLMOps 작업 메뉴' })
     onStage('BUDGET')
-    await menu.getByRole('link', { name: '예산 관리', exact: true }).click()
-    await page.getByRole('heading', { name: '예산 관리', exact: true }).waitFor()
+    await menu.getByRole('link', { name: '평가 예산', exact: true }).click()
+    await page.getByRole('heading', { name: '평가 예산', exact: true }).waitFor()
     assert.equal(new URL(page.url()).pathname, '/ops/budget')
     await page.locator('#evaluation-budget').getByText('조회 시각:', { exact: false }).waitFor()
     assert.equal(await page.getByRole('alert').count(), 0, 'Management view contains an error')
     assert.equal(await history.count(), 0, 'List must not remain on the budget page')
-    assert.equal(await page.title(), 'GovBiz · 예산 관리')
+    assert.equal(await page.title(), 'GovBiz · 평가 예산')
     onStage('SCHEDULES')
     await menu.getByRole('link', { name: '정기 실행', exact: true }).click()
     await page.getByRole('heading', { name: '정기 실행', exact: true }).waitFor()
@@ -111,7 +111,7 @@ export async function checkRestoreBrowser(origin, responses, expected, reports, 
       }
       await history.locator(`a[href="/ops/evaluations/${id}"]`).click()
       await page.getByRole('heading', { name: '평가 실행 상세', exact: true }).waitFor()
-      await page.locator('summary').getByText('실행 정보·버전 자세히 보기', { exact: true }).click()
+      await page.locator('summary').getByText('실행 정보·예산·기록 자세히', { exact: true }).click()
       await page.locator('dd').getByText(id, { exact: true }).waitFor()
       await page.locator('dd').getByText(expected[id].execution_spec_sha256, { exact: true }).waitFor()
       await page.getByRole('region', { name: '실행 예산 장부' }).getByText('새 모델 호출을 예약하는 실행이 아닙니다.', { exact: false }).waitFor()
@@ -124,7 +124,7 @@ export async function checkRestoreBrowser(origin, responses, expected, reports, 
         await checkRagMaterial(page, responses[route])
       }
       assert.equal(await page.getByRole('alert').count(), 0, 'Detail view contains an error')
-      const link = page.getByRole('link', { name: 'Evidently 보고서', exact: true })
+      const link = page.getByRole('link', { name: '평가 상세 보고서', exact: true })
       onStage('REPORT')
       const viewPath = `/ops/evaluations/${id}/report`
       assert.equal(await link.getAttribute('href'), viewPath)
@@ -132,7 +132,7 @@ export async function checkRestoreBrowser(origin, responses, expected, reports, 
       assert.deepEqual((await link.getAttribute('rel')).split(' ').sort(), ['noopener', 'noreferrer'])
       const [view] = await Promise.all([context.waitForEvent('page'), link.click()])
       try {
-        await view.getByRole('heading', { name: 'Evidently 평가 보고서', exact: true }).waitFor()
+        await view.getByRole('heading', { name: '평가 상세 보고서', exact: true }).waitFor()
         await view.getByRole('region', { name: '평가 대상' }).getByText(`실행 ID: ${id}`, { exact: true }).waitFor()
         assert.equal(view.url(), origin + viewPath)
         assert.equal(await view.evaluate(() => window.opener === null), true)
@@ -178,7 +178,7 @@ export async function checkRestoreBrowser(origin, responses, expected, reports, 
     await page.getByRole('alert').getByText('관리자 계정만 운영 화면을 이용할 수 있습니다.', { exact: false }).waitFor()
     await page.getByRole('button', { name: '연결 다시 확인' }).waitFor()
     assert.equal(await page.getByRole('region', { name: '평가 실행 이력' }).count(), 0)
-    assert.equal(await page.getByRole('link', { name: 'Evidently 보고서', exact: true }).count(), 0)
+    assert.equal(await page.getByRole('link', { name: '평가 상세 보고서', exact: true }).count(), 0)
     for (const id of ids) {
       await page.goto(origin + `/ops/evaluations/${id}/report`, { waitUntil: 'domcontentloaded' })
       await page.getByRole('alert').getByText('관리자 계정만 운영 화면을 이용할 수 있습니다.', { exact: false }).waitFor()

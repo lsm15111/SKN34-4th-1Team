@@ -95,7 +95,7 @@ export function EvaluationReport({ onExpired }: { onExpired: () => void }) {
   const comparison = run?.status === 'COMPLETED' ? run.comparison : null
   const detailPath = `/ops/evaluations/${runId}`
   return <>
-    <WorkspacePageHeader title="Evidently 평가 보고서" parent={{ to: detailPath, label: '평가 상세' }}
+    <WorkspacePageHeader title="평가 상세 보고서" parent={{ to: detailPath, label: '평가 상세' }}
       actions={<button className={styles.secondaryButton} onClick={() => setReload((value) => value + 1)}>보고서 새로고침</button>} />
     <div className={styles.content}>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -160,8 +160,8 @@ export function EvaluationReport({ onExpired }: { onExpired: () => void }) {
             <Link className={styles.quietLink} to={detailPath}>평가 상세에서 원문·검토 상태 확인 →</Link>
           </section>
         </> : <p role="status">{run.status !== 'COMPLETED' ? '아직 완료된 평가 보고서가 없습니다.' : '이 실행에는 지표 해설에 필요한 비교 기록이 없습니다. 제공되는 원본 보고서에서 확인해 주세요.'}</p>}
-        {run.status === 'COMPLETED' && run.report_url && <section className={styles.card} aria-label="Evidently 원본 차트">
-          <h2 className={styles.cardTitle}>Evidently 원본 차트</h2>
+        {run.status === 'COMPLETED' && run.report_url && <section className={styles.card} aria-label="원본 차트">
+          <h2 className={styles.cardTitle}>원본 차트 <span className="text-xs font-normal text-ink-muted">Evidently</span></h2>
           <p className="text-sm">Current는 후보, Reference는 비교 대상이며 Row count는 평가 사례 수입니다. Mean은 해당 지표의 평균입니다.</p>
           {comparison?.schema_version === 3 && <p className="text-sm">failed의 0은 실패 없음, 1은 실행 실패입니다. Mean이 0이면 실패율 0%이며 답변 정확도 100%를 뜻하지 않습니다. 양쪽 모두 측정값이 있는 지표만 담긴 원본에는 일부 점수 차트가 없을 수 있습니다. 위 해설에서는 후보만 측정된 점수도 표시합니다.</p>}
           <div><a className={styles.secondaryButton} href={run.report_url} target="_blank" rel="noopener noreferrer">원본 차트 새 탭에서 보기 ↗</a></div>

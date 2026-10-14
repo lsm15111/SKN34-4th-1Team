@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AdminAiModelPrice } from '@govbiz/shared/domain/entities/AdminAiCost'
+import { appContainer } from '../../../app/appContainer'
+import { resetAiModelPricesForTest } from './opsFormat'
 import { TraceDetailPage, TraceListPage } from './TracePages'
 
 const from = '2026-10-07T00:00:00Z'
@@ -31,6 +34,15 @@ function mount(url = '/ops/traces', onExpired = vi.fn()) {
     <Route path="/ops/traces/:traceId" element={<TraceDetailPage onExpired={onExpired} />} />
   </Routes></MemoryRouter>)
 }
+const lunaPrice: AdminAiModelPrice = {
+  id: 1, modelPrefix: 'gpt-6-luna', serviceTier: 'default', inputUsdPerMillion: '0.1', cachedInputUsdPerMillion: null,
+  cacheWriteInputUsdPerMillion: null, cacheWrite12hInputUsdPerMillion: null, outputUsdPerMillion: '0.5', effectiveFrom: '2026-01-01', note: null,
+}
+let prices: ReturnType<typeof vi.spyOn>
+beforeEach(() => {
+  resetAiModelPricesForTest()
+  prices = vi.spyOn(appContainer.resolve('getAdminAiModelPricesUseCase'), 'execute').mockResolvedValue([lunaPrice])
+})
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('관리자 AI 실행 추적', () => {
@@ -101,6 +113,26 @@ describe('관리자 AI 실행 추적', () => {
     await screen.findByRole('link', { name: '공고 검색 · root-001' })
     const query = new URL(fetch.mock.calls.at(-1)![0], 'https://govbiz.test').searchParams
     expect(Object.fromEntries(query)).toEqual({ name: 'support-program-search', from_time: from, to_time: to, cursor: 'list-2' })
+  })
+
+  it('비용이 기록되지 않은 모델 호출은 Core 가격표로 추정 비용을 따로 보이고 기록된 비용을 대신하지 않는다', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(detail)))
+    mount(`/ops/traces/${traceId}`)
+    const stages = await screen.findByRole('region', { name: '실행 단계' })
+    const estimate = await within(stages).findByText('추정 비용 (GovBiz 가격표)')
+    expect(estimate.nextElementSibling?.textContent).toBe('$0.000033')
+    expect(within(stages).getAllByText('추정 비용 (GovBiz 가격표)')).toHaveLength(1)
+    expect(prices).toHaveBeenCalledOnce()
+  })
+
+  it('가격표를 읽지 못하면 추정 비용을 0원으로 채우지 않는다', async () => {
+    prices.mockRejectedValue(new Error('denied'))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(detail)))
+    mount(`/ops/traces/${traceId}`)
+    await screen.findByRole('region', { name: '실행 단계' })
+    await waitFor(() => expect(prices).toHaveBeenCalledOnce())
+    expect(screen.queryByText('추정 비용 (GovBiz 가격표)')).toBeNull()
+    expect(screen.queryByText(/^\$/)).toBeNull()
   })
 
   it('상세 페이지 이동은 별도 커서를 사용하고 목록의 커서를 보존한다', async () => {

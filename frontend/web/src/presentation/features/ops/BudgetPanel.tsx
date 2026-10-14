@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { getBudgetReservations, getRunBudget, OpsApiError, type BudgetBreakdown, type BudgetPage, type RunBudget } from '../../../data/ops/opsApi'
 import { workspacePageStyles as styles } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime } from './opsFormat'
 import { UnaccountedRunsPanel } from './UnaccountedRunsPanel'
 import { BudgetLimitsForm } from './BudgetLimitsForm'
 import { DailyBudgetPanel } from './DailyBudgetPanel'
 import { DailyBudgetLimitsForm } from './DailyBudgetLimitsForm'
 
-const date = (value: string) => new Date(value).toLocaleString('ko-KR')
+const date = (value: string) => `${seoulDateTime(value)} (서울)`
 const count = (value: number) => value.toLocaleString('ko-KR')
 const inputCount = (value: number | null | undefined) => value == null ? '미확인·미설정' : `${count(value)}토큰`
 const message = (error: unknown) => error instanceof Error ? error.message : '예산 장부를 불러오지 못했습니다.'

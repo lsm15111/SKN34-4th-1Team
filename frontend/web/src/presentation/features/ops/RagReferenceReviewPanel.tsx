@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { OpsApiError, saveRagReferenceReview, type RagReferenceReviewInput, type RagReviewState } from '../../../data/ops/opsApi'
 import { workspacePageStyles as styles } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime } from './opsFormat'
 
 type Decision = RagReferenceReviewInput['decision']
 const labels: Record<Decision, string> = { APPROVED: '참조 자료 승인', CHANGES_REQUESTED: '수정 필요', DEFERRED: '판단 보류', REVOKED: '승인 철회' }
@@ -44,8 +45,8 @@ export function RagReferenceReviewPanel({ runId, state, disabled, onDirty, onBus
       if (mounted.current) { setBusy(false); onBusy(false) }
     }
   }
-  return <section className="space-y-3 rounded-xl border border-line p-4" aria-label="RAG 참조 자료 검토" aria-busy={busy}>
-    <h3 className="font-semibold">원문·참조 자료 검토 · {current ? labels[current.decision] : '현재 승인 없음'}</h3>
+  return <section className="space-y-3 rounded-xl border border-line p-4" aria-label="RAG 평가 자료 검토" aria-busy={busy}>
+    <h3 className="font-semibold">2. 평가 자료 검토 · {current ? labels[current.decision] : '현재 승인 없음'}</h3>
     <p className="text-sm">{reference.rubric.description} 사례 선택에서 전체 자료를 확인하세요. 승인은 이 실행의 전체 대상에만 적용되며 다른 실행에 자동 적용되지 않습니다.</p>
     <p className="text-sm">AI 작성 출처는 유지합니다. 참조 자료 승인은 후보 답변의 품질 합격이나 비교 기준 지정과 별개입니다.</p>
     <p className="text-sm break-words">검토 대상 {reference.case_ids.length}건: {reference.case_ids.join(', ')}</p>
@@ -71,7 +72,7 @@ export function RagReferenceReviewPanel({ runId, state, disabled, onDirty, onBus
     <details><summary className="cursor-pointer font-semibold">참조 검토 이력 · {reference.history.length}건</summary>
       {reference.history.map((row) => <article key={row.id} className="my-2 rounded-lg bg-surface-muted p-3 text-sm" aria-label={`참조 검토 이력 ${row.version}`}>
         <p>#{row.version} · {labels[row.decision]} · {row.is_current ? '현재 자료의 최신 검토' : '이전 검토'}</p>
-        <p>{row.reviewed_by} · {new Date(row.created_at).toLocaleString('ko-KR')}</p>
+        <p>{row.reviewed_by} · {seoulDateTime(row.created_at)} (서울)</p>
         <p className="whitespace-pre-wrap break-words">{row.comment}</p>
         {row.revoked_review_id !== null && <p>철회 대상 기록: #{row.revoked_review_id}</p>}
         <details className="break-all text-xs"><summary>참조 검토 당시 자료 정보</summary>

@@ -642,7 +642,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: RequestIn
   const admissionMessage = response.status === 503 && body?.code === 'EVALUATION_ADMISSION_PAUSED'
     ? '점검을 위해 새 평가 접수가 중지되어 있습니다. 접수 재개 후 다시 시도해 주세요.'
     : response.status === 503 && body?.code === 'EVALUATION_ADMISSION_UNAVAILABLE'
-    ? '평가 접수 상태를 확인할 수 없어 접수하지 않았습니다. 운영자에게 확인해 주세요.'
+    ? '평가 접수 상태를 확인하지 못해 접수하지 않았습니다. 잠시 후 다시 시도하고, 계속되면 운영 서버의 접수 중지 설정(evaluation_admission 명령)을 확인하세요.'
     : null
   if (admissionMessage) throw new OpsApiError(admissionMessage, response.status)
   // 연결 점검은 정상적인 진단 실패도 HTTP 503으로 반환한다. 다른 503 오류와 구분한다.
@@ -657,7 +657,9 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: RequestIn
   if (!response.ok && !(dispatch && response.status === 503)) {
     const error = body
     const message = response.status === 400 && error?.code === 'LIVE_BUDGET_UNAVAILABLE'
-      ? '누적 평가 한도가 부족하거나 설정되지 않아 접수하지 않았습니다. 운영자에게 예약·미확인 사용량과 한도를 확인해 주세요.'
+      ? '평가 예산이 부족하거나 설정되지 않아 접수하지 않았습니다. 평가 예산 화면에서 남은 한도와 미반영 실행을 확인하세요.'
+      : response.status === 400 && error?.code === 'INVALID_REFERENCE'
+      ? '평가 자료·비교 기준·실행 방식이 서로 맞지 않아 접수하지 않았습니다. 새 평가 화면을 새로고침한 뒤 다시 선택하세요.'
       : ['BUDGET_CHANGE_CONFLICT', 'DAILY_BUDGET_CHANGE_CONFLICT', 'LEGACY_USAGE_CONFLICT', 'SCHEDULE_SETTINGS_CONFLICT', 'SCHEDULE_DISABLED', 'SCHEDULE_BUDGET_UNAVAILABLE', 'EXECUTION_PROFILE_CHANGED', 'REVIEWED_BASELINE_REQUIRED', 'ACTIVE_SCHEDULE_EXISTS'].includes(error?.code) && typeof error?.detail === 'string'
         ? error.detail
       : path === '/evaluation-catalog' && error?.code === 'VECTOR_CACHE_UNAVAILABLE' ? '평가 자료에 연결된 저장 벡터를 확인할 수 없습니다. 잠시 후 다시 조회하세요.'
@@ -665,8 +667,8 @@ async function request<T>(path: string, schema: z.ZodType<T>, options: RequestIn
       : error?.code === 'INVALID_RAG_REFERENCE_REVIEW' ? '전체 대상 자료의 확인과 참조 검토 근거를 입력하세요.'
       : error?.code === 'CANCEL_FORBIDDEN' ? '평가를 요청한 계정만 취소할 수 있습니다.'
       : error?.code === 'CANCEL_CONFLICT' ? '이미 종료된 평가입니다. 상태를 다시 확인하세요.'
-      : error?.code === 'RESULTS_UNAVAILABLE' ? '저장된 검토 자료와 평가 결과의 무결성을 확인할 수 없습니다. 운영자에게 확인해 주세요.'
-      : error?.code === 'PREFECT_LOGS_UNAVAILABLE' ? 'Prefect 실행 로그를 가져오지 못했습니다. 잠시 후 다시 조회하세요.'
+      : error?.code === 'RESULTS_UNAVAILABLE' ? '저장된 검토 자료와 평가 결과를 읽지 못했습니다. 정기 실행 화면의 연결 설정 점검으로 결과 저장소 연결을 확인한 뒤 다시 조회하세요.'
+      : error?.code === 'PREFECT_LOGS_UNAVAILABLE' ? '실행 로그(Prefect)를 가져오지 못했습니다. 잠시 후 다시 조회하세요.'
       : error?.code === 'PREFECT_RUN_NOT_SUBMITTED' ? '아직 Prefect에 접수된 실행이 없습니다. 실행 상태를 다시 확인하세요.'
       : response.status === 401 ? '로그인이 만료되었습니다.'
       : response.status === 403 ? '관리자 계정만 운영 화면을 이용할 수 있습니다.'

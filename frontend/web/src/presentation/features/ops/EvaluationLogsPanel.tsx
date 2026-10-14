@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getEvaluationLogs, OpsApiError, type EvaluationLogs } from '../../../data/ops/opsApi'
 import { workspacePageStyles as styles } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime } from './opsFormat'
 
 const levelName = (level: number) => ({ 10: 'DEBUG', 20: 'INFO', 30: 'WARNING', 40: 'ERROR', 50: 'CRITICAL' })[level] ?? String(level)
 
@@ -24,10 +25,10 @@ export function EvaluationLogsPanel({ runId, flowId, onExpired }: { runId: strin
     return () => controller.abort()
   }, [runId, flowId, query])
 
-  return <section className={styles.card} aria-label="Prefect 실행 로그">
-    <h2 className={styles.cardTitle}>Prefect 실행 로그</h2>
+  return <section className={styles.card} aria-label="실행 로그">
+    <h2 className={styles.cardTitle}>실행 로그 <span className="text-xs font-normal text-ink-muted">Prefect · 서울 시간</span></h2>
     <button type="button" className={`${styles.secondaryButton} self-start`} disabled={busy} onClick={() => setQuery({ offset: 0 })}>
-      {query ? '최신 로그 새로고침' : 'Prefect 실행 로그'}
+      {query ? '최신 로그 새로고침' : '실행 로그 보기'}
     </button>
     {busy && <p role="status" className="text-sm text-ink-muted">실행 로그를 불러오고 있습니다.</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -37,7 +38,7 @@ export function EvaluationLogsPanel({ runId, flowId, onExpired }: { runId: strin
         : <ol aria-label="실행 로그 목록" className="max-h-[32rem] space-y-3 overflow-auto rounded-xl bg-slate-950 p-4 text-sm text-slate-100">
           {data.results.map((log) => <li key={log.id} className="border-b border-slate-700 pb-3 last:border-0">
             <p className={log.level >= 40 ? 'text-red-300' : log.level >= 30 ? 'text-amber-300' : 'text-slate-300'}>
-              <time dateTime={log.timestamp}>{new Date(log.timestamp).toLocaleString('ko-KR')}</time> · {levelName(log.level)} · {log.name}
+              <time dateTime={log.timestamp}>{seoulDateTime(log.timestamp)}</time> · {levelName(log.level)} · {log.name}
             </p>
             <pre className="mt-1 whitespace-pre-wrap break-words font-mono">{log.message}</pre>
           </li>)}

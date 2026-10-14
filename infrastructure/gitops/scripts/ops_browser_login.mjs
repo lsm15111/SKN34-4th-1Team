@@ -126,7 +126,7 @@ export async function checkBrowserLogin({ origin, email, password, expected }, p
       }
       await history.locator(`a[href="/ops/evaluations/${id}"]`).click()
       await page.getByRole('heading', { name: '평가 실행 상세', exact: true }).waitFor()
-      await page.locator('summary').getByText('실행 정보·버전 자세히 보기', { exact: true }).click()
+      await page.locator('summary').getByText('실행 정보·예산·기록 자세히', { exact: true }).click()
       await page.locator('dd').getByText(id, { exact: true }).waitFor()
       await page.locator('dd').getByText(expected[id].execution_spec_sha256, { exact: true }).waitFor()
       await page.getByRole('region', { name: '실행 예산 장부' }).getByText('새 모델 호출을 예약하는 실행이 아닙니다.', { exact: false }).waitFor()
@@ -138,7 +138,7 @@ export async function checkBrowserLogin({ origin, email, password, expected }, p
       }
       const reportPath = `/api/v1/ops/evaluations/${id}/report`
       // The UI opens the explanation page; the immutable HTML remains at the API URL.
-      const reportLink = page.getByRole('link', { name: 'Evidently 보고서', exact: true })
+      const reportLink = page.getByRole('link', { name: '평가 상세 보고서', exact: true })
       assert.equal(await reportLink.getAttribute('href'), `/ops/evaluations/${id}/report`)
       assert.equal(await reportLink.getAttribute('target'), '_blank')
       assert.deepEqual((await reportLink.getAttribute('rel')).split(' ').sort(), ['noopener', 'noreferrer'])

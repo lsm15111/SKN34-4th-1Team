@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { OpsApiError, saveRagCaseReview, type RagCaseReviewInput, type RagMaterial, type RagReviewState } from '../../../data/ops/opsApi'
 import { workspacePageStyles as styles } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime } from './opsFormat'
 
 type Decision = RagCaseReviewInput['answer_decision']
 const labels: Record<Decision, string> = { SUITABLE: '적합', UNSUITABLE: '부적합', DEFERRED: '판단 보류' }
@@ -45,7 +46,7 @@ export function RagCaseReviewForm({ runId, item, state, onExpired, onSaved, onLo
     }
   }
   return <section className="space-y-3 rounded-xl border border-line p-4" aria-label="RAG 사례 검토 기록" aria-busy={busy}>
-    <h3 className="font-semibold">후보 사례 검토 저장</h3>
+    <h3 className="font-semibold">1. 사례 검토 저장</h3>
     <p className="text-sm">원문·검색 결과·후보 답변을 대조하고 각 항목을 판단하세요. 품질 점검에는 저장된 검토만 반영됩니다. 검토 저장은 합격이나 기준 지정으로 이어지지 않습니다.</p>
     <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void save() }}>
       {dimensions.map((key) => {
@@ -72,7 +73,7 @@ export function RagCaseReviewForm({ runId, item, state, onExpired, onSaved, onLo
     <h4 className="font-semibold">이 사례의 검토 이력 · {history.length}건</h4>
     {history.length === 0 && <p className="text-sm">저장된 사람 검토가 없습니다.</p>}
     {history.map((row) => <article key={row.id} className="rounded-lg bg-surface-muted p-3 text-sm" aria-label={`검토 이력 ${row.version}`}>
-      <p>#{row.version} · {row.is_current ? '현재 자료의 최신 검토' : '이전 검토'} · {row.reviewed_by} · {new Date(row.created_at).toLocaleString('ko-KR')}</p>
+      <p>#{row.version} · {row.is_current ? '현재 자료의 최신 검토' : '이전 검토'} · {row.reviewed_by} · {seoulDateTime(row.created_at)} (서울)</p>
       <p>검색: {labels[row.retrieval_decision]} · 답변: {labels[row.answer_decision]} · 인용: {labels[row.citation_decision]}</p>
       <p className="whitespace-pre-wrap break-words">{row.comment}</p>
       <details className="break-all text-xs"><summary>검토 당시 자료 정보</summary>

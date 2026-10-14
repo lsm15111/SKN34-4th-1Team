@@ -83,12 +83,12 @@ function Material({ runId, onExpired, onReviewChanged }: Props) {
         <h3 className="font-bold">검토 진행 안내</h3>
         <p className="font-semibold">사례 검토 저장 {reviewedCount} / {material.cases.length}건 · 검색·답변·인용 모두 적합 {suitableCount}건</p>
         <progress className="h-2 w-full accent-brand-primary" aria-label="RAG 사례 검토 진행률" value={reviewedCount} max={material.cases.length} />
-        <p>자료 승인: {state.reference_review.approved ? '완료' : '필요'} · 품질 판정: {state.quality.is_current ? { NOT_EVALUATED: '미판정', NEEDS_REVIEW: '검토 필요', FAIL: '부적합', PASS: '합격' }[state.quality.status] : '현재 검토로 재판정 필요'} · 비교 기준: {state.baseline.selected ? '지정됨' : '미지정'}</p>
-        <p>{!state.reference_review.approved ? '다음 할 일: 각 사례의 원문과 참조 조건을 확인하고 자료 검토를 저장하세요.' : reviewedCount < material.cases.length ? '다음 할 일: 미검토 사례의 검색·답변·인용을 판단하고 사유를 저장하세요.' : suitableCount < material.cases.length ? '부적합·보류 사례가 있습니다. 품질 점검에서 사유를 확인하세요. 합격을 위해 판단을 바꿀 필요는 없습니다.' : !state.baseline.selected ? '다음 할 일: 품질 점검 결과를 확인하고 조건이 충족되면 비교 기준을 지정하세요.' : '현재 자료의 비교 기준 지정까지 완료했습니다.'}</p>
+        <p>평가 자료 검토: {state.reference_review.approved ? '완료' : '필요'} · 품질 판정: {state.quality.is_current ? { NOT_EVALUATED: '미판정', NEEDS_REVIEW: '검토 필요', FAIL: '불합격', PASS: '합격' }[state.quality.status] : '현재 검토로 재판정 필요'} · 비교 기준: {state.baseline.selected ? '지정됨' : '미지정'}</p>
+        <p>{reviewedCount < material.cases.length ? '다음 할 일: 1단계에서 미검토 사례의 검색·답변·인용을 판단하고 사유를 저장하세요.' : !state.reference_review.approved ? '다음 할 일: 2단계에서 사례들의 원문과 참조 조건을 확인하고 평가 자료 검토를 저장하세요.' : suitableCount < material.cases.length ? '불합격·보류 사례가 있습니다. 3단계 품질 판정에서 사유를 확인하세요. 합격을 위해 판단을 바꿀 필요는 없습니다.' : !state.baseline.selected ? '다음 할 일: 3단계 품질 판정을 저장하고 조건이 충족되면 비교 기준을 지정하세요.' : '현재 자료의 비교 기준 지정까지 완료했습니다.'}</p>
         <nav aria-label="RAG 검토 위치" className="flex flex-wrap gap-2">
-          <a href="#rag-case-review" className={styles.secondaryButton}>사례 확인</a>
-          <a href="#rag-reference-review" className={styles.secondaryButton}>자료 검토</a>
-          <a href="#rag-quality-review" className={styles.secondaryButton}>품질·기준 확인</a>
+          <a href="#rag-case-review" className={styles.secondaryButton}>1. 사례 검토</a>
+          <a href="#rag-reference-review" className={styles.secondaryButton}>2. 평가 자료 검토</a>
+          <a href="#rag-quality-review" className={styles.secondaryButton}>3. 품질 판정·비교 기준</a>
         </nav>
       </section>
       {material.data_type === 'official-html-snapshot' && <p className="text-sm">실제 공고의 저장된 HTML 본문입니다. 첨부파일은 포함하지 않습니다. 문단 단위로 나눈 평가용 청크이며, 기존 고정 근거 답변의 검토 승인은 이 RAG 결과에 적용되지 않습니다.</p>}
@@ -125,7 +125,7 @@ function Material({ runId, onExpired, onReviewChanged }: Props) {
           <p className="break-all text-xs">참조 청크: {expected.chunk_id}</p><p className="whitespace-pre-wrap">{expected.quote}</p>
         </blockquote>) : <p className="text-sm">지정된 참조 인용 없음</p>}
       </details>
-      {saved && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-brand-primary">사례 검토가 저장되었습니다. 품질 점검은 새 검토를 반영해 별도로 저장하세요.</p>}
+      {saved && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-brand-primary">사례 검토가 저장되었습니다. 품질 판정은 새 검토를 반영해 별도로 저장하세요.</p>}
       <RagCaseReviewForm key={`${item.case_id}:${state.review_version}:${material.material_sha256}`} runId={runId} item={item} state={state} disabled={qualityBusy || referenceDirty || referenceBusy} onExpired={onExpired} onLock={(value) => { setLocked(value); if (value) setSaved(false) }} onSaved={(value) => { setState(value); setSaved(true); onReviewChanged?.() }} />
       <div id="rag-reference-review" className="scroll-mt-28"><RagReferenceReviewPanel key={`${runId}:${state.review_version}:${material.fixture_sha256}`} runId={runId} state={state} disabled={locked || qualityBusy} onDirty={setReferenceDirty} onBusy={setReferenceBusy} onSaved={(value) => { setState(value); setReferenceDirty(false); setReferenceBusy(false); setSaved(false); onReviewChanged?.() }} onExpired={onExpired} /></div>
       <div id="rag-quality-review" className="scroll-mt-28"><RagQualityPanel key={`${runId}:${state.quality.input_sha256}`} runId={runId} state={state} disabled={locked || busy || referenceDirty || referenceBusy} onBusy={setQualityBusy} onSaved={(value) => { setState(value); setQualityBusy(false); setSaved(false); onReviewChanged?.() }} onExpired={onExpired} /></div>

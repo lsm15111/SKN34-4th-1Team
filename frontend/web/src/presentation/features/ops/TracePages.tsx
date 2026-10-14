@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { OpsApiError } from '../../../data/ops/opsApi'
 import { getTrace, listTraces, type TraceDetail, type TracePage, type TraceSummary } from '../../../data/ops/traceApi'
+import { estimateAiCostUsd, formatEstimatedAiCostUsd, type AdminAiModelPrice } from '@govbiz/shared/domain/entities/AdminAiCost'
 import { WorkspacePageHeader } from '../../shared/workspace/WorkspacePageHeader'
 import { workspacePageStyles as styles, workspaceTagClassName } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime, useAiModelPrices } from './opsFormat'
 
 const path = '/ops/traces'
 const names = [
   ['support-program-search', '공고 검색'], ['assistant-agent', 'AI 도우미'], ['support-program-evidence', '공고 근거 답변'],
 ] as const
 const field = 'min-h-11 w-full rounded-xl border border-line bg-white px-3 text-sm focus:outline-2 focus:outline-brand-primary'
-const date = (value: string | null) => value ? new Date(value).toLocaleString('ko-KR') : '기록 없음'
+const date = (value: string | null) => seoulDateTime(value, '기록 없음')
 const stageNames: Record<string, string> = {
   'search.total': '공고 검색', 'search.ranking.request': '공고 검색 순위 요청', 'search.ranking.model': '공고 검색 모델 호출',
   'search.semantic.request': '공고 의미 검색 요청',
@@ -37,12 +39,29 @@ function ErrorNotice({ error, onRetry }: { error: string; onRetry: () => void })
 function Level({ value }: { value: string }) {
   return <span className={workspaceTagClassName(value === 'ERROR' ? 'danger' : value === 'WARNING' ? 'warn' : 'muted')}>{value === 'ERROR' ? '오류' : value === 'WARNING' ? '주의' : value || '미기록'}</span>
 }
-function Metrics({ item }: { item: TraceSummary }) {
+/**
+ * 비용이 기록되지 않은 모델 호출 단계의 추정 비용입니다. Langfuse에 그 모델 가격이 없으면 비용이 비므로, 토큰 사용량에
+ * Core 가격표(기본 처리 등급)를 곱합니다. 캐시 읽기 토큰이 따로 기록된 경우만 캐시 가격을 씁니다.
+ */
+function estimateObservationCost(item: TraceDetail['observations'][number], prices: readonly AdminAiModelPrice[] | null): number | null {
+  const usage = item.usage_details
+  const model = item.model?.trim()
+  if (!prices || !usage || !model || !isModelCall(item) || !item.started_at) return null
+  const cached = usage.input_cached_tokens ?? usage.cache_read_input_tokens ?? 0
+  const input = usage.input ?? usage.input_tokens
+  if (input === undefined) return null
+  return estimateAiCostUsd(prices, {
+    model, inputTokens: input + cached, cachedInputTokens: cached, outputTokens: usage.output ?? usage.output_tokens ?? 0,
+    on: new Date(item.started_at).toISOString().slice(0, 10),
+  })
+}
+function Metrics({ item, estimate = null }: { item: TraceSummary; estimate?: number | null }) {
   const missingModelMetric = isModelCall(item) ? '기록 없음' : '모델 호출 단계에서 확인'
   return <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
     <div><dt className="text-ink-muted">모델</dt><dd className="mt-1 break-all">{item.model?.trim() || missingModelMetric}</dd></div>
     <div><dt className="text-ink-muted">소요 시간</dt><dd className="mt-1">{item.latency_seconds === null ? '기록 없음' : `${item.latency_seconds.toLocaleString('ko-KR', { maximumFractionDigits: 3 })}초`}</dd></div>
     <div><dt className="text-ink-muted">기록된 비용 (USD)</dt><dd className="mt-1">{item.total_cost === null ? missingModelMetric : `$${item.total_cost.toLocaleString('en-US', { maximumFractionDigits: 8 })}`}</dd></div>
+    {item.total_cost === null && estimate !== null && <div><dt className="text-ink-muted">추정 비용 (GovBiz 가격표)</dt><dd className="mt-1">{formatEstimatedAiCostUsd(estimate)}</dd></div>}
     <div><dt className="text-ink-muted">환경</dt><dd className="mt-1 break-all">{environmentLabel(item.environment)}</dd></div>
   </dl>
 }
@@ -64,7 +83,7 @@ function ListMetrics({ item }: { item: TracePage['results'][number] }) {
     </p>
     {(partial || summary.missing_cost_count > 0) && <p className="rounded-lg bg-surface-muted p-3 text-xs text-ink-muted">{partial
       ? `집계가 아직 완전하지 않습니다. ${summary.recorded_cost === null ? '확인된 비용 기록이 없습니다.' : '표시된 비용은 현재 확인된 금액입니다.'} 진행 중이거나 아직 조회되지 않은 호출은 반영 후 달라질 수 있습니다.`
-      : '비용이 기록된 호출만 합산한 금액입니다. 비용 미기록 호출은 0원으로 포함하지 않습니다.'}</p>}
+      : '비용이 기록된 호출만 합산한 금액입니다. 비용 미기록 호출은 0원으로 포함하지 않으며, 호출 상세에서 GovBiz 가격표 기준 추정 비용을 볼 수 있습니다.'}</p>}
   </>
 }
 
@@ -120,7 +139,7 @@ export function TraceListPage({ onExpired }: { onExpired: () => void }) {
         <button className={styles.primaryButton} type="submit">조회</button>
       </form>
       {error ? <ErrorNotice error={error} onRetry={() => setReload((value) => value + 1)} /> : !data ? <p role="status">실행 추적을 불러오고 있습니다.</p> : <>
-        <p className="text-xs text-ink-muted">조회 범위: {date(data.from_time)} ~ {date(data.to_time)} · 이 페이지 {data.results.length}건 · 최신순 고정 · 페이지 이동 시 조회 범위를 유지합니다.</p>
+        <p className="text-xs text-ink-muted">조회 범위(서울): {date(data.from_time)} ~ {date(data.to_time)} · 이 페이지 {data.results.length}건 · 최신순 고정 · 페이지 이동 시 조회 범위를 유지합니다.</p>
         <section aria-label="AI 실행 목록" className="flex min-w-0 flex-col gap-3">
           {!data.results.length && <div className={styles.card}><h2 className={styles.cardTitle}>이 기간에 기록된 실행이 없습니다.</h2><p className="text-sm text-ink-muted">기간이나 실행 이름을 바꿔 조회하세요. 최근 실행은 기록 반영까지 잠시 걸릴 수 있습니다.</p></div>}
           {data.results.map((item) => <article key={item.id} className={styles.card}>
@@ -152,6 +171,10 @@ export function TraceDetailPage({ onExpired }: { onExpired: () => void }) {
   const [data, setData] = useState<TraceDetail | null>(null)
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
+  // 기록된 비용이 없는 모델 호출이 있을 때만 가격표를 읽습니다.
+  const needsEstimate = data?.observations.some((item) => isModelCall(item) && item.total_cost === null && item.usage_details !== null) ?? false
+  const prices = useAiModelPrices(needsEstimate)
+  const priceList = prices.status === 'ready' ? prices.prices : null
   const expiry = useRef(onExpired); expiry.current = onExpired
   useEffect(() => {
     const controller = new AbortController()
@@ -186,7 +209,7 @@ export function TraceDetailPage({ onExpired }: { onExpired: () => void }) {
       <Link to={back} className={styles.quietLink}>← 조회하던 실행 목록으로</Link>
       <p className="text-xs break-all text-ink-muted">추적 ID: {traceId}</p>
       {error ? <ErrorNotice error={error} onRetry={() => setReload((value) => value + 1)} /> : !data ? <p role="status">실행 단계를 불러오고 있습니다.</p> : <>
-        <p className="text-sm text-ink-muted">이 페이지 {data.observations.length}개 단계입니다. 모델 호출 단계(GENERATION·EMBEDDING)는 펼쳐 표시하며 모델·기록된 비용·토큰 사용량을 확인할 수 있습니다. 단계별 비용은 중첩될 수 있으므로 합산하지 않습니다.</p>
+        <p className="text-sm text-ink-muted">이 페이지 {data.observations.length}개 단계입니다. 모델 호출 단계는 펼쳐 표시하며 모델·비용·토큰 사용량을 확인할 수 있습니다. 비용이 기록되지 않은 호출은 토큰에 GovBiz 가격표(기본 처리 등급)를 곱한 추정값을 함께 보입니다{prices.status === 'unavailable' ? '(지금은 가격표를 읽지 못해 표시하지 않음)' : ''}. 시각은 서울 시간입니다.</p>
         <section aria-label="실행 단계" className="flex min-w-0 flex-col gap-3">
           {!data.observations.length && <p>이 페이지에 기록된 단계가 없습니다.</p>}
           {data.observations.map((item, index) => <details key={`${cursor ?? 'first'}:${item.id}`} open={index === 0 || isModelCall(item)} className={styles.card} style={{ marginLeft: `${depth(item.id) * 12}px` }}>
@@ -194,7 +217,7 @@ export function TraceDetailPage({ onExpired }: { onExpired: () => void }) {
             <div className="mt-4 flex min-w-0 flex-col gap-4">
               <p className="text-xs break-all text-ink-muted">단계 ID: {item.id}{item.parent_observation_id && ` · 상위 단계: ${nameLabel(observations.get(item.parent_observation_id)?.name ?? '')} (${item.parent_observation_id})`}</p>
               <p className="text-xs text-ink-muted">시작: {date(item.started_at)} · 종료: {date(item.ended_at)}</p>
-              <Metrics item={item} />
+              <Metrics item={item} estimate={estimateObservationCost(item, priceList)} />
               <Payload label="토큰 사용량" value={item.usage_details} />
               {item.status_message && <Payload label="실행 메시지" value={item.status_message} />}
               <div className="grid min-w-0 gap-4 xl:grid-cols-2"><Payload label="입력" value={item.input} /><Payload label="출력" value={item.output} /></div>

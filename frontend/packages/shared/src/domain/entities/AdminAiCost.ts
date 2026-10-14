@@ -106,3 +106,55 @@ export function defaultAdminAiCostPeriod(now: number = Date.now()): { from: stri
   const today = new Date(now).toISOString().slice(0, 10)
   return { from: `${today.slice(0, 8)}01`, to: today }
 }
+
+/**
+ * Core `AiModelPrice.find`와 같은 규칙으로 가격을 고릅니다. 처리 등급이 같고 모델명이 접두어와 같거나 `접두어-`로 시작하는 행 중
+ * 시작일이 `on`(UTC 날짜 `YYYY-MM-DD`) 이전인 것에서 가장 긴 접두어, 그다음 가장 최근 시작일입니다. 없으면 null입니다.
+ */
+export function findAdminAiModelPrice(prices: readonly AdminAiModelPrice[], model: string, serviceTier: AiServiceTier, on: string): AdminAiModelPrice | null {
+  let found: AdminAiModelPrice | null = null
+  for (const price of prices) {
+    const covers = price.serviceTier === serviceTier && (model === price.modelPrefix || model.startsWith(`${price.modelPrefix}-`))
+    if (!covers || price.effectiveFrom > on) continue
+    if (!found || price.modelPrefix.length > found.modelPrefix.length
+      || (price.modelPrefix.length === found.modelPrefix.length && price.effectiveFrom > found.effectiveFrom)) found = price
+  }
+  return found
+}
+
+export type AiCostEstimateUsage = {
+  model: string
+  /** 응답에 등급이 없으면 기본 등급으로 봅니다. */
+  serviceTier?: AiServiceTier
+  inputTokens: number
+  /** 캐시 읽기 토큰입니다. 모르면 0으로 두어 일반 입력 가격으로 계산합니다(할인 미반영이라 실제보다 크거나 같음). */
+  cachedInputTokens?: number
+  outputTokens: number
+  /** 가격을 고를 UTC 날짜 `YYYY-MM-DD`입니다. */
+  on: string
+}
+
+/**
+ * 화면 표시용 추정 비용(USD)입니다. 캐시 쓰기는 구분하지 않고 일반 입력 가격으로 계산하며, 맞는 가격이 없으면 0이 아니라 null입니다.
+ * 청구 확정 금액이 아니므로 화면은 "추정"으로 표시합니다.
+ */
+export function estimateAiCostUsd(prices: readonly AdminAiModelPrice[], usage: AiCostEstimateUsage): number | null {
+  const price = findAdminAiModelPrice(prices, usage.model, usage.serviceTier ?? 'default', usage.on)
+  if (!price) return null
+  const cached = Math.min(Math.max(usage.cachedInputTokens ?? 0, 0), usage.inputTokens)
+  const uncached = usage.inputTokens - cached
+  const cachedPrice = Number(price.cachedInputUsdPerMillion ?? price.inputUsdPerMillion)
+  return (uncached * Number(price.inputUsdPerMillion) + cached * cachedPrice + usage.outputTokens * Number(price.outputUsdPerMillion)) / 1_000_000
+}
+
+/**
+ * 추정 금액 표시입니다. 1센트 미만은 유효 숫자 두 자리까지(`$0.00019`), 그 이상은 소수 넷째 자리까지 보입니다.
+ * 추정값이라는 뜻은 화면의 항목 이름("추정 비용")이 전달하므로 금액에는 접두어를 붙이지 않습니다.
+ */
+export function formatEstimatedAiCostUsd(usd: number): string {
+  if (usd === 0) return '$0'
+  const text = usd < 0.01
+    ? usd.toLocaleString('en-US', { maximumSignificantDigits: 2 })
+    : usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+  return `$${text}`
+}

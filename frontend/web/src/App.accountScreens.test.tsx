@@ -564,7 +564,7 @@ describe('작업 화면 사이드바', () => {
     expect(within(accountMenu).getByRole('button', { name: '로그아웃' })).toBeTruthy()
     expect(within(accountMenu).getAllByRole('link').map((link) => link.textContent)).toEqual(['내 프로필', '회원 관리', '감사 기록', 'LLMOps'])
     const opsLink = within(accountMenu).getByRole('link', { name: 'LLMOps' })
-    expect(opsLink.getAttribute('href')).toBe('/ops/evaluations')
+    expect(opsLink.getAttribute('href')).toBe('/ops/dashboard')
     expect(opsLink.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
     const adminLink = within(accountMenu).getByRole('link', { name: '회원 관리' })
     expect(adminLink.getAttribute('href')).toBe('/app/admin/accounts')

@@ -348,7 +348,7 @@ export function AppSidebar({ onClose, onNewChat, closeLabel, onNavigate, history
                     <MenuIconGraphic name="document" />
                     <span>{screenTitles.adminAuditLogs}</span>
                   </Link>
-                  <Link className={sidebarMenuItemClassName('inactive')} to="/ops/evaluations">
+                  <Link className={sidebarMenuItemClassName('inactive')} to="/ops/dashboard">
                     <MenuIconGraphic name="llmops" />
                     <span>LLMOps</span>
                   </Link>

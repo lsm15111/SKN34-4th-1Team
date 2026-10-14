@@ -28,18 +28,19 @@ export function EvaluationReviewProgress({ data, hasDrafts, disabled, onNavigate
   const qualityPassed = quality.is_current && quality.status === 'PASS'
   const baselineCurrent = data.is_baseline && !data.baseline_requires_review && data.can_promote
     && fixtureApproved && remaining.length === 0 && data.approval_current && qualityPassed
+  // 단계 번호는 화면에 놓인 순서와 같습니다. 사례를 보며 참조 조건도 함께 확인하므로 사례 검토가 먼저입니다.
   const steps = [
-    { label: '기준 자료 검토', done: fixtureApproved, hint: '평가 조건이 원문과 맞는지 확인', value: fixtureApproved ? '승인 완료' : fixtureCurrent ? fixture.decision === 'DEFERRED' ? '판단 보류' : '수정 필요' : fixture ? '재검토 필요' : '미검토' },
     { label: '사례별 답변 검토', done: remaining.length === 0, hint: '각 답변의 판단과 사유 저장', value: `적합 ${cases.length - remaining.length} / ${cases.length}건` },
+    { label: '평가 자료 검토', done: fixtureApproved, hint: '참조 조건이 원문과 맞는지 확인', value: fixtureApproved ? '승인 완료' : fixtureCurrent ? fixture.decision === 'DEFERRED' ? '판단 보류' : '수정 필요' : fixture ? '재검토 필요' : '미검토' },
     { label: '전체 응답 승인', done: data.approval_current, hint: '모든 사례의 검토 결과 승인', value: data.approval_current ? '승인 완료' : '승인 필요' },
-    { label: '품질 판정', done: qualityPassed, hint: '저장된 검토로 품질 판정', value: qualityPassed ? '현재 근거로 합격' : quality.is_current ? quality.status === 'FAIL' ? '불합격 · 근거 확인 필요' : '검토 필요' : quality.history.length ? '재판정 필요' : '미판정' },
+    { label: '품질 판정', done: qualityPassed, hint: '저장된 검토로 합격 여부 판정', value: qualityPassed ? '현재 근거로 합격' : quality.is_current ? quality.status === 'FAIL' ? '불합격 · 근거 확인 필요' : '검토 필요' : quality.history.length ? '재판정 필요' : '미판정' },
     { label: '비교 기준 지정', done: baselineCurrent, hint: '다음 평가에 쓸 비교 기준 선택', value: baselineCurrent ? '지정 완료' : data.is_baseline ? '기존 기준 재검토 필요' : data.can_promote ? '지정 가능' : '조건 미충족' },
   ]
-  const next = !fixtureApproved ? { target: 'fixture-review', label: '기준 자료 검토로 이동' }
-    : remaining.length ? { target: `case-review-${remaining[0].id}`, label: `${remaining[0].id} 사례 검토로 이동` }
+  const next = remaining.length ? { target: `case-review-${remaining[0].id}`, label: `${remaining[0].id} 사례 검토로 이동` }
+    : !fixtureApproved ? { target: 'fixture-review', label: '평가 자료 검토로 이동' }
     : !data.approval_current ? { target: 'overall-review', label: '전체 응답 승인으로 이동' }
-    : !qualityPassed ? { target: 'quality-review', label: '품질 판정과 사유로 이동' }
-    : !baselineCurrent ? { target: 'overall-review', label: '비교 기준 지정으로 이동' } : null
+    : !qualityPassed ? { target: 'quality-review', label: '품질 판정으로 이동' }
+    : !baselineCurrent ? { target: 'baseline-review', label: '비교 기준 지정으로 이동' } : null
   const completed = steps.filter((step) => step.done).length
   return <section aria-label="검토 진행 안내" className="grid gap-4 rounded-xl border border-brand-primary/20 bg-[#f3f7f5] p-5 text-sm">
     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">검토 진행 안내</h3><span className="font-semibold tabular-nums">{completed} / {steps.length}단계 완료</span></div>

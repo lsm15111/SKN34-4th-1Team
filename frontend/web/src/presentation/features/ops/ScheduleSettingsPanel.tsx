@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getScheduleSettings, OpsApiError, setScheduleSettings, type ScheduleSettings, type ScheduleSettingsInput } from '../../../data/ops/opsApi'
 import { workspacePageStyles as styles, workspaceTagClassName } from '../../shared/workspace/WorkspacePage.styles'
+import { seoulDateTime } from './opsFormat'
 
 type Props = { owner: string; onExpired: () => void; onSaved: () => void; refreshKey?: number }
 const label = (enabled: boolean) => enabled ? '활성' : '비활성'
@@ -117,7 +118,7 @@ function ScheduleSettingsForm({ owner, onExpired, onSaved, refreshKey }: Props) 
         {settings.changes.length ? <ul className="mt-3 space-y-3">{settings.changes.map((change) => <li className="rounded border border-line p-3" key={change.request_id}>
           <p>버전 {change.revision} · {label(change.previous_enabled)} → {label(change.enabled)}</p>
           <p className="mt-1">{change.reason}</p>
-          <p className="mt-1 text-xs text-ink-muted">관리자 {change.actor} · {new Date(change.created_at).toLocaleString('ko-KR')}</p>
+          <p className="mt-1 text-xs text-ink-muted">관리자 {change.actor} · {seoulDateTime(change.created_at)} (서울)</p>
         </li>)}</ul> : <p className="mt-2 text-ink-muted">아직 관리자가 저장한 변경 이력이 없습니다.</p>}
       </details>
     </>}

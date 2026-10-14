@@ -9,7 +9,7 @@ const log = { id: '30000000-0000-4000-8000-000000000003', timestamp: '2026-10-13
 const page = { run_id: runId, prefect_flow_run_id: flowId, offset: 0, next_offset: null, results: [log] }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const mount = (onExpired = vi.fn()) => render(<EvaluationLogsPanel runId={runId} flowId={flowId} onExpired={onExpired} />)
-const load = () => fireEvent.click(screen.getByRole('button', { name: 'Prefect 실행 로그' }))
+const load = () => fireEvent.click(screen.getByRole('button', { name: '실행 로그 보기' }))
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('관리자 실행 로그', () => {
@@ -50,7 +50,7 @@ describe('관리자 실행 로그', () => {
       .mockResolvedValueOnce(json({ ...page, results: [] })))
     mount(); load(); await screen.findByRole('list')
     fireEvent.click(screen.getByRole('button', { name: '최신 로그 새로고침' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('Prefect 실행 로그를 가져오지 못했습니다.')
+    expect((await screen.findByRole('alert')).textContent).toContain('실행 로그(Prefect)를 가져오지 못했습니다.')
     expect(screen.queryByRole('list')).toBeNull()
     expect(screen.queryByText(/저장된 실행 로그가 없습니다/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '최신 로그 새로고침' }))
