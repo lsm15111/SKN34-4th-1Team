@@ -55,9 +55,12 @@ export function AdminAiCostsPage({ title = 'AI 비용', children, onExpired }: {
               <button className={workspacePageStyles.primaryButton} type="submit">조회</button>
             </div>
           </form>
-          <button className={workspacePageStyles.secondaryButton} type="button" disabled={!vm.sync.configured || vm.sync.busy} onClick={vm.sync.run}>
+          <button className={workspacePageStyles.secondaryButton} type="button" disabled={!vm.sync.configured || vm.sync.busy} onClick={vm.sync.run}
+            aria-describedby={vm.sync.configured ? undefined : 'ai-cost-sync-unavailable'}>
             {vm.sync.busy ? '가져오는 중…' : '사용량·비용 가져오기'}
           </button>
+          {/* 버튼이 꺼진 이유를 버튼 옆에서 바로 알 수 있게 합니다. 자세한 안내는 아래 비용 비교 칸에 있습니다. */}
+          {!vm.sync.configured && vm.phase === 'ready' ? <p id="ai-cost-sync-unavailable" className="m-0 text-xs text-ink-muted">조직 관리자 키가 없어 가져올 수 없어요</p> : null}
         </div>
         {form.error ? <p className={styles.formError} role="alert">{form.error}</p> : null}
 

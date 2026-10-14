@@ -30,6 +30,9 @@ export type TracePage = z.infer<typeof tracePageSchema>
 export type TraceDetail = z.infer<typeof traceDetailSchema>
 export type TraceFilters = { name?: string; from_time?: string; to_time?: string; cursor?: string }
 
+/** 추적 서버(Langfuse)에 닿지 못했을 때 원인과 대신 볼 곳을 함께 알립니다. */
+const unreachable = 'AI 실행 추적 서버(Langfuse)에 연결할 수 없습니다. 추적 서버가 꺼져 있거나 연결 설정이 없을 수 있습니다. 비용 집계는 실사용 모니터링에서 확인할 수 있습니다.'
+
 async function read<T>(path: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
   let response: Response
   try {
@@ -39,14 +42,14 @@ async function read<T>(path: string, schema: z.ZodType<T>, signal?: AbortSignal)
     })
   } catch (error) {
     if (signal?.aborted) throw error
-    throw new OpsApiError('AI 실행 추적 서버에 연결할 수 없습니다. 잠시 후 다시 시도하세요.', 0)
+    throw new OpsApiError(unreachable, 0)
   }
   if (!response.ok) {
     const message = response.status === 401 ? '로그인이 만료되었습니다.'
       : response.status === 403 ? '관리자 계정만 AI 실행 추적을 볼 수 있습니다.'
       : response.status === 404 ? '해당 실행 추적을 찾을 수 없습니다.'
       : response.status === 400 ? '조회 조건이 올바르지 않습니다. 기간과 필터를 다시 선택하세요.'
-      : 'AI 실행 추적 서버에 연결할 수 없습니다. 잠시 후 다시 시도하세요.'
+      : unreachable
     throw new OpsApiError(message, response.status)
   }
   const parsed = schema.safeParse(await response.json().catch(() => null))

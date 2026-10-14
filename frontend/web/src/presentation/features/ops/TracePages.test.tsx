@@ -247,7 +247,7 @@ describe('관리자 AI 실행 추적', () => {
     vi.stubGlobal('fetch', fetch)
     mount(url)
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('AI 실행 추적 서버에 연결할 수 없습니다.')
+    expect(alert.textContent).toContain('AI 실행 추적 서버(Langfuse)에 연결할 수 없습니다.')
     expect(screen.queryByText('이 기간에 기록된 실행이 없습니다.')).toBeNull()
     fireEvent.click(within(alert).getByRole('button', { name: '다시 조회' }))
     await screen.findByRole('region', { name: url.endsWith(traceId) ? '실행 단계' : 'AI 실행 목록' })

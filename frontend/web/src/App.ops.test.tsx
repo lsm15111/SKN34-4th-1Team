@@ -284,6 +284,9 @@ describe('React LLMOps 운영 화면', () => {
     expect(screen.getByRole('link', { name: 'member@example.com' }).getAttribute('href')).toBe('/app/admin/accounts/detail?accountId=11')
     expect(screen.getByRole('link', { name: '실사용 모니터링' }).getAttribute('aria-current')).toBe('page')
     expect(document.title).toBe('GovBiz · 실사용 모니터링')
+    const sync = screen.getByRole('button', { name: '사용량·비용 가져오기' })
+    expect(sync).toHaveProperty('disabled', true)
+    expect(document.getElementById(sync.getAttribute('aria-describedby')!)?.textContent).toBe('조직 관리자 키가 없어 가져올 수 없어요')
     const traceLink = screen.getByRole('link', { name: '실행 목록 열기' })
     expect(traceLink.getAttribute('href')).toBe('/ops/traces')
     expect(traceLink.getAttribute('target')).toBeNull()
@@ -1846,8 +1849,8 @@ it('작업 메뉴마다 해당 기능만 표시하고 다른 기능의 조회를
 })
 
 it.each([
-  ['/ops/dashboard', '성능 대시보드'], ['/ops', '성능 대시보드'],
-  ['/ops/login', '성능 대시보드'], ['/ops/unknown', '성능 대시보드'],
+  ['/ops/dashboard', '성능 대시보드'], ['/ops', '운영 요약'],
+  ['/ops/login', '운영 요약'], ['/ops/unknown', '운영 요약'],
   ['/ops/evaluations#evaluation-budget', '예산 관리'],
   ['/ops/evaluations#evaluation-schedules', '정기 실행'],
   ['/ops/evaluations#new-evaluation', '새 평가'],
@@ -1863,11 +1866,12 @@ it.each([
   expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
 })
 
-it('운영 로고는 평가 이력에서 성능 대시보드로 돌아간다', async () => {
+it('운영 로고는 평가 이력에서 운영 요약으로 돌아간다', async () => {
   open('/ops/evaluations')
   await screen.findByRole('heading', { level: 1, name: '평가 이력' })
   fireEvent.click(screen.getByRole('link', { name: 'GovBiz LLMOps' }))
-  expect(await screen.findByRole('heading', { level: 1, name: '성능 대시보드' })).toBeTruthy()
+  expect(await screen.findByRole('heading', { level: 1, name: '운영 요약' })).toBeTruthy()
+  expect(screen.getByRole('link', { name: '운영 요약' }).getAttribute('aria-current')).toBe('page')
   expect(screen.queryByRole('region', { name: '평가 실행 이력' })).toBeNull()
 })
 
@@ -1892,7 +1896,7 @@ it.each(['/ops/dashboard', '/ops', '/ops/login', '/ops/budget', '/ops/schedules'
   fireEvent.change(await screen.findByLabelText('이메일'), { target: { value: 'operator@example.com' } })
   fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: 'example-password' } })
   fireEvent.click(screen.getByRole('button', { name: '이메일로 로그인' }))
-  const name = ['/ops/dashboard', '/ops', '/ops/login'].includes(path) ? '성능 대시보드' : path.endsWith('budget') ? '예산 관리' : path.endsWith('schedules') ? '정기 실행' : '새 평가'
+  const name = path === '/ops/dashboard' ? '성능 대시보드' : ['/ops', '/ops/login'].includes(path) ? '운영 요약' : path.endsWith('budget') ? '예산 관리' : path.endsWith('schedules') ? '정기 실행' : '새 평가'
   expect(await screen.findByRole('heading', { level: 1, name })).toBeTruthy()
 })
 
